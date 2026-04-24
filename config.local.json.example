@@ -1,0 +1,15 @@
+{
+    "http": {
+        "port": 3100
+    },
+    "logger": {
+        "level": "debug",
+        "filePath": "./logs/dev.log",
+        "stackLevel": 1,
+        "outputStack": false
+    },
+    "runtimeFiles": {
+        "tempDir": "./.runtime/temp-dev",
+        "userDataDir": "./.runtime/user-data-dev"
+    }
+}
