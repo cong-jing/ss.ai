@@ -1,14 +1,8 @@
-export type LogLevel = "debug" | "info" | "warn" | "error";
-
-export interface Logger {
-    debug(message: string, meta?: Record<string, unknown>): void;
-    info(message: string, meta?: Record<string, unknown>): void;
-    warn(message: string, meta?: Record<string, unknown>): void;
-    error(message: string, meta?: Record<string, unknown>): void;
-}
-
 export interface AgentConfig {
+    provider: string;
+    apiUrl: string;
     model: string;
+    apiKey: string;
     timeoutMs: number;
     maxRetries: number;
 }
@@ -30,4 +24,5 @@ export interface ModelClient {
         sessionId?: string;
         timeoutMs: number;
     }): Promise<string>;
+    listModels(): Promise<string[]>;
 }

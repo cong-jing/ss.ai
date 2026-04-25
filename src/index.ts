@@ -1,12 +1,11 @@
 import fs from "node:fs";
-import { AgentService } from "../packages/agent/src";
-import { runCli } from "./cli";
-import { loadRuntimeConfig } from "./config";
+import { loadRuntimeConfig } from "./util/config";
 import { startHttpServer } from "./http/server";
-import { createLogger } from "./logger";
+import { createLogger, setGlobalLogger } from "./util/logger";
+
+const LOGGER_STACK_LEVEL = 1;
 
 async function main(): Promise<void> {
-    const mode = process.argv[2] ?? "serve";
     const config = loadRuntimeConfig();
 
     fs.mkdirSync(config.runtimeFiles.tempDir, { recursive: true });
@@ -14,37 +13,23 @@ async function main(): Promise<void> {
 
     const logger = createLogger({
         level: config.logger.level,
-        filePath: config.logger.filePath,
-        outputStack: config.logger.outputStack,
-        stackLevel: 0,
+        logFilePath: config.logger.logFilePath,
+        includeSourceLocation: config.logger.includeSourceLocation,
+        includeStackTrace: config.logger.includeStackTrace,
+        stackLevel: LOGGER_STACK_LEVEL,
     });
+    setGlobalLogger(logger);
 
-    const agentService = new AgentService(config.agent, {
-        logger
-        // TODO: inject real ModelClient implementation (OpenAI/Azure/Anthropic/etc.) here.
+    await startHttpServer({ config });
+    logger.info("HTTP server started", {
+        host: config.http.host,
+        port: config.http.port
     });
-
-    if (mode === "cli") {
-        const cliArgv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
-        await runCli({ agentService, config, argv: cliArgv });
-        return;
-    }
-
-    if (mode === "serve") {
-        await startHttpServer({ agentService, config });
-        logger.info("HTTP server started", {
-            host: config.http.host,
-            port: config.http.port
-        });
-        return;
-    }
-
-    logger.error("Unknown mode", { mode });
-    process.exitCode = 1;
+    process.stdout.write(`Server is running at http://${config.http.host}:${config.http.port}\n`);
 }
 
 main().catch((error) => {
     const message = error instanceof Error ? error.stack ?? error.message : String(error);
-    process.stderr.write(`${message}\n`);
+    process.stderr.write(`${message} \n`);
     process.exit(1);
 });

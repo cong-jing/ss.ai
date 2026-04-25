@@ -2,8 +2,8 @@
 
 A minimal Node.js + TypeScript scaffold with:
 
-- reusable core agent package in `packages/agent`
-- runtime launchers (HTTP + CLI) in `src`
+- reusable core agent module in `src/agent`
+- HTTP runtime launcher in `src`
 - config/logging handled outside the core and injected into the agent
 
 ## Quick start
@@ -19,6 +19,12 @@ Runtime config is layered and merged in this order:
 
 - `config.default.json` (shared baseline, committed)
 - `config.local.json` (developer/local overrides, gitignored)
+
+Models are configured in `config.default.json` under `models`.
+Each model entry defines `provider` and `apiUrl`.
+Optional `model` can map a config key (alias) to the real provider model id.
+`apiUrl` is kept in `config.default.json`.
+`apiKey` and current model are managed in user settings at runtime.
 
 `logger.filePath`, `runtimeFiles.tempDir`, and `runtimeFiles.userDataDir` support relative or absolute path.
 If a path is empty or missing, defaults are under project root.
@@ -37,15 +43,17 @@ curl -X POST http://127.0.0.1:3000/v1/chat \
   -d "{\"prompt\":\"hello\"}"
 ```
 
-CLI mode:
+Simple web UI (provider + apiKey + model list mock):
 
 ```bash
-npm run prod:cli chat
+npm run dev:serve
+npm run build:web
+# open http://127.0.0.1:3000/web
 ```
+
+Note: web page HTTP call for model list is intentionally left as TODO in `web/src/api/modelApi.ts`.
 
 ## Current TODOs
 
 - Replace placeholder model client with real LLM API integration.
-- Add config schema validation (zod/valibot).
-- Add streaming/interactive CLI mode.
 - Add tests for `AgentService` and API handlers.

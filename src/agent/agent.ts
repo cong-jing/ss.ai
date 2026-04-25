@@ -1,20 +1,19 @@
-import { noopLogger, PlaceholderModelClient } from "./defaults";
-import { AgentConfig, ChatRequest, ChatResponse, Logger, ModelClient } from "./types";
+import { getGlobalLogger } from "../util/logger";
+import { PlaceholderModelClient } from "./clients/placeholderModelClient";
+import { AgentConfig, ChatRequest, ChatResponse, ModelClient } from "./types";
 
 export interface AgentDependencies {
-    logger?: Logger;
     modelClient?: ModelClient;
 }
 
 export class AgentService {
-    private readonly logger: Logger;
+    private readonly logger = getGlobalLogger();
     private readonly modelClient: ModelClient;
 
     constructor(
         private readonly config: AgentConfig,
         dependencies: AgentDependencies = {}
     ) {
-        this.logger = dependencies.logger ?? noopLogger;
         this.modelClient = dependencies.modelClient ?? new PlaceholderModelClient();
     }
 
@@ -43,5 +42,9 @@ export class AgentService {
             model: this.config.model,
             requestId
         };
+    }
+
+    async listModels(): Promise<string[]> {
+        return this.modelClient.listModels();
     }
 }

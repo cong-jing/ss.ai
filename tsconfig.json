@@ -12,8 +12,8 @@
         "rootDir": "."
     },
     "include": [
-        "packages/**/*.ts",
-        "src/**/*.ts"
+        "src/**/*.ts",
+        "shared/contracts/**/*.ts"
     ],
     "exclude": [
         "dist",

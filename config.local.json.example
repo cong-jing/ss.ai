@@ -1,15 +1,25 @@
 {
+    "$schema": "./schemas/config.schema.json",
     "http": {
         "port": 3100
     },
     "logger": {
         "level": "debug",
-        "filePath": "./logs/dev.log",
-        "stackLevel": 1,
-        "outputStack": false
+        "logFilePath": "./logs/dev.log",
+        "includeSourceLocation": true,
+        "includeStackTrace": false
     },
     "runtimeFiles": {
         "tempDir": "./.runtime/temp-dev",
         "userDataDir": "./.runtime/user-data-dev"
+    },
+    "agent": {
+        "currentProvider": "mistral.ai"
+    },
+    "models": {
+        "mistral.ai": {
+            "apiKey": "YOUR_LOCAL_API_KEY",
+            "availableModels": []
+        }
     }
 }
