@@ -12,7 +12,7 @@ A minimal Node.js + TypeScript scaffold with:
 npm install
 cp config.local.json.example config.local.json
 npm run build
-npm run prod:serve
+npm run prod:server
 ```
 
 Runtime config is layered and merged in this order:
@@ -46,7 +46,7 @@ curl -X POST http://127.0.0.1:3000/v1/chat \
 Simple web UI (provider + apiKey + model list mock):
 
 ```bash
-npm run dev:serve
+npm run dev:server
 npm run build:web
 # open http://127.0.0.1:3000/web
 ```

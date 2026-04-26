@@ -10,6 +10,7 @@ import { UserSettingsStore } from "./userSettingsStore";
 export function createHttpServer(config: RuntimeConfig) {
     const app = express();
     const logger = getGlobalLogger();
+    const webDistDir = path.resolve(process.cwd(), "web", "dist");
 
     const userSettingsStore = new UserSettingsStore(
         path.resolve(config.runtimeFiles.userDataDir, "user-settings.json"),
@@ -26,10 +27,10 @@ export function createHttpServer(config: RuntimeConfig) {
     const createAgentServiceFromUserSettings = createAgentServiceFactory(userSettingsStore, config.models, config);
 
     app.use(express.json());
-    app.use("/web", express.static(path.resolve(process.cwd(), "web")));
+    app.use(express.static(webDistDir));
 
     app.get("/", (_req, res) => {
-        res.redirect("/web");
+        res.sendFile(path.resolve(webDistDir, "index.html"));
     });
 
     app.get("/health", (_req, res) => {

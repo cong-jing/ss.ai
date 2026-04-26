@@ -8,12 +8,13 @@
         "build:server": "tsc -p tsconfig.json",
         "typecheck:web": "vue-tsc -p web/tsconfig.json --noEmit",
         "build:web": "npm run typecheck:web && vite build --config web/vite.config.ts",
+        "watch:web": "vite build --watch --config web/vite.config.ts",
         "dev": "npm run dev:web",
         "dev:web": "vite --config web/vite.config.ts",
         "dev:server": "tsx watch src/index.ts",
         "start": "npm run start:server",
         "start:server": "node dist/src/index.js",
-        "prod:serve": "npm run start:server"
+        "prod:server": "npm run start:server"
     },
     "dependencies": {
         "@mistralai/mistralai": "^2.2.1",
