@@ -1,3 +1,4 @@
+import "./styles.css";
 import { loadUserSettings, upsertCurrentUserSettings } from "./api/apiFacade";
 import { initConversationFeature } from "./features/conversation";
 import { appState } from "./state/appState";

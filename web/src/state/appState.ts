@@ -7,7 +7,7 @@ export interface AppState {
 
 export const appState: AppState = {
     connection: {
-        provider: "mistral",
+        provider: "mistral.ai",
         apiKey: ""
     },
     availableModels: []

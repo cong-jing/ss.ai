@@ -5,16 +5,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SS.AI Model Connector</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./dist/app.css" />
 </head>
 
 <body>
-    <main class="container">
+    <main class="settings-container">
         <h1>模型设置</h1>
 
         <label for="provider">模型提供商</label>
         <select id="provider">
-            <option value="mistral">正在获取...</option>
+            <option value="mistral.ai">正在获取...</option>
         </select>
 
         <label for="apiKey">API Key</label>
@@ -22,12 +22,14 @@
 
         <button id="connectBtn" type="button">保存</button>
 
-        <p id="status" class="status"></p>
+        <p id="status" class="settings-status"></p>
 
         <label for="models">可用模型列表</label>
         <select id="models" disabled>
             <option>请先连接</option>
         </select>
+
+        <a class="settings-link" href="./chat-demo.html">打开聊天滚动 Demo</a>
     </main>
 
     <script type="module" src="./dist/app.js"></script>

@@ -7,8 +7,8 @@
         "build": "npm run build:server && npm run build:web",
         "build:server": "tsc -p tsconfig.json",
         "typecheck:web": "tsc -p web/tsconfig.json --noEmit",
-        "build:web": "npm run typecheck:web && esbuild web/src/main.ts --bundle --format=esm --sourcemap --outfile=web/dist/app.js",
-        "dev:web": "esbuild web/src/main.ts --bundle --format=esm --sourcemap --outfile=web/dist/app.js --watch",
+        "build:web": "npm run typecheck:web && esbuild web/src/main.ts --bundle --format=esm --sourcemap --outfile=web/dist/app.js && esbuild web/src/chatDemoMain.ts --bundle --format=esm --sourcemap --outfile=web/dist/chatDemoMain.js",
+        "dev:web": "esbuild web/src/main.ts web/src/chatDemoMain.ts --bundle --format=esm --sourcemap --outdir=web/dist --watch",
         "dev:serve": "tsx src/index.ts",
         "prod:serve": "node dist/src/index.js"
     },
