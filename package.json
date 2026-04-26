@@ -6,23 +6,30 @@
     "scripts": {
         "build": "npm run build:server && npm run build:web",
         "build:server": "tsc -p tsconfig.json",
-        "typecheck:web": "tsc -p web/tsconfig.json --noEmit",
-        "build:web": "npm run typecheck:web && esbuild web/src/main.ts --bundle --format=esm --sourcemap --outfile=web/dist/app.js && esbuild web/src/chatDemoMain.ts --bundle --format=esm --sourcemap --outfile=web/dist/chatDemoMain.js",
-        "dev:web": "esbuild web/src/main.ts web/src/chatDemoMain.ts --bundle --format=esm --sourcemap --outdir=web/dist --watch",
-        "dev:serve": "tsx src/index.ts",
-        "prod:serve": "node dist/src/index.js"
+        "typecheck:web": "vue-tsc -p web/tsconfig.json --noEmit",
+        "build:web": "npm run typecheck:web && vite build --config web/vite.config.ts",
+        "dev": "npm run dev:web",
+        "dev:web": "vite --config web/vite.config.ts",
+        "dev:server": "tsx watch src/index.ts",
+        "start": "npm run start:server",
+        "start:server": "node dist/src/index.js",
+        "prod:serve": "npm run start:server"
     },
     "dependencies": {
         "@mistralai/mistralai": "^2.2.1",
         "ajv": "^8.20.0",
         "express": "^4.19.2",
+        "vue": "^3.5.13",
         "zod": "^4.3.6"
     },
     "devDependencies": {
+        "@vitejs/plugin-vue": "^5.2.1",
         "@types/express": "^4.17.21",
         "@types/node": "^22.7.4",
         "esbuild": "^0.24.2",
         "tsx": "^4.19.1",
-        "typescript": "^5.6.3"
+        "typescript": "^5.6.3",
+        "vite": "^5.4.11",
+        "vue-tsc": "^2.1.10"
     }
 }
