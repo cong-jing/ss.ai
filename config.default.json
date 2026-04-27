@@ -2,7 +2,7 @@
     "$schema": "./schemas/config.schema.json",
     "http": {
         "host": "0.0.0.0",
-        "port": 3000
+        "port": 8999
     },
     "logger": {
         "level": "info",

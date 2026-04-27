@@ -36,10 +36,10 @@ function onKeydown(event: KeyboardEvent) {
       v-model="text"
       :disabled="disabled"
       class="chat-input"
-      placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+      placeholder="Input message, Enter to send, Shift+Enter for newline"
       @keydown="onKeydown"
     />
-    <Button :disabled="disabled" @click="submit">发送</Button>
+    <Button :disabled="disabled" @click="submit">Send</Button>
   </footer>
 </template>
 

@@ -37,11 +37,6 @@ async function buildUserSettingsResponse(context: HttpApiContext): Promise<GetUs
 
         if (modelEntry.availableModels.length > 0) {
             availableModels = [...modelEntry.availableModels].sort();
-            context.logger.debug("buildUserSettingsResponse: use models from config.availableModels", {
-                provider: currentProvider,
-                modelCount: availableModels.length,
-                firstModels: availableModels.slice(0, 5)
-            });
         } else if (apiKey) {
             const client = createModelClientFromConfig({
                 provider: modelEntry.provider,
@@ -81,7 +76,7 @@ async function buildUserSettingsResponse(context: HttpApiContext): Promise<GetUs
 
 export function registerUserSettingsRoutes(context: HttpApiContext): void {
     registerApi(context.app, ApiGetUserSettings, async () => {
-        context.logger.debug("getUserSettings: loading settings");
+        context.logger.info("getUserSettings: loading settings");
 
         const response = await buildUserSettingsResponse(context);
 

@@ -21,12 +21,12 @@ function mapResponseToSettings(
     };
 }
 
-export async function getUserSettings(): Promise<UserSettings> {
+export async function apiGetUserSettings(): Promise<UserSettings> {
     const response = await callApi(ApiGetUserSettings);
     return mapResponseToSettings(response);
 }
 
-export async function saveUserSettings(payload: SaveUserSettingsPayload, previousApiKey = ""): Promise<UserSettings> {
+export async function apiSaveUserSettings(payload: SaveUserSettingsPayload, previousApiKey = ""): Promise<UserSettings> {
     const response = await callApi(ApiUpsertUserSettings, {
         provider: payload.provider,
         model: payload.model,

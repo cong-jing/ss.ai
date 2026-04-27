@@ -3,7 +3,7 @@ import { loadRuntimeConfig } from "./util/config";
 import { startHttpServer } from "./http/server";
 import { createLogger, setGlobalLogger } from "./util/logger";
 
-const LOGGER_STACK_LEVEL = 1;
+const LOGGER_STACK_LEVEL = 0;
 
 async function main(): Promise<void> {
     const config = loadRuntimeConfig();

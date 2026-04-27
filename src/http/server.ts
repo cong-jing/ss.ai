@@ -5,7 +5,10 @@ import { getGlobalLogger } from "../util/logger";
 import { createAgentServiceFactory } from "./apis/apiContext";
 import { registerChatRoute } from "./apis/chat.route";
 import { registerUserSettingsRoutes } from "./apis/userSettings.route";
+import { registerUserInfoRoutes } from "./apis/userInfo.route";
+import { registerCharacterInfoRoutes } from "./apis/characterInfo.route";
 import { UserSettingsStore } from "./userSettingsStore";
+import { JsonFileStore } from "./jsonFileStore";
 
 export function createHttpServer(config: RuntimeConfig) {
     const app = express();
@@ -25,6 +28,16 @@ export function createHttpServer(config: RuntimeConfig) {
         ]
     );
     const createAgentServiceFromUserSettings = createAgentServiceFactory(userSettingsStore, config.models, config);
+
+    const userInfoStore = new JsonFileStore(
+        path.resolve(config.runtimeFiles.userDataDir, "user-info.json"),
+        { name: "", bio: "" }
+    );
+
+    const characterInfoStore = new JsonFileStore(
+        path.resolve(config.runtimeFiles.userDataDir, "character-info.json"),
+        { name: "", description: "" }
+    );
 
     app.use(express.json());
     app.use(express.static(webDistDir));
@@ -47,6 +60,8 @@ export function createHttpServer(config: RuntimeConfig) {
 
     registerUserSettingsRoutes(apiContext);
     registerChatRoute(apiContext);
+    registerUserInfoRoutes(apiContext, userInfoStore);
+    registerCharacterInfoRoutes(apiContext, characterInfoStore);
 
     return app;
 }

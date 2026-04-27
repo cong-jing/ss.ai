@@ -26,13 +26,16 @@ onMounted(() => {
 
     <div class="form-group">
       <label>API Key</label>
-      <TextInput v-model="settings.apiKey" type="password" :placeholder="settings.apiKeySet ? '已设置（留空表示不更新）' : '请输入 API Key'" />
+      <TextInput v-model="settings.apiKey" type="password" 
+        :placeholder="settings.apiKeySet ? 'Already set (leave blank to keep current)' : 'Enter API Key'" />
     </div>
 
     <div class="form-group">
       <label>Model</label>
-      <select v-model="settings.currentModel" :disabled="settings.availableModels.length === 0 || isSaving">
-        <option v-if="settings.availableModels.length === 0" :value="null">暂无可用模型</option>
+      <select v-model="settings.currentModel" :disabled="isSaving"
+        @click="settings.availableModels.length === 0 ? loadSettings() : undefined"
+        @change="settings.availableModels.length > 0 ? saveSettings() : undefined">
+        <option v-if="settings.availableModels.length === 0" :value="null">No available models (click to load)</option>
         <option v-for="model in settings.availableModels" :key="model" :value="model">
           {{ model }}
         </option>
@@ -40,12 +43,12 @@ onMounted(() => {
     </div>
 
     <div class="actions">
-      <Button :disabled="!canSave || isSaving" @click="saveSettings">{{ isSaving ? '保存中...' : '保存' }}</Button>
+      <Button :disabled="!canSave || isSaving" @click="saveSettings">{{ isSaving ? 'Saving...' : 'Save' }}</Button>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
-    <p v-else-if="isLoading" class="hint">加载中...</p>
-    <p v-else class="hint">设置已加载</p>
+    <p v-else-if="isLoading" class="hint">Loading...</p>
+    <p v-else class="hint">Settings loaded</p>
   </Panel>
 </template>
 

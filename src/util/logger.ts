@@ -151,7 +151,7 @@ export class Logger {
             const filePath = matchedWithFunction[2];
             const line = Number(matchedWithFunction[3]);
 
-            const fileName = path.relative(process.cwd(), filePath) || filePath;
+            const fileName = path.resolve(filePath);
             return {
                 functionName,
                 fileName,
@@ -164,7 +164,7 @@ export class Logger {
             const filePath = matchedWithoutFunction[1];
             const line = Number(matchedWithoutFunction[2]);
 
-            const fileName = path.relative(process.cwd(), filePath) || filePath;
+            const fileName = path.resolve(filePath);
             return {
                 functionName: "anonymous",
                 fileName,

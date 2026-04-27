@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { getUserSettings, saveUserSettings } from "./userSettingsApi";
+import { apiGetUserSettings, apiSaveUserSettings } from "./userSettingsApi";
 import type { UserSettings } from "./userSettingsTypes";
 
 function createEmptySettings(): UserSettings {
@@ -26,7 +26,7 @@ export function useUserSettingsViewModel() {
         error.value = null;
 
         try {
-            settings.value = await getUserSettings();
+            settings.value = await apiGetUserSettings();
         } catch (e) {
             error.value = e instanceof Error ? e.message : String(e);
         } finally {
@@ -36,7 +36,7 @@ export function useUserSettingsViewModel() {
 
     async function saveSettings(): Promise<void> {
         if (!settings.value.currentProvider) {
-            error.value = "请选择 provider";
+            error.value = "Select a provider";
             return;
         }
 
@@ -45,7 +45,7 @@ export function useUserSettingsViewModel() {
 
         try {
             const apiKey = settings.value.apiKey.trim();
-            settings.value = await saveUserSettings({
+            settings.value = await apiSaveUserSettings({
                 provider: settings.value.currentProvider,
                 model: settings.value.currentModel || null,
                 apiKey: apiKey ? apiKey : null

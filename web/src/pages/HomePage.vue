@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ChatPanel from "../panels/chat/ChatPanel.vue";
 import UserSettingsPanel from "../panels/userSettings/UserSettingsPanel.vue";
+import ScenarioPanel from "../panels/scenario/ScenarioPanel.vue";
 </script>
 
 <template>
@@ -12,6 +13,10 @@ import UserSettingsPanel from "../panels/userSettings/UserSettingsPanel.vue";
     <section class="chat-area">
       <ChatPanel />
     </section>
+
+    <aside class="info-area">
+      <ScenarioPanel />
+    </aside>
   </main>
 </template>
 
@@ -24,8 +29,8 @@ import UserSettingsPanel from "../panels/userSettings/UserSettingsPanel.vue";
 }
 
 .settings-area {
-    width: 320px;
-    min-width: 320px;
+    width: 280px;
+    min-width: 280px;
     border-right: 1px solid #e5e7eb;
     background: #ffffff;
 }
@@ -34,5 +39,13 @@ import UserSettingsPanel from "../panels/userSettings/UserSettingsPanel.vue";
     flex: 1;
     min-width: 0;
     background: #f9fafb;
+}
+
+.info-area {
+    width: 280px;
+    min-width: 280px;
+    border-left: 1px solid #e5e7eb;
+    background: #ffffff;
+    overflow-y: auto;
 }
 </style>

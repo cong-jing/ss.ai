@@ -18,8 +18,8 @@ onMounted(() => {
   <Panel title="Chat" class="chat-panel">
     <div class="chat-layout">
       <div class="chat-actions">
-        <Button :disabled="isSending" @click="clearMessages">清空消息</Button>
-        <span v-if="isSending" class="sending">发送中...</span>
+        <Button :disabled="isSending" @click="clearMessages">Clear</Button>
+        <span v-if="isSending" class="sending">Sending...</span>
       </div>
 
       <div class="chat-messages">
