@@ -21,14 +21,16 @@ onMounted(() => {
         <Button :disabled="isSending" @click="clearMessages">Clear</Button>
         <span v-if="isSending" class="sending">Sending...</span>
       </div>
-
       <div class="chat-messages">
         <ChatMessageList :messages="messages" />
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
 
-      <ChatInputBox :disabled="isSending" @send="sendMessage" />
+      <ChatInputBox
+        :disabled="isSending"
+        @send="(text, stream) => sendMessage(text, stream)"
+      />
     </div>
   </Panel>
 </template>
@@ -36,15 +38,32 @@ onMounted(() => {
 <style scoped>
 .chat-panel {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .chat-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+
   display: flex;
   flex-direction: column;
-  height: 100%;
+
+  overflow: hidden;
 }
 
 .chat-actions {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -54,8 +73,11 @@ onMounted(() => {
 }
 
 .chat-messages {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: #f9fafb;
 }
 
@@ -65,6 +87,7 @@ onMounted(() => {
 }
 
 .error {
+  flex-shrink: 0;
   margin: 0;
   padding: 8px 12px;
   font-size: 12px;

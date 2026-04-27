@@ -19,6 +19,7 @@ export interface RuntimeConfig {
     logger: {
         level: LogLevel;
         logFilePath: string;
+        clearLogFileOnStart: boolean;
         includeSourceLocation: boolean;
         includeStackTrace: boolean;
     };
@@ -49,6 +50,7 @@ interface RawConfig {
     logger?: {
         level?: LogLevel;
         logFilePath?: string;
+        clearLogFileOnStart?: boolean;
         includeSourceLocation?: boolean;
         includeStackTrace?: boolean;
     };
@@ -224,6 +226,7 @@ export function loadRuntimeConfig(): RuntimeConfig {
         logger: {
             level: fileConfig.logger?.level ?? "info",
             logFilePath: loggerFilePath,
+            clearLogFileOnStart: fileConfig.logger?.clearLogFileOnStart ?? false,
             includeSourceLocation: fileConfig.logger?.includeSourceLocation ?? false,
             includeStackTrace: fileConfig.logger?.includeStackTrace ?? false
         },

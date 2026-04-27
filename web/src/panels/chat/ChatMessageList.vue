@@ -7,19 +7,37 @@ const props = defineProps<{
   messages: ChatMessage[];
 }>();
 
+const emit = defineEmits<{
+  reachTop: [];
+  reachBottom: [];
+}>();
+
 const listEl = ref<HTMLElement | null>(null);
 
 function scrollToBottom() {
   const el = listEl.value;
-  if (!el) {
-    return;
-  }
-
+  if (!el) return;
   el.scrollTop = el.scrollHeight;
 }
 
+function onScroll() {
+  const el = listEl.value;
+  if (!el) return;
+
+  if (el.scrollTop === 0) {
+    emit("reachTop");
+  }
+
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1) {
+    emit("reachBottom");
+  }
+}
+
 watch(
-  () => props.messages.length,
+  () => {
+    const last = props.messages[props.messages.length - 1];
+    return `${props.messages.length}:${last?.content?.length ?? 0}`;
+  },
   async () => {
     await nextTick();
     scrollToBottom();
@@ -28,18 +46,20 @@ watch(
 </script>
 
 <template>
-  <section ref="listEl" class="message-list">
+  <section ref="listEl" class="message-list" @scroll="onScroll">
     <ChatMessageBlock v-for="message in messages" :key="message.id" :message="message" />
   </section>
 </template>
 
 <style scoped>
 .message-list {
-  display: flex;
-  flex-direction: column;
   gap: 8px;
-  height: 100%;
-  overflow-y: auto;
   padding: 12px;
+
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
 }
 </style>

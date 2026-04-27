@@ -1,5 +1,10 @@
 import { ApiDefine } from "../apiBase";
 
+export interface GetCharacterInfoResponse {
+    name: string;
+    description: string;
+}
+
 export interface UpsertCharacterInfoRequest {
     name: string;
     description: string;
@@ -10,4 +15,5 @@ export interface UpsertCharacterInfoResponse {
     description: string;
 }
 
+export const ApiGetCharacterInfo = new ApiDefine<void, GetCharacterInfoResponse>("/v1/character-info", "GET");
 export const ApiUpsertCharacterInfo = new ApiDefine<UpsertCharacterInfoRequest, UpsertCharacterInfoResponse>("/v1/character-info", "POST");

@@ -28,7 +28,7 @@ onMounted(() => {
 
 <template>
   <div class="scenario-panel">
-    <Panel title="User Info" class="info-section">
+    <Panel title="User Info" class="info-section" :stretch="false">
       <div class="form-group">
         <label>Name</label>
         <TextInput v-model="userInfo.name" :disabled="isLoadingUser || isSavingUser" placeholder="Enter your name" />
@@ -46,7 +46,7 @@ onMounted(() => {
       <p v-else-if="isLoadingUser" class="hint">Loading...</p>
     </Panel>
 
-    <Panel title="Character" class="info-section">
+    <Panel title="Character" class="info-section" :stretch="false">
       <div class="form-group">
         <label>Character Name</label>
         <TextInput v-model="characterInfo.name" :disabled="isLoadingCharacter || isSavingCharacter" placeholder="Enter character name" />
@@ -78,11 +78,6 @@ onMounted(() => {
 
 .info-section {
   flex-shrink: 0;
-}
-
-/* Override Panel's height: 100% so stacked panels use natural height */
-.info-section :deep(.panel) {
-  height: auto;
 }
 
 .form-group {

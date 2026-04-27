@@ -25,6 +25,7 @@ import ScenarioPanel from "../panels/scenario/ScenarioPanel.vue";
     display: flex;
     width: 100%;
     height: 100vh;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -34,10 +35,13 @@ import ScenarioPanel from "../panels/scenario/ScenarioPanel.vue";
     border-right: 1px solid #e5e7eb;
     background: #ffffff;
 }
-
 .chat-area {
+    display: flex;
+    flex-direction: column;
     flex: 1;
     min-width: 0;
+    min-height: 0;
+    overflow: hidden;
     background: #f9fafb;
 }
 

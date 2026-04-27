@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import { apiSendChatMessage } from "./chatApi";
+import { apiSendChatMessage, apiStreamChatMessage } from "./chatApi";
 import type { ChatMessage } from "./chatTypes";
 
 function createId(prefix: string): string {
@@ -92,7 +92,7 @@ export function useChatViewModel() {
     const isLoading = ref(false);
     const error = ref<string | null>(null);
 
-    async function sendMessage(text: string) {
+    async function sendMessage(text: string, stream = false) {
         const prompt = text.trim();
         if (!prompt) {
             return;
@@ -108,6 +108,41 @@ export function useChatViewModel() {
 
         isSending.value = true;
         error.value = null;
+
+        if (stream) {
+            const msgId = createId("assistant");
+            messages.value.push({
+                id: msgId,
+                role: "assistant",
+                content: "",
+                createdAt: new Date().toISOString(),
+                status: "streaming"
+            });
+
+            try {
+                const result = await apiStreamChatMessage(prompt, (chunk) => {
+                    const msg = messages.value.find(m => m.id === msgId);
+                    if (msg) msg.content += chunk;
+                });
+
+                const msg = messages.value.find(m => m.id === msgId);
+                if (msg) {
+                    msg.status = "normal";
+                    msg.id = result.requestId || msgId;
+                }
+            } catch (e) {
+                const message = e instanceof Error ? e.message : String(e);
+                error.value = message;
+                const msg = messages.value.find(m => m.id === msgId);
+                if (msg) {
+                    msg.content = message;
+                    msg.status = "failed";
+                }
+            } finally {
+                isSending.value = false;
+            }
+            return;
+        }
 
         try {
             const response = await apiSendChatMessage(prompt);

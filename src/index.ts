@@ -12,10 +12,12 @@ async function main(): Promise<void> {
     fs.mkdirSync(config.runtimeFiles.userDataDir, { recursive: true });
 
     const logger = createLogger({
-        level: config.logger.level,
-        logFilePath: config.logger.logFilePath,
-        includeSourceLocation: config.logger.includeSourceLocation,
-        includeStackTrace: config.logger.includeStackTrace,
+        // level: config.logger.level,
+        // logFilePath: config.logger.logFilePath,
+        // clearLogFileOnStart: config.logger.clearLogFileOnStart,
+        // includeSourceLocation: config.logger.includeSourceLocation,
+        // includeStackTrace: config.logger.includeStackTrace,
+        ...config.logger,
         stackLevel: LOGGER_STACK_LEVEL,
     });
     setGlobalLogger(logger);

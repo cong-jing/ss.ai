@@ -26,6 +26,7 @@
             "properties": {
                 "level": {
                     "enum": [
+                        "verbose",
                         "debug",
                         "info",
                         "warn",
@@ -34,6 +35,9 @@
                 },
                 "logFilePath": {
                     "type": "string"
+                },
+                "clearLogFileOnStart": {
+                    "type": "boolean"
                 },
                 "includeSourceLocation": {
                     "type": "boolean"

@@ -2,9 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import util from "node:util";
 
-export type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogLevel = "verbose" | "debug" | "info" | "warn" | "error";
 
 const levelWeight: Record<LogLevel, number> = {
+    verbose: 0,
     debug: 10,
     info: 20,
     warn: 30,
@@ -16,6 +17,7 @@ export interface LoggerOptions {
     logFilePath: string;
     includeSourceLocation: boolean;
     includeStackTrace: boolean;
+    clearLogFileOnStart: boolean;
     stackLevel: number;
 }
 
@@ -30,6 +32,7 @@ interface CallerInfo {
 const noopOptions: LoggerOptions = {
     level: "error",
     logFilePath: "",
+    clearLogFileOnStart: false,
     includeSourceLocation: false,
     includeStackTrace: false,
     stackLevel: 0,
@@ -47,11 +50,18 @@ export class Logger {
         if (enabled) {
             this.logFilePath = path.resolve(options.logFilePath);
             fs.mkdirSync(path.dirname(this.logFilePath), { recursive: true });
+            if (options.clearLogFileOnStart) {
+                fs.writeFileSync(this.logFilePath, "", "utf-8");
+            }
         }
     }
 
     static noop(): Logger {
         return new Logger(noopOptions, false);
+    }
+
+    verbose(message: string, meta?: Record<string, unknown>, onceOptions?: LoggerOverrideOptions): void {
+        this.log("verbose", message, meta, onceOptions);
     }
 
     debug(message: string, meta?: Record<string, unknown>, onceOptions?: LoggerOverrideOptions): void {
