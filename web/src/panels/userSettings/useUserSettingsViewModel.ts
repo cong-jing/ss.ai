@@ -1,71 +1,166 @@
-import { computed, ref } from "vue";
-import { apiGetUserSettings, apiSaveUserSettings } from "./userSettingsApi";
-import type { UserSettings } from "./userSettingsTypes";
-
-function createEmptySettings(): UserSettings {
-    return {
-        providers: [],
-        currentProvider: null,
-        currentModel: null,
-        availableModels: [],
-        apiKey: "",
-        apiKeySet: false
-    };
-}
+import { ref } from "vue";
+import {
+    apiGetUserSettings,
+    apiUpsertApiKey,
+    apiDeleteApiKey,
+    apiTestApiKey,
+    apiUpsertFunctionModel,
+    apiListModels
+} from "./userSettingsApi";
+import type { ProviderState, FunctionModelState } from "./userSettingsTypes";
+import { AI_FUNCTIONS, type AiFunction } from "../../../../shared/aiFunctions";
 
 export function useUserSettingsViewModel() {
-    const settings = ref<UserSettings>(createEmptySettings());
+    const providers = ref<ProviderState[]>([]);
+    const functionModels = ref<FunctionModelState[]>([]);
     const isLoading = ref(false);
-    const isSaving = ref(false);
-    const error = ref<string | null>(null);
-
-    const canSave = computed(() => Boolean(settings.value.currentProvider));
+    const loadError = ref<string | null>(null);
+    const isSavingFunctionModel = ref(false);
 
     async function loadSettings(): Promise<void> {
         isLoading.value = true;
-        error.value = null;
-
+        loadError.value = null;
         try {
-            settings.value = await apiGetUserSettings();
+            const response = await apiGetUserSettings();
+
+            providers.value = response.providers.map((p) => ({
+                provider: p.provider,
+                apiKeySet: p.apiKeySet,
+                apiKeyInput: null,
+                availableModels: p.availableModels,
+                isSavingKey: false,
+                isTestingKey: false,
+                isLoadingModels: false,
+                testResult: "none",
+                testMessage: ""
+            }));
+
+            // Build function model state from response
+            const fnStates: FunctionModelState[] = [];
+            for (const fn of AI_FUNCTIONS) {
+                const assignment = response.functionModels[fn];
+                if (assignment) {
+                    fnStates.push({ fn, provider: assignment.provider, model: assignment.model });
+                } else {
+                    fnStates.push({ fn, provider: "", model: "" });
+                }
+            }
+            functionModels.value = fnStates;
         } catch (e) {
-            error.value = e instanceof Error ? e.message : String(e);
+            loadError.value = e instanceof Error ? e.message : String(e);
         } finally {
             isLoading.value = false;
         }
     }
 
-    async function saveSettings(): Promise<void> {
-        if (!settings.value.currentProvider) {
-            error.value = "Select a provider";
-            return;
-        }
+    function getProvider(providerName: string): ProviderState | undefined {
+        return providers.value.find(p => p.provider === providerName);
+    }
 
-        isSaving.value = true;
-        error.value = null;
+    function startEditApiKey(providerName: string): void {
+        const p = getProvider(providerName);
+        if (p) p.apiKeyInput = "";
+    }
 
+    function cancelEditApiKey(providerName: string): void {
+        const p = getProvider(providerName);
+        if (p) p.apiKeyInput = null;
+    }
+
+    async function saveApiKey(providerName: string): Promise<void> {
+        const p = getProvider(providerName);
+        if (!p || p.apiKeyInput === null) return;
+
+        p.isSavingKey = true;
+        p.testResult = "none";
         try {
-            const apiKey = settings.value.apiKey.trim();
-            settings.value = await apiSaveUserSettings({
-                provider: settings.value.currentProvider,
-                model: settings.value.currentModel || null,
-                apiKey: apiKey ? apiKey : null
-            }, settings.value.apiKey);
-
-            settings.value.apiKey = "";
-        } catch (e) {
-            error.value = e instanceof Error ? e.message : String(e);
+            const res = await apiUpsertApiKey(providerName, p.apiKeyInput.trim());
+            p.apiKeySet = res.apiKeySet;
+            p.availableModels = res.availableModels;
+            p.apiKeyInput = null;
         } finally {
-            isSaving.value = false;
+            p.isSavingKey = false;
+        }
+    }
+
+    async function deleteApiKey(providerName: string): Promise<void> {
+        const p = getProvider(providerName);
+        if (!p) return;
+
+        p.isSavingKey = true;
+        p.testResult = "none";
+        try {
+            const res = await apiDeleteApiKey(providerName);
+            p.apiKeySet = res.apiKeySet;
+            p.availableModels = [];
+            p.apiKeyInput = null;
+        } finally {
+            p.isSavingKey = false;
+        }
+    }
+
+    async function testApiKey(providerName: string): Promise<void> {
+        const p = getProvider(providerName);
+        if (!p) return;
+
+        p.isTestingKey = true;
+        p.testResult = "none";
+        p.testMessage = "";
+        try {
+            const res = await apiTestApiKey(providerName);
+            p.testResult = res.ok ? "ok" : "fail";
+            p.testMessage = res.message ?? "";
+        } catch (e) {
+            p.testResult = "fail";
+            p.testMessage = e instanceof Error ? e.message : String(e);
+        } finally {
+            p.isTestingKey = false;
+        }
+    }
+
+    async function loadModels(providerName: string): Promise<void> {
+        const p = getProvider(providerName);
+        if (!p || !p.apiKeySet) return;
+
+        p.isLoadingModels = true;
+        try {
+            const res = await apiListModels(providerName);
+            p.availableModels = res.models;
+        } finally {
+            p.isLoadingModels = false;
+        }
+    }
+
+    async function saveFunctionModel(fn: AiFunction, providerName: string, model: string): Promise<void> {
+        isSavingFunctionModel.value = true;
+        try {
+            const res = await apiUpsertFunctionModel(fn, providerName, model);
+            for (const fnFn of AI_FUNCTIONS) {
+                const assignment = res.functionModels[fnFn];
+                const state = functionModels.value.find(f => f.fn === fnFn);
+                if (state && assignment) {
+                    state.provider = assignment.provider;
+                    state.model = assignment.model;
+                }
+            }
+        } finally {
+            isSavingFunctionModel.value = false;
         }
     }
 
     return {
-        settings,
+        providers,
+        functionModels,
         isLoading,
-        isSaving,
-        error,
-        canSave,
+        loadError,
+        isSavingFunctionModel,
         loadSettings,
-        saveSettings
+        startEditApiKey,
+        cancelEditApiKey,
+        saveApiKey,
+        deleteApiKey,
+        testApiKey,
+        loadModels,
+        saveFunctionModel
     };
 }

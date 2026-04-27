@@ -132,6 +132,7 @@ export function useChatViewModel() {
                 }
             } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
+                console.error("[chat/stream] error:", e);
                 error.value = message;
                 const msg = messages.value.find(m => m.id === msgId);
                 if (msg) {
@@ -155,6 +156,7 @@ export function useChatViewModel() {
             });
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
+            console.error("[chat] error:", e);
             error.value = message;
             messages.value.push({
                 id: createId("assistant-error"),

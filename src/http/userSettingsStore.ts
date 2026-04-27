@@ -1,10 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { AiFunction } from "../../shared/aiFunctions";
+
+export interface FunctionModelAssignment {
+    provider: string;
+    model: string;
+}
 
 export interface UserSettings {
     currentProvider: string | null;
     currentModel: string | null;
     providerApiKeys: Record<string, string>;
+    functionModels: Partial<Record<AiFunction, FunctionModelAssignment>>;
 }
 
 interface LegacyUserSettings {
@@ -53,9 +60,26 @@ export class UserSettingsStore {
             providerApiKeys: {
                 ...current.providerApiKeys,
                 ...(patch.providerApiKeys ?? {})
+            },
+            functionModels: {
+                ...current.functionModels,
+                ...(patch.functionModels ?? {})
             }
         };
 
+        this.write(next);
+        return next;
+    }
+
+    setFunctionModel(fn: AiFunction, provider: string, model: string): UserSettings {
+        const current = this.read();
+        const next: UserSettings = {
+            ...current,
+            functionModels: {
+                ...current.functionModels,
+                [fn]: { provider: provider.trim().toLowerCase(), model: model.trim() }
+            }
+        };
         this.write(next);
         return next;
     }
@@ -127,7 +151,10 @@ export class UserSettingsStore {
         return {
             currentProvider,
             currentModel,
-            providerApiKeys
+            providerApiKeys,
+            functionModels: (data.functionModels && typeof data.functionModels === "object" && !Array.isArray(data.functionModels))
+                ? data.functionModels as UserSettings["functionModels"]
+                : {}
         };
     }
 

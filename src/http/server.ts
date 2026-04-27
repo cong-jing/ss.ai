@@ -20,7 +20,8 @@ export function createHttpServer(config: RuntimeConfig) {
         {
             currentProvider: null,
             currentModel: null,
-            providerApiKeys: {}
+            providerApiKeys: {},
+            functionModels: {}
         },
         [
             path.resolve(config.runtimeFiles.userDataDir, "ai-user-settings.json"),

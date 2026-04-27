@@ -1,8 +1,15 @@
 import {
     ApiGetUserSettings,
-    ApiUpsertUserSettings,
-    type GetUserSettingsResponse
+    ApiUpsertApiKey,
+    ApiDeleteApiKey,
+    ApiTestApiKey,
+    ApiUpsertFunctionModel,
+    ApiListModels,
+    type GetUserSettingsResponse,
+    type ProviderStatus,
+    type FunctionModelMap
 } from "../../../shared/contracts/httpApi";
+import { AI_FUNCTIONS } from "../../../shared/aiFunctions";
 import { createModelClientFromConfig } from "../../agent";
 import { registerApi } from "../registerApi";
 import {
@@ -10,171 +17,173 @@ import {
     type HttpApiContext
 } from "./apiContext";
 
-async function buildUserSettingsResponse(context: HttpApiContext): Promise<GetUserSettingsResponse> {
-    const settings = context.userSettingsStore.read();
-    const providerKeys = Object.keys(context.config.models);
-    let currentProvider = settings.currentProvider;
+async function listModelsForProvider(context: HttpApiContext, provider: string): Promise<string[]> {
+    const modelEntry = context.config.models[provider];
+    if (!modelEntry) return [];
 
-    if (currentProvider && !providerKeys.includes(currentProvider)) {
-        context.logger.debug("buildUserSettingsResponse: provider not in configured providers, treat as unset", {
-            currentProvider,
-            providers: providerKeys
-        });
-        currentProvider = null;
+    if (modelEntry.availableModels.length > 0) {
+        return [...modelEntry.availableModels].sort();
     }
 
-    const apiKey = context.userSettingsStore.getApiKey(currentProvider);
-    const apiKeySet = Boolean(apiKey);
+    const apiKey = context.userSettingsStore.getApiKey(provider);
+    if (!apiKey) return [];
 
-    let availableModels: string[] = [];
-
-    if (currentProvider) {
-        const modelEntry = context.config.models[currentProvider];
-
-        if (!modelEntry) {
-            throw new Error(`Unsupported provider: ${currentProvider}`);
-        }
-
-        if (modelEntry.availableModels.length > 0) {
-            availableModels = [...modelEntry.availableModels].sort();
-        } else if (apiKey) {
-            const client = createModelClientFromConfig({
-                provider: modelEntry.provider,
-                model: settings.currentModel || modelEntry.defaultModel || "model-for-listing",
-                apiUrl: modelEntry.apiUrl,
-                apiKey
-            });
-
-            availableModels = await client.listModels();
-            availableModels.sort();
-            context.logger.debug("buildUserSettingsResponse: models loaded from provider api", {
-                provider: currentProvider,
-                modelCount: availableModels.length,
-                firstModels: availableModels.slice(0, 5)
-            });
-        }
-    }
-
-    let currentModel = settings.currentModel;
-    if (currentModel && availableModels.length > 0 && !availableModels.includes(currentModel)) {
-        context.logger.debug("buildUserSettingsResponse: model not in availableModels, treat as unset", {
-            currentProvider,
-            currentModel,
-            modelCount: availableModels.length
-        });
-        currentModel = null;
-    }
-
-    return {
-        providers: providerKeys,
-        currentProvider,
-        apiKeySet,
-        currentModel,
-        availableModels
-    };
+    const client = createModelClientFromConfig({
+        provider: modelEntry.provider,
+        model: modelEntry.defaultModel || "model-for-listing",
+        apiUrl: modelEntry.apiUrl,
+        apiKey
+    });
+    const models = await client.listModels();
+    return models.sort();
 }
 
 export function registerUserSettingsRoutes(context: HttpApiContext): void {
+    // GET /v1/user-settings
     registerApi(context.app, ApiGetUserSettings, async () => {
-        context.logger.info("getUserSettings: loading settings");
+        const settings = context.userSettingsStore.read();
+        const providerKeys = Object.keys(context.config.models);
 
-        const response = await buildUserSettingsResponse(context);
+        const providers: ProviderStatus[] = providerKeys.map((p) => ({
+            provider: p,
+            apiKeySet: Boolean(context.userSettingsStore.getApiKey(p)),
+            availableModels: []
+        }));
 
-        context.logger.debug("getUserSettings: response prepared", {
-            providers: response.providers,
-            currentProvider: response.currentProvider,
-            currentModel: response.currentModel,
-            apiKeySet: response.apiKeySet,
-            modelCount: response.availableModels.length,
-            firstModels: response.availableModels.slice(0, 5)
-        });
+        const functionModels: FunctionModelMap = {};
+        for (const fn of AI_FUNCTIONS) {
+            const assignment = settings.functionModels?.[fn];
+            functionModels[fn] = assignment ?? null;
+        }
 
+        const response: GetUserSettingsResponse = { providers, functionModels };
         return response;
     }, {
         onError: (error) => {
             const response = toErrorResponse(error);
-            context.logger.error("getUserSettings: failed", {
-                message: response.message
-            });
-
-            return {
-                status: 400,
-                body: response
-            };
+            context.logger.error("getUserSettings: failed", { message: response.message });
+            return { status: 400, body: response };
         }
     });
 
-    registerApi(context.app, ApiUpsertUserSettings, async ({ body }) => {
-        const provider = typeof body?.provider === "string" ? body.provider.trim().toLowerCase() : "";
-        const model = typeof body?.model === "string" ? body.model.trim() : null;
-        const apiKeyInput = typeof body?.apiKey === "string" ? body.apiKey.trim() : null;
+    // POST /v1/user-settings/api-key
+    registerApi(context.app, ApiUpsertApiKey, async ({ body }) => {
+        const provider = (body?.provider ?? "").trim().toLowerCase();
+        const apiKey = (body?.apiKey ?? "").trim();
 
-        context.logger.debug("upsertUserSettings: request received", {
+        if (!provider) throw new Error("provider is required");
+        if (!context.config.models[provider]) throw new Error(`Unsupported provider: ${provider}`);
+        if (!apiKey) throw new Error("apiKey is required");
+
+        context.userSettingsStore.setApiKey(provider, apiKey);
+
+        const availableModels = await listModelsForProvider(context, provider);
+
+        return {
             provider,
-            model,
-            hasApiKeyInRequest: Boolean(apiKeyInput)
-        });
-
-        if (!provider) {
-            throw new Error("provider is required");
-        }
-
-        if (!context.config.models[provider]) {
-            throw new Error(`Unsupported provider: ${provider}`);
-        }
-
-        const current = context.userSettingsStore.read();
-        const keepExistingModel = provider === current.currentProvider ? current.currentModel : null;
-        const targetModel = model || keepExistingModel;
-
-        context.userSettingsStore.update({
-            currentProvider: provider,
-            currentModel: targetModel
-        });
-
-        if (apiKeyInput !== null) {
-            context.userSettingsStore.setApiKey(provider, apiKeyInput || null);
-        }
-
-        context.logger.info("upsertUserSettings: settings persisted", {
-            currentProvider: provider,
-            currentModel: targetModel,
-            apiKeySet: Boolean(context.userSettingsStore.getApiKey(provider))
-        });
-
-        const response = await buildUserSettingsResponse(context);
-
-        if (response.availableModels.length > 0 && response.currentModel && !response.availableModels.includes(response.currentModel)) {
-            const fallbackModel = response.availableModels[0];
-            context.userSettingsStore.update({ currentModel: fallbackModel });
-            context.logger.debug("upsertUserSettings: current model corrected", {
-                from: response.currentModel,
-                to: fallbackModel
-            });
-
-            return buildUserSettingsResponse(context);
-        }
-
-        context.logger.debug("upsertUserSettings: response prepared", {
-            currentProvider: response.currentProvider,
-            currentModel: response.currentModel,
-            apiKeySet: response.apiKeySet,
-            modelCount: response.availableModels.length,
-            firstModels: response.availableModels.slice(0, 5)
-        });
-
-        return response;
+            apiKeySet: true,
+            availableModels
+        };
     }, {
         onError: (error) => {
             const response = toErrorResponse(error);
-            context.logger.error("upsertUserSettings: failed", {
-                message: response.message
-            });
+            context.logger.error("upsertApiKey: failed", { message: response.message });
+            return { status: 400, body: response };
+        }
+    });
 
-            return {
-                status: 400,
-                body: response
-            };
+    // POST /v1/user-settings/api-key/delete
+    registerApi(context.app, ApiDeleteApiKey, async ({ body }) => {
+        const provider = (body?.provider ?? "").trim().toLowerCase();
+        if (!provider) throw new Error("provider is required");
+
+        context.userSettingsStore.setApiKey(provider, null);
+
+        return {
+            provider,
+            apiKeySet: false
+        };
+    }, {
+        onError: (error) => {
+            const response = toErrorResponse(error);
+            context.logger.error("deleteApiKey: failed", { message: response.message });
+            return { status: 400, body: response };
+        }
+    });
+
+    // POST /v1/user-settings/test-api-key
+    registerApi(context.app, ApiTestApiKey, async ({ body }) => {
+        const provider = (body?.provider ?? "").trim().toLowerCase();
+        if (!provider) throw new Error("provider is required");
+
+        const modelEntry = context.config.models[provider];
+        if (!modelEntry) throw new Error(`Unsupported provider: ${provider}`);
+
+        const apiKey = context.userSettingsStore.getApiKey(provider);
+        if (!apiKey) {
+            return { provider, ok: false, message: "API key not set" };
+        }
+
+        try {
+            const client = createModelClientFromConfig({
+                provider: modelEntry.provider,
+                model: modelEntry.defaultModel || "model-for-listing",
+                apiUrl: modelEntry.apiUrl,
+                apiKey
+            });
+            const models = await client.listModels();
+            return { provider, ok: true, message: `${models.length} model(s) available` };
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { provider, ok: false, message };
+        }
+    }, {
+        onError: (error) => {
+            const response = toErrorResponse(error);
+            context.logger.error("testApiKey: failed", { message: response.message });
+            return { status: 400, body: response };
+        }
+    });
+
+    // POST /v1/user-settings/function-model
+    registerApi(context.app, ApiUpsertFunctionModel, async ({ body }) => {
+        const fn = body?.function;
+        const provider = (body?.provider ?? "").trim().toLowerCase();
+        const model = (body?.model ?? "").trim();
+
+        if (!fn || !(AI_FUNCTIONS as readonly string[]).includes(fn)) {
+            throw new Error(`Invalid function: ${fn}`);
+        }
+        if (!provider) throw new Error("provider is required");
+        if (!model) throw new Error("model is required");
+
+        const updated = context.userSettingsStore.setFunctionModel(fn, provider, model);
+        const functionModels: FunctionModelMap = {};
+        for (const f of AI_FUNCTIONS) {
+            functionModels[f] = updated.functionModels?.[f] ?? null;
+        }
+        return { functionModels };
+    }, {
+        onError: (error) => {
+            const response = toErrorResponse(error);
+            context.logger.error("upsertFunctionModel: failed", { message: response.message });
+            return { status: 400, body: response };
+        }
+    });
+
+    // POST /v1/user-settings/list-models
+    registerApi(context.app, ApiListModels, async ({ body }) => {
+        const provider = (body?.provider ?? "").trim().toLowerCase();
+        if (!provider) throw new Error("provider is required");
+        if (!context.config.models[provider]) throw new Error(`Unsupported provider: ${provider}`);
+
+        const models = await listModelsForProvider(context, provider);
+        return { provider, models };
+    }, {
+        onError: (error) => {
+            const response = toErrorResponse(error);
+            context.logger.error("listModels: failed", { message: response.message });
+            return { status: 400, body: response };
         }
     });
 }
