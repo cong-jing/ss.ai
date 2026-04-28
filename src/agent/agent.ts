@@ -1,6 +1,6 @@
-import { getGlobalLogger } from "../util/logger";
-import { PlaceholderModelClient } from "./clients/placeholderModelClient";
-import { AgentConfig, ChatRequest, ChatResponse, ModelClient } from "./types";
+import { getGlobalLogger } from "../util/logger.js";
+import { PlaceholderModelClient } from "./clients/placeholderModelClient.js";
+import { AgentConfig, ChatRequest, ChatResponse, ModelClient } from "./types.js";
 
 export interface AgentDependencies {
     modelClient?: ModelClient;

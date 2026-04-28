@@ -1,9 +1,9 @@
-import { AgentService, createModelClientFromConfig } from "../../agent";
+import { AgentService, createModelClientFromConfig } from "../../agent/index.js";
 import type { Express } from "express";
-import { RuntimeConfig, RuntimeModelEntry } from "../../util/config";
-import { Logger } from "../../util/logger";
-import { UserSettingsStore } from "../userSettingsStore";
-import type { ErrorResponse } from "../../../shared/contracts/httpApi";
+import { RuntimeConfig, RuntimeModelEntry } from "../../util/config.js";
+import { Logger } from "../../util/logger.js";
+import { UserSettingsStore } from "../userSettingsStore.js";
+import type { ErrorResponse } from "../../../shared/contracts/httpApi.js";
 
 export interface HttpApiContext {
     app: Express;

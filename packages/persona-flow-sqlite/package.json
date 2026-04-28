@@ -1,0 +1,19 @@
+{
+    "name": "@ss-ai/persona-flow-sqlite",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "test": "tsx test/run.ts",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "better-sqlite3": "^9.6.0",
+        "drizzle-orm": "^0.43.1"
+    },
+    "devDependencies": {
+        "@types/better-sqlite3": "^7.6.13",
+        "tsx": "*",
+        "typescript": "*"
+    }
+}

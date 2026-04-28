@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import Ajv2020 from "ajv/dist/2020";
+import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ErrorObject } from "ajv";
-import { LogLevel } from "./logger";
+import { LogLevel } from "./logger.js";
 
 export interface RuntimeModelEntry {
     provider: string;

@@ -1,7 +1,7 @@
 import fs from "node:fs";
-import { loadRuntimeConfig } from "./util/config";
-import { startHttpServer } from "./http/server";
-import { createLogger, setGlobalLogger } from "./util/logger";
+import { loadRuntimeConfig } from "./util/config.js";
+import { startHttpServer } from "./http/server.js";
+import { createLogger, setGlobalLogger } from "./util/logger.js";
 
 const LOGGER_STACK_LEVEL = 0;
 

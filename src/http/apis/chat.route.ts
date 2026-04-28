@@ -1,7 +1,7 @@
-import { ApiChat, ApiChatStream, type ChatRequest, type ChatStreamEvent } from "../../../shared/contracts/httpApi";
-import { AgentService, createModelClientFromConfig } from "../../agent";
-import { registerApi } from "../registerApi";
-import { toErrorResponse, type HttpApiContext } from "./apiContext";
+import { ApiChat, ApiChatStream, type ChatRequest, type ChatStreamEvent } from "../../../shared/contracts/httpApi.js";
+import { AgentService, createModelClientFromConfig } from "../../agent/index.js";
+import { registerApi } from "../registerApi.js";
+import { toErrorResponse, type HttpApiContext } from "./apiContext.js";
 
 function createChatAgentService(context: HttpApiContext): AgentService {
     const settings = context.userSettingsStore.read();

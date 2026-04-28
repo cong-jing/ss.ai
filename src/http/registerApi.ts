@@ -1,6 +1,6 @@
 import type { Express, Request, RequestHandler } from "express";
-import type { ApiDefine, ErrorResponse } from "../../shared/contracts/httpApi";
-import type { HttpApiContext } from "./apis/apiContext";
+import type { ApiDefine, ErrorResponse } from "../../shared/contracts/httpApi.js";
+import type { HttpApiContext } from "./apis/apiContext.js";
 
 export interface RegisterApiOptions<TRequest, TResponse> {
     handleRequest: (request: Request, body: TRequest) =>

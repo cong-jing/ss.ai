@@ -1,4 +1,4 @@
-import { ApiDefine } from "../apiBase";
+import { ApiDefine } from "../apiBase.js";
 
 export interface GetCharacterInfoResponse {
     name: string;

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { AiFunction } from "../../shared/aiFunctions";
+import type { AiFunction } from "../../shared/aiFunctions.js";
 
 export interface FunctionModelAssignment {
     provider: string;

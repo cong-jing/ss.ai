@@ -1,4 +1,4 @@
-import { ModelClient } from "../types";
+import { ModelClient } from "../types.js";
 import type { Mistral as MistralSDKClient } from "@mistralai/mistralai";
 
 type MistralSDKModule = typeof import("@mistralai/mistralai");

@@ -1,14 +1,14 @@
 import express from "express";
 import path from "node:path";
-import { RuntimeConfig } from "../util/config";
-import { getGlobalLogger } from "../util/logger";
-import { createAgentServiceFactory } from "./apis/apiContext";
-import { registerChatRoute } from "./apis/chat.route";
-import { registerUserSettingsRoutes } from "./apis/userSettings.route";
-import { registerUserInfoRoutes } from "./apis/userInfo.route";
-import { registerCharacterInfoRoutes } from "./apis/characterInfo.route";
-import { UserSettingsStore } from "./userSettingsStore";
-import { JsonFileStore } from "./jsonFileStore";
+import { RuntimeConfig } from "../util/config.js";
+import { getGlobalLogger } from "../util/logger.js";
+import { createAgentServiceFactory } from "./apis/apiContext.js";
+import { registerChatRoute } from "./apis/chat.route.js";
+import { registerUserSettingsRoutes } from "./apis/userSettings.route.js";
+import { registerUserInfoRoutes } from "./apis/userInfo.route.js";
+import { registerCharacterInfoRoutes } from "./apis/characterInfo.route.js";
+import { UserSettingsStore } from "./userSettingsStore.js";
+import { JsonFileStore } from "./jsonFileStore.js";
 
 export function createHttpServer(config: RuntimeConfig) {
     const app = express();

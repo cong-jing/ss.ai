@@ -1,5 +1,5 @@
-import { ApiDefine } from "../apiBase";
-import type { AiFunction } from "../../aiFunctions";
+import { ApiDefine } from "../apiBase.js";
+import type { AiFunction } from "../../aiFunctions.js";
 
 // --- Provider info ---
 

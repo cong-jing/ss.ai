@@ -1,10 +1,10 @@
 import {
     ApiGetUserInfo,
     ApiUpsertUserInfo
-} from "../../../shared/contracts/httpApi";
-import { registerApi } from "../registerApi";
-import { toErrorResponse, type HttpApiContext } from "./apiContext";
-import type { JsonFileStore } from "../jsonFileStore";
+} from "../../../shared/contracts/httpApi.js";
+import { registerApi } from "../registerApi.js";
+import { toErrorResponse, type HttpApiContext } from "./apiContext.js";
+import type { JsonFileStore } from "../jsonFileStore.js";
 
 interface UserInfoData {
     name: string;

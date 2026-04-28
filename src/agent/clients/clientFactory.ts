@@ -1,5 +1,5 @@
-import { AgentConfig, ModelClient } from "../types";
-import { MistralModelClient } from "./mistralModelClient";
+import { AgentConfig, ModelClient } from "../types.js";
+import { MistralModelClient } from "./mistralModelClient.js";
 
 export function createModelClientFromConfig(config: Pick<AgentConfig, "provider" | "apiKey" | "apiUrl" | "model">): ModelClient {
     const normalizedProvider = config.provider.toLowerCase();

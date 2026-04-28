@@ -1,4 +1,4 @@
-import { ModelClient } from "../types";
+import { ModelClient } from "../types.js";
 
 export class PlaceholderModelClient implements ModelClient {
     async generate(input: {

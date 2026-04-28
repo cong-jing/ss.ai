@@ -1,9 +1,9 @@
-import * as UserSettingsApi from "../../../shared/contracts/apis/userSettings.api";
-import type { ErrorResponse } from "../../../shared/contracts/httpApi";
-import { AI_FUNCTIONS } from "../../../shared/aiFunctions";
-import { createModelClientFromConfig } from "../../agent";
-import { registerApi } from "../registerApi";
-import { toErrorResponse, type HttpApiContext } from "./apiContext";
+import * as UserSettingsApi from "../../../shared/contracts/apis/userSettings.api.js";
+import type { ErrorResponse } from "../../../shared/contracts/httpApi.js";
+import { AI_FUNCTIONS } from "../../../shared/aiFunctions.js";
+import { createModelClientFromConfig } from "../../agent/index.js";
+import { registerApi } from "../registerApi.js";
+import { toErrorResponse, type HttpApiContext } from "./apiContext.js";
 
 async function listModelsForProvider(context: HttpApiContext, provider: string): Promise<string[]> {
     const modelEntry = context.config.models[provider];
