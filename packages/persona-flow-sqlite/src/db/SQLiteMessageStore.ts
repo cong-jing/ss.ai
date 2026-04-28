@@ -1,7 +1,7 @@
 import { eq, desc } from "drizzle-orm";
-import { messages, type MessageRow } from "./schema";
-import type { DrizzleDb } from "./openDatabase";
-import type { Message, MessageStore, ChatRole } from "../../../persona-flow/src/index";
+import { messages, type MessageRow } from "./schema.js";
+import type { DrizzleDb } from "./openDatabase.js";
+import type { Message, MessageStore, ChatRole } from "@ss-ai/persona-flow";
 
 // 把数据库行转成 domain Message
 // role 从数据库读出是普通 string，这里做一次简单的类型断言
