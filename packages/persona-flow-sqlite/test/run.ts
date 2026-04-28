@@ -7,9 +7,10 @@
  */
 
 import path from "node:path";
-import { openDatabase, SQLiteMessageStore } from "../src/index";
+import { fileURLToPath } from "node:url";
+import { openDatabase, SQLiteMessageStore } from "../src/index.js";
 
-// CJS 里 __dirname 直接可用，不需要 fileURLToPath
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const userDataDir = path.resolve(__dirname, "data");
 const dbPath = path.join(userDataDir, "persona-flow-dev.db");
 

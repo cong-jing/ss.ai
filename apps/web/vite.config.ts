@@ -1,0 +1,35 @@
+import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
+
+export default defineConfig({
+    plugins: [vue()],
+    server: {
+        host: "0.0.0.0",
+        port: 5173,
+        proxy: {
+            "/v1/chat/stream": {
+                target: "http://127.0.0.1:8999",
+                changeOrigin: true,
+                // Disable Vite's response buffering so SSE chunks are forwarded immediately
+                configure(proxy) {
+                    proxy.on("proxyRes", (proxyRes) => {
+                        proxyRes.headers["cache-control"] = "no-cache, no-transform";
+                        proxyRes.headers["x-accel-buffering"] = "no";
+                    });
+                }
+            },
+            "/v1": {
+                target: "http://127.0.0.1:8999",
+                changeOrigin: true
+            },
+            "/health": {
+                target: "http://127.0.0.1:8999",
+                changeOrigin: true
+            }
+        }
+    },
+    build: {
+        outDir: "dist",
+        emptyOutDir: true
+    }
+});

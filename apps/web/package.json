@@ -1,0 +1,14 @@
+{
+    "name": "@ss-ai/web",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vue-tsc -p tsconfig.json --noEmit && vite build",
+        "typecheck": "vue-tsc -p tsconfig.json --noEmit"
+    },
+    "dependencies": {
+        "@ss-ai/contracts": "*"
+    }
+}
