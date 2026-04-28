@@ -12,16 +12,17 @@ interface UserInfoData {
 }
 
 export function registerUserInfoRoutes(context: HttpApiContext, store: JsonFileStore<UserInfoData>): void {
-    registerApi(context.app, ApiGetUserInfo, () => {
-        return store.read();
+    registerApi(context.app, ApiGetUserInfo, {
+        handleRequest: () => store.read()
     });
 
-    registerApi(context.app, ApiUpsertUserInfo, ({ body }) => {
-        const name = typeof body?.name === "string" ? body.name : "";
-        const bio = typeof body?.bio === "string" ? body.bio : "";
-        return store.update({ name, bio });
-    }, {
-        onError: (error) => {
+    registerApi(context.app, ApiUpsertUserInfo, {
+        handleRequest: (_, body) => {
+            const name = typeof body?.name === "string" ? body.name : "";
+            const bio = typeof body?.bio === "string" ? body.bio : "";
+            return store.update({ name, bio });
+        },
+        handleError: (error) => {
             const response = toErrorResponse(error);
             return { status: 400, body: response };
         }

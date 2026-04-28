@@ -1,4 +1,4 @@
-import { ApiChat, ApiChatStream, type ChatStreamEvent } from "../../../shared/contracts/httpApi";
+import { ApiChat, ApiChatStream, type ChatRequest, type ChatStreamEvent } from "../../../shared/contracts/httpApi";
 import { AgentService, createModelClientFromConfig } from "../../agent";
 import { registerApi } from "../registerApi";
 import { toErrorResponse, type HttpApiContext } from "./apiContext";
@@ -29,41 +29,35 @@ function createChatAgentService(context: HttpApiContext): AgentService {
     return new AgentService(agentConfig, { modelClient: createModelClientFromConfig(agentConfig) });
 }
 
+async function handleChat(context: HttpApiContext, body: ChatRequest) {
+    const prompt = body?.prompt;
+    const sessionId = body?.sessionId;
+
+    context.logger.debug("chat: request received", {
+        hasSessionId: Boolean(sessionId),
+        promptLength: typeof prompt === "string" ? prompt.length : 0,
+        prompt,
+    });
+
+    const runtimeAgentService = createChatAgentService(context);
+    const response = await runtimeAgentService.chat({ prompt, sessionId });
+
+    context.logger.debug("chat: completed", {
+        requestPromptLength: typeof prompt === "string" ? prompt.length : 0,
+        model: response.model,
+        requestId: response.requestId
+    });
+
+    return response;
+}
+
 export function registerChatRoute(context: HttpApiContext): void {
-    registerApi(context.app, ApiChat, async ({ body }) => {
-        const prompt = body?.prompt;
-        const sessionId = body?.sessionId;
-
-        context.logger.debug("chat: request received", {
-            hasSessionId: Boolean(sessionId),
-            promptLength: typeof prompt === "string" ? prompt.length : 0,
-            prompt,
-        });
-
-        const runtimeAgentService = createChatAgentService(context);
-        const response = await runtimeAgentService.chat({
-            prompt,
-            sessionId
-        });
-
-        context.logger.debug("chat: completed", {
-            requestPromptLength: typeof prompt === "string" ? prompt.length : 0,
-            model: response.model,
-            requestId: response.requestId
-        });
-
-        return response;
-    }, {
-        onError: (error) => {
+    registerApi(context.app, ApiChat, {
+        handleRequest: (_, body) => handleChat(context, body),
+        handleError: (error) => {
             const response = toErrorResponse(error);
-            context.logger.error("chat: failed", {
-                message: response.message
-            });
-
-            return {
-                status: 400,
-                body: response
-            };
+            context.logger.error("chat: failed", { message: response.message });
+            return { status: 400, body: response };
         }
     });
 

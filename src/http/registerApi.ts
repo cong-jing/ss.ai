@@ -1,8 +1,11 @@
 import type { Express, Request, RequestHandler } from "express";
 import type { ApiDefine, ErrorResponse } from "../../shared/contracts/httpApi";
+import type { HttpApiContext } from "./apis/apiContext";
 
-export interface RegisterApiOptions {
-    onError?: (error: unknown, request: Request) => {
+export interface RegisterApiOptions<TRequest, TResponse> {
+    handleRequest: (request: Request, body: TRequest) =>
+        Promise<TResponse> | TResponse;
+    handleError?: (error: unknown, request: Request, body: TRequest) => {
         status: number;
         body: ErrorResponse;
     };
@@ -11,13 +14,12 @@ export interface RegisterApiOptions {
 export function registerApi<TRequest, TResponse>(
     app: Express,
     api: ApiDefine<TRequest, TResponse>,
-    handler: (input: { request: Request; body: TRequest }) => Promise<TResponse> | TResponse,
-    options?: RegisterApiOptions
+    handler: RegisterApiOptions<TRequest, TResponse>
 ): void {
     const wrappedHandler: RequestHandler = async (request, response) => {
         try {
             const body = (api.method === "GET" ? undefined : request.body) as TRequest;
-            const result = await handler({ request, body });
+            const result = await handler.handleRequest(request, body);
             response.json(result);
         } catch (error) {
             const fallback = {
@@ -27,7 +29,8 @@ export function registerApi<TRequest, TResponse>(
                 } satisfies ErrorResponse
             };
 
-            const errorResult = options?.onError ? options.onError(error, request) : fallback;
+            const errorResult = handler.handleError ? handler.handleError(
+                error, request, (api.method === "GET" ? undefined : request.body) as TRequest) : fallback;
             response.status(errorResult.status).json(errorResult.body);
         }
     };
