@@ -1,5 +1,6 @@
 import { ApiChat, ApiChatStream, type ChatRequest, type ChatStreamEvent } from "@ss-ai/contracts";
 import { AgentService, createModelClientFromConfig } from "../../agent/index.js";
+import type { HistoryMessage } from "../../agent/types.js";
 import { registerApi } from "../registerApi.js";
 import { toErrorResponse, type HttpApiContext } from "./apiContext.js";
 
@@ -31,21 +32,51 @@ function createChatAgentService(context: HttpApiContext): AgentService {
 
 async function handleChat(context: HttpApiContext, body: ChatRequest) {
     const prompt = body?.prompt;
-    const sessionId = body?.sessionId;
+    const sessionId = body?.sessionId ?? crypto.randomUUID();
 
     context.logger.debug("chat: request received", {
-        hasSessionId: Boolean(sessionId),
+        hasSessionId: Boolean(body?.sessionId),
         promptLength: typeof prompt === "string" ? prompt.length : 0,
         prompt,
     });
 
+    // 1. Append user message
+    await context.messageStore.appendMessage({
+        id: crypto.randomUUID(),
+        conversationId: sessionId,
+        role: "user",
+        content: prompt,
+        createdAt: new Date().toISOString(),
+    });
+
+    // 2. Get recent messages for conversation context
+    const recentMessages = await context.messageStore.getRecentMessages({
+        conversationId: sessionId,
+        limit: 20,
+    });
+
+    // 3. Build history — all messages except the one just appended (last entry)
+    const history: HistoryMessage[] = recentMessages
+        .slice(0, -1)
+        .map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
+
+    // 4. Call LLM
     const runtimeAgentService = createChatAgentService(context);
-    const response = await runtimeAgentService.chat({ prompt, sessionId });
+    const response = await runtimeAgentService.chat({ prompt, sessionId, history });
 
     context.logger.debug("chat: completed", {
         requestPromptLength: typeof prompt === "string" ? prompt.length : 0,
         model: response.model,
         requestId: response.requestId
+    });
+
+    // 5. Append assistant message
+    await context.messageStore.appendMessage({
+        id: crypto.randomUUID(),
+        conversationId: sessionId,
+        role: "assistant",
+        content: response.output,
+        createdAt: new Date().toISOString(),
     });
 
     return response;
@@ -64,6 +95,9 @@ export function registerChatRoute(context: HttpApiContext): void {
     // SSE streaming endpoint
     context.app.post(ApiChatStream.apiUrl, async (req, res) => {
         const prompt = typeof req.body?.prompt === "string" ? req.body.prompt : "";
+        const sessionId: string = typeof req.body?.sessionId === "string" && req.body.sessionId
+            ? req.body.sessionId
+            : crypto.randomUUID();
         const requestId = `stream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
         context.logger.debug("chat/stream: request received", { promptLength: prompt.length, prompt });
@@ -85,9 +119,28 @@ export function registerChatRoute(context: HttpApiContext): void {
             "X-Accel-Buffering": "no"
         });
 
+        // 1. Append user message
+        await context.messageStore.appendMessage({
+            id: crypto.randomUUID(),
+            conversationId: sessionId,
+            role: "user",
+            content: prompt,
+            createdAt: new Date().toISOString(),
+        });
+
+        // 2. Get recent messages, build history
+        const recentMessages = await context.messageStore.getRecentMessages({
+            conversationId: sessionId,
+            limit: 20,
+        });
+        const history: HistoryMessage[] = recentMessages
+            .slice(0, -1)
+            .map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
+
+        // 3. Call LLM
         let fullResponse: string;
         try {
-            const chatResponse = await agentService.chat({ prompt, sessionId: req.body?.sessionId });
+            const chatResponse = await agentService.chat({ prompt, sessionId, history });
             fullResponse = chatResponse.output;
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : "Unknown error";
@@ -97,6 +150,15 @@ export function registerChatRoute(context: HttpApiContext): void {
             res.end();
             return;
         }
+
+        // 4. Append assistant message
+        await context.messageStore.appendMessage({
+            id: crypto.randomUUID(),
+            conversationId: sessionId,
+            role: "assistant",
+            content: fullResponse,
+            createdAt: new Date().toISOString(),
+        });
 
         const settings = context.userSettingsStore.read();
         const modelName = settings.functionModels?.chat?.model ?? "unknown";

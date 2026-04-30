@@ -4,12 +4,14 @@ import { RuntimeConfig, RuntimeModelEntry } from "../../util/config.js";
 import { Logger } from "../../util/logger.js";
 import { UserSettingsStore } from "../userSettingsStore.js";
 import type { ErrorResponse } from "@ss-ai/contracts";
+import type { MessageStore } from "@ss-ai/persona-flow";
 
 export interface HttpApiContext {
     app: Express;
     logger: Logger;
     config: RuntimeConfig;
     userSettingsStore: UserSettingsStore;
+    messageStore: MessageStore;
     createAgentServiceFromUserSettings: () => AgentService;
 }
 

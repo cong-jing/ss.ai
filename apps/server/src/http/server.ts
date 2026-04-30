@@ -9,10 +9,17 @@ import { registerUserInfoRoutes } from "./apis/userInfo.route.js";
 import { registerCharacterInfoRoutes } from "./apis/characterInfo.route.js";
 import { UserSettingsStore } from "./userSettingsStore.js";
 import { JsonFileStore } from "./jsonFileStore.js";
+import { openDatabase, SQLiteMessageStore } from "@ss-ai/persona-flow-sqlite";
 
 export function createHttpServer(config: RuntimeConfig) {
     const app = express();
     const logger = getGlobalLogger();
+
+    const { db } = openDatabase(
+        path.join(config.runtimeFiles.userDataDir, "messages.db"),
+        (sql: unknown) => logger.verbose("[db]", { sql: String(sql) })
+    );
+    const messageStore = new SQLiteMessageStore(db);
 
     const userSettingsStore = new UserSettingsStore(
         path.resolve(config.runtimeFiles.userDataDir, "user-settings.json"),
@@ -23,8 +30,8 @@ export function createHttpServer(config: RuntimeConfig) {
             functionModels: {}
         },
         [
-            path.resolve(config.runtimeFiles.userDataDir, "ai-user-settings.json"),
-            path.resolve(config.runtimeFiles.userDataDir, "ai-settings.json")
+            path.resolve(config.runtimeFiles.userDataDir, "user-settings.json"),
+            path.resolve(config.runtimeFiles.userDataDir, "settings.json")
         ]
     );
     const createAgentServiceFromUserSettings = createAgentServiceFactory(userSettingsStore, config.models, config);
@@ -50,6 +57,7 @@ export function createHttpServer(config: RuntimeConfig) {
         logger,
         config,
         userSettingsStore,
+        messageStore,
         createAgentServiceFromUserSettings
     };
 

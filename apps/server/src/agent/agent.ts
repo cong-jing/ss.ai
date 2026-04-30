@@ -23,19 +23,19 @@ export class AgentService {
         }
 
         const requestId = crypto.randomUUID();
-        this.logger.info("Agent chat request received", {
-            requestId,
-            model: this.config.model,
-            sessionId: request.sessionId
-        });
-
         const output = await this.modelClient.generate({
             prompt: request.prompt,
             sessionId: request.sessionId,
+            history: request.history,
             timeoutMs: this.config.timeoutMs
         });
 
-        this.logger.info("Agent chat request completed", { requestId });
+        this.logger.debug("Agent chat request completed", {
+            requestId,
+            prompt: request.prompt,
+            output,
+            history: request.history
+        });
 
         return {
             output,

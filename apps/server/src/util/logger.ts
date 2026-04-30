@@ -2,10 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import util from "node:util";
 
-export type LogLevel = "stack" | "debug" | "info" | "warn" | "error";
+export type LogLevel = "verbose" | "debug" | "info" | "warn" | "error";
 
 const levelWeight: Record<LogLevel, number> = {
-    stack: 0,
+    verbose: 0,
     debug: 10,
     info: 20,
     warn: 30,
@@ -60,8 +60,8 @@ export class Logger {
         return new Logger(noopOptions, false);
     }
 
-    stack(message: string, meta?: Record<string, unknown>, onceOptions?: LoggerOverrideOptions): void {
-        this.log("stack", message, meta, onceOptions);
+    verbose(message: string, meta?: Record<string, unknown>, onceOptions?: LoggerOverrideOptions): void {
+        this.log("verbose", message, meta, onceOptions);
     }
 
     debug(message: string, meta?: Record<string, unknown>, onceOptions?: LoggerOverrideOptions): void {

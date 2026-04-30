@@ -10,9 +10,11 @@ export interface OpenDatabaseResult {
     db: DrizzleDb;
 }
 
-export function openDatabase(path: string): OpenDatabaseResult {
+export type DbLog = (message: unknown, ...args: any[]) => void;
+
+export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
     // 打开（或创建）SQLite 文件
-    const sqlite = new Database(path);
+    const sqlite = new Database(path, { verbose: dblog, });
 
     // 性能和安全配置
     sqlite.pragma("foreign_keys = ON");

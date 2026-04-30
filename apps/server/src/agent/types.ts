@@ -7,9 +7,15 @@ export interface AgentConfig {
     maxRetries: number;
 }
 
+export interface HistoryMessage {
+    role: "user" | "assistant";
+    content: string;
+}
+
 export interface ChatRequest {
     prompt: string;
     sessionId?: string;
+    history?: HistoryMessage[];
 }
 
 export interface ChatResponse {
@@ -22,6 +28,7 @@ export interface ModelClient {
     generate(input: {
         prompt: string;
         sessionId?: string;
+        history?: HistoryMessage[];
         timeoutMs: number;
     }): Promise<string>;
     listModels(): Promise<string[]>;

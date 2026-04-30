@@ -1,4 +1,4 @@
-import { ModelClient } from "../types.js";
+import { ModelClient, HistoryMessage } from "../types.js";
 import type { Mistral as MistralSDKClient } from "@mistralai/mistralai";
 
 type MistralSDKModule = typeof import("@mistralai/mistralai");
@@ -73,6 +73,7 @@ export class MistralModelClient implements ModelClient {
     async generate(input: {
         prompt: string;
         sessionId?: string;
+        history?: HistoryMessage[];
         timeoutMs: number;
     }): Promise<string> {
         const client = await this.getClient();
@@ -85,9 +86,15 @@ export class MistralModelClient implements ModelClient {
         });
 
         try {
+            const historyMessages = (input.history ?? []).map(m => ({
+                role: m.role as "user" | "assistant",
+                content: m.content
+            }));
+
             const completionPromise = client.chat.complete({
                 model: this.options.model,
                 messages: [
+                    ...historyMessages,
                     {
                         role: "user",
                         content: input.prompt

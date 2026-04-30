@@ -55,7 +55,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <Panel title="Settings" class="user-settings-panel" :stretch="false">
+  <Panel title="Settings" class="user-settings-panel" :height-mode="'auto'">
     <div class="settings-content">
       <p v-if="isLoading" class="hint">Loading...</p>
       <p v-if="loadError" class="error">{{ loadError }}</p>

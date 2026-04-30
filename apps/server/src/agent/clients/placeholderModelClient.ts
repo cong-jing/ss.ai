@@ -1,9 +1,10 @@
-import { ModelClient } from "../types.js";
+import { ModelClient, HistoryMessage } from "../types.js";
 
 export class PlaceholderModelClient implements ModelClient {
     async generate(input: {
         prompt: string;
         sessionId?: string;
+        history?: HistoryMessage[];
         timeoutMs: number;
     }): Promise<string> {
         const sessionPart = input.sessionId ? ` [session=${input.sessionId}]` : "";
