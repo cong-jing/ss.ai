@@ -1,6 +1,6 @@
 import {
-    ApiGetUserInfo,
-    ApiUpsertUserInfo,
+    ApiGetUserProfile,
+    ApiUpsertUserProfile,
     ApiListCharacters,
     ApiCreateCharacter,
     ApiGetActiveCharacter,
@@ -13,11 +13,11 @@ import type { UserInfo } from "./scenarioTypes";
 // ── User ─────────────────────────────────────────────────────────────────────
 
 export async function apiGetUserInfo(): Promise<UserInfo> {
-    return callApi(ApiGetUserInfo);
+    return callApi(ApiGetUserProfile);
 }
 
 export async function apiSaveUserInfo(info: UserInfo): Promise<UserInfo> {
-    return callApi(ApiUpsertUserInfo, { name: info.name, bio: info.bio });
+    return callApi(ApiUpsertUserProfile, { name: info.name, bio: info.bio });
 }
 
 // ── Character CRUD ────────────────────────────────────────────────────────────

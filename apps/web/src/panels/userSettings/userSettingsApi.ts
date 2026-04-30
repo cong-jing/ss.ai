@@ -1,11 +1,11 @@
 import {
-    ApiGetUserSettings,
+    ApiGetUserPreference,
     ApiUpsertApiKey,
     ApiDeleteApiKey,
     ApiTestApiKey,
     ApiUpsertFunctionModel,
     ApiListModels,
-    type GetUserSettingsResponse,
+    type GetUserPreferenceResponse,
     type UpsertApiKeyResponse,
     type DeleteApiKeyResponse,
     type TestApiKeyResponse,
@@ -15,8 +15,8 @@ import {
 import { callApi } from "../../shared/api/httpClient";
 import type { AiFunction } from "@ss-ai/contracts";
 
-export async function apiGetUserSettings(): Promise<GetUserSettingsResponse> {
-    return callApi(ApiGetUserSettings);
+export async function apiGetUserSettings(): Promise<GetUserPreferenceResponse> {
+    return callApi(ApiGetUserPreference);
 }
 
 export async function apiUpsertApiKey(provider: string, apiKey: string): Promise<UpsertApiKeyResponse> {

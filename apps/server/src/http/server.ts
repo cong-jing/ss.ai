@@ -3,8 +3,8 @@ import path from "node:path";
 import { RuntimeConfig } from "../util/config.js";
 import { getGlobalLogger } from "../util/logger.js";
 import { registerChatRoute } from "./apis/chat.route.js";
-import { registerUserSettingsRoutes } from "./apis/userSettings.route.js";
-import { registerUserInfoRoutes } from "./apis/userInfo.route.js";
+import { registerUserPreferenceRoutes } from "./apis/userPreference.route.js";
+import { registerUserProfileRoutes } from "./apis/userProfile.route.js";
 import { registerCharacterRoutes } from "./apis/character.route.js";
 import {
     openDatabase,
@@ -59,9 +59,9 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
         messageStore,
     };
 
-    registerUserSettingsRoutes(apiContext);
+    registerUserPreferenceRoutes(apiContext);
     registerChatRoute(apiContext);
-    registerUserInfoRoutes(apiContext);
+    registerUserProfileRoutes(apiContext);
     registerCharacterRoutes(apiContext, characterStore);
 
     return app;

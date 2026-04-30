@@ -5,6 +5,7 @@
     "type": "module",
     "exports": {
         ".": "./src/index.ts",
-        "./apis/userSettings": "./src/apis/userSettings.api.ts"
+        "./apis/userPreference": "./src/apis/userPreference.api.ts",
+        "./apis/userProfile": "./src/apis/userProfile.api.ts"
     }
 }

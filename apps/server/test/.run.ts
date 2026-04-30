@@ -9,5 +9,5 @@
  */
 
 import "./characters.test.js";
-import "./userSettings.test.js";
-import "./userInfo.test.js";
+import "./userPreference.test.js";
+import "./userProfile.test.js";

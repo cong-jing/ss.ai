@@ -13,14 +13,14 @@ export interface ProviderStatus {
 
 export type FunctionModelMap = Partial<Record<AiFunction, { provider: string; model: string } | null>>;
 
-// --- GET /v1/user-settings ---
+// --- GET /v1/user-preference ---
 
-export interface GetUserSettingsResponse {
+export interface GetUserPreferenceResponse {
     providers: ProviderStatus[];
     functionModels: FunctionModelMap;
 }
 
-// --- POST /v1/user-settings/api-key ---
+// --- POST /v1/user-preference/api-key ---
 
 export interface UpsertApiKeyRequest {
     provider: string;
@@ -33,7 +33,7 @@ export interface UpsertApiKeyResponse {
     availableModels: string[];
 }
 
-// --- DELETE /v1/user-settings/api-key ---
+// --- POST /v1/user-preference/api-key/delete ---
 
 export interface DeleteApiKeyRequest {
     provider: string;
@@ -44,7 +44,7 @@ export interface DeleteApiKeyResponse {
     apiKeySet: boolean;
 }
 
-// --- POST /v1/user-settings/test-api-key ---
+// --- POST /v1/user-preference/test-api-key ---
 
 export interface TestApiKeyRequest {
     provider: string;
@@ -56,7 +56,7 @@ export interface TestApiKeyResponse {
     message?: string;
 }
 
-// --- POST /v1/user-settings/function-model ---
+// --- POST /v1/user-preference/function-model ---
 
 export interface UpsertFunctionModelRequest {
     function: AiFunction;
@@ -68,7 +68,7 @@ export interface UpsertFunctionModelResponse {
     functionModels: FunctionModelMap;
 }
 
-// --- POST /v1/user-settings/list-models ---
+// --- POST /v1/user-preference/list-models ---
 
 export interface ListModelsRequest {
     provider: string;
@@ -79,9 +79,9 @@ export interface ListModelsResponse {
     models: string[];
 }
 
-export const ApiGetUserSettings = new ApiDefine<void, GetUserSettingsResponse>("/v1/user-settings", "GET");
-export const ApiUpsertApiKey = new ApiDefine<UpsertApiKeyRequest, UpsertApiKeyResponse>("/v1/user-settings/api-key", "POST");
-export const ApiDeleteApiKey = new ApiDefine<DeleteApiKeyRequest, DeleteApiKeyResponse>("/v1/user-settings/api-key/delete", "POST");
-export const ApiTestApiKey = new ApiDefine<TestApiKeyRequest, TestApiKeyResponse>("/v1/user-settings/test-api-key", "POST");
-export const ApiUpsertFunctionModel = new ApiDefine<UpsertFunctionModelRequest, UpsertFunctionModelResponse>("/v1/user-settings/function-model", "POST");
-export const ApiListModels = new ApiDefine<ListModelsRequest, ListModelsResponse>("/v1/user-settings/list-models", "POST");
+export const ApiGetUserPreference = new ApiDefine<void, GetUserPreferenceResponse>("/v1/user-preference", "GET");
+export const ApiUpsertApiKey = new ApiDefine<UpsertApiKeyRequest, UpsertApiKeyResponse>("/v1/user-preference/api-key", "POST");
+export const ApiDeleteApiKey = new ApiDefine<DeleteApiKeyRequest, DeleteApiKeyResponse>("/v1/user-preference/api-key/delete", "POST");
+export const ApiTestApiKey = new ApiDefine<TestApiKeyRequest, TestApiKeyResponse>("/v1/user-preference/test-api-key", "POST");
+export const ApiUpsertFunctionModel = new ApiDefine<UpsertFunctionModelRequest, UpsertFunctionModelResponse>("/v1/user-preference/function-model", "POST");
+export const ApiListModels = new ApiDefine<ListModelsRequest, ListModelsResponse>("/v1/user-preference/list-models", "POST");

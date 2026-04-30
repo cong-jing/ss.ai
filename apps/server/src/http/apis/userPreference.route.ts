@@ -1,4 +1,4 @@
-import * as UserSettingsApi from "@ss-ai/contracts/apis/userSettings";
+import * as UserPreferenceApi from "@ss-ai/contracts/apis/userPreference";
 import type { ErrorResponse } from "@ss-ai/contracts";
 import { AI_FUNCTIONS } from "@ss-ai/contracts";
 import { createModelClientFromConfig } from "../../agent/index.js";
@@ -26,13 +26,13 @@ async function listModelsForProvider(context: HttpApiContext, provider: string):
     return models.sort();
 }
 
-async function getUserSettings(context: HttpApiContext): Promise<UserSettingsApi.GetUserSettingsResponse> {
+async function getUserPreference(context: HttpApiContext): Promise<UserPreferenceApi.GetUserPreferenceResponse> {
     const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
     const credentials = await context.userProviderCredentialStore.listCredentials(DEFAULT_USER_ID);
     const credsByProvider = new Map(credentials.map(c => [c.provider, c]));
 
     const providerKeys = Object.keys(context.config.models);
-    const providers: UserSettingsApi.ProviderStatus[] = await Promise.all(
+    const providers: UserPreferenceApi.ProviderStatus[] = await Promise.all(
         providerKeys.map(async (p) => ({
             provider: p,
             apiKeySet: credsByProvider.has(p),
@@ -40,7 +40,7 @@ async function getUserSettings(context: HttpApiContext): Promise<UserSettingsApi
         }))
     );
 
-    const functionModels: UserSettingsApi.FunctionModelMap = {};
+    const functionModels: UserPreferenceApi.FunctionModelMap = {};
     for (const fn of AI_FUNCTIONS) {
         const assignment = prefs?.functionModels?.[fn];
         functionModels[fn] = assignment ?? null;
@@ -51,8 +51,8 @@ async function getUserSettings(context: HttpApiContext): Promise<UserSettingsApi
 
 async function upsertApiKey(
     context: HttpApiContext,
-    body: UserSettingsApi.UpsertApiKeyRequest
-): Promise<UserSettingsApi.UpsertApiKeyResponse> {
+    body: UserPreferenceApi.UpsertApiKeyRequest
+): Promise<UserPreferenceApi.UpsertApiKeyResponse> {
     const provider = (body?.provider ?? "").trim().toLowerCase();
     const apiKey = (body?.apiKey ?? "").trim();
 
@@ -76,8 +76,8 @@ async function upsertApiKey(
 
 async function deleteApiKey(
     context: HttpApiContext,
-    body: UserSettingsApi.DeleteApiKeyRequest
-): Promise<UserSettingsApi.DeleteApiKeyResponse> {
+    body: UserPreferenceApi.DeleteApiKeyRequest
+): Promise<UserPreferenceApi.DeleteApiKeyResponse> {
     const provider = (body?.provider ?? "").trim().toLowerCase();
     if (!provider) throw new Error("provider is required");
 
@@ -87,8 +87,8 @@ async function deleteApiKey(
 
 async function testApiKey(
     context: HttpApiContext,
-    body: UserSettingsApi.TestApiKeyRequest
-): Promise<UserSettingsApi.TestApiKeyResponse> {
+    body: UserPreferenceApi.TestApiKeyRequest
+): Promise<UserPreferenceApi.TestApiKeyResponse> {
     const provider = (body?.provider ?? "").trim().toLowerCase();
     if (!provider) throw new Error("provider is required");
 
@@ -117,8 +117,8 @@ async function testApiKey(
 
 async function upsertFunctionModel(
     context: HttpApiContext,
-    body: UserSettingsApi.UpsertFunctionModelRequest
-): Promise<UserSettingsApi.UpsertFunctionModelResponse> {
+    body: UserPreferenceApi.UpsertFunctionModelRequest
+): Promise<UserPreferenceApi.UpsertFunctionModelResponse> {
     const fn = body?.function;
     const provider = (body?.provider ?? "").trim().toLowerCase();
     const model = (body?.model ?? "").trim();
@@ -138,7 +138,7 @@ async function upsertFunctionModel(
     });
 
     const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
-    const functionModels: UserSettingsApi.FunctionModelMap = {};
+    const functionModels: UserPreferenceApi.FunctionModelMap = {};
     for (const f of AI_FUNCTIONS) {
         functionModels[f] = prefs?.functionModels?.[f] ?? null;
     }
@@ -147,8 +147,8 @@ async function upsertFunctionModel(
 
 async function listModels(
     context: HttpApiContext,
-    body: UserSettingsApi.ListModelsRequest
-): Promise<UserSettingsApi.ListModelsResponse> {
+    body: UserPreferenceApi.ListModelsRequest
+): Promise<UserPreferenceApi.ListModelsResponse> {
     const provider = (body?.provider ?? "").trim().toLowerCase();
     if (!provider) throw new Error("provider is required");
     if (!context.config.models[provider]) throw new Error(`Unsupported provider: ${provider}`);
@@ -166,33 +166,33 @@ function handleError(message: string, context: HttpApiContext, error: unknown): 
     return { status: 400, body: response };
 }
 
-export function registerUserSettingsRoutes(context: HttpApiContext): void {
-    registerApi(context.app, UserSettingsApi.ApiGetUserSettings, {
-        handleRequest: () => getUserSettings(context),
-        handleError: (error) => handleError("getUserSettings: failed", context, error)
+export function registerUserPreferenceRoutes(context: HttpApiContext): void {
+    registerApi(context.app, UserPreferenceApi.ApiGetUserPreference, {
+        handleRequest: () => getUserPreference(context),
+        handleError: (error) => handleError("getUserPreference: failed", context, error)
     });
 
-    registerApi(context.app, UserSettingsApi.ApiUpsertApiKey, {
+    registerApi(context.app, UserPreferenceApi.ApiUpsertApiKey, {
         handleRequest: (_, body) => upsertApiKey(context, body),
         handleError: (error) => handleError("upsertApiKey: failed", context, error)
     });
 
-    registerApi(context.app, UserSettingsApi.ApiDeleteApiKey, {
+    registerApi(context.app, UserPreferenceApi.ApiDeleteApiKey, {
         handleRequest: (_, body) => deleteApiKey(context, body),
         handleError: (error) => handleError("deleteApiKey: failed", context, error)
     });
 
-    registerApi(context.app, UserSettingsApi.ApiTestApiKey, {
+    registerApi(context.app, UserPreferenceApi.ApiTestApiKey, {
         handleRequest: (_, body) => testApiKey(context, body),
         handleError: (error) => handleError("testApiKey: failed", context, error)
     });
 
-    registerApi(context.app, UserSettingsApi.ApiUpsertFunctionModel, {
+    registerApi(context.app, UserPreferenceApi.ApiUpsertFunctionModel, {
         handleRequest: (_, body) => upsertFunctionModel(context, body),
         handleError: (error) => handleError("upsertFunctionModel: failed", context, error)
     });
 
-    registerApi(context.app, UserSettingsApi.ApiListModels, {
+    registerApi(context.app, UserPreferenceApi.ApiListModels, {
         handleRequest: (_, body) => listModels(context, body),
         handleError: (error) => handleError("listModels: failed", context, error)
     });

@@ -8,7 +8,7 @@
         "build": "tsc -p tsconfig.json",
         "start": "APP_ROOT=../.. node dist/index.js",
         "typecheck": "tsc --noEmit",
-        "test": "tsx --test test/run.ts"
+        "test": "tsx --test test/.run.ts"
     },
     "dependencies": {
         "@ss-ai/contracts": "*",

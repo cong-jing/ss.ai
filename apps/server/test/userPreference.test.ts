@@ -1,5 +1,5 @@
 /**
- * Integration tests for the UserSettings API.
+ * Integration tests for the UserPreference API.
  *
  * Uses supertest (in-process, no TCP) + node:test runner.
  * Run via the unified entry: npm test
@@ -8,12 +8,12 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type {
-    GetUserSettingsResponse,
+    GetUserPreferenceResponse,
     UpsertApiKeyResponse,
     DeleteApiKeyResponse,
     UpsertFunctionModelResponse,
     ListModelsResponse,
-} from "@ss-ai/contracts/apis/userSettings";
+} from "@ss-ai/contracts/apis/userPreference";
 import type { RuntimeModelEntry } from "../src/util/config.js";
 import { createTestApp, type TestApp } from "./helpers/testServer.js";
 
@@ -26,7 +26,7 @@ const MOCK_MODELS: Record<string, RuntimeModelEntry> = {
     },
 };
 
-describe("UserSettings API", () => {
+describe("UserPreference API", () => {
     let app: TestApp;
 
     before(() => {
@@ -37,11 +37,11 @@ describe("UserSettings API", () => {
         app.cleanup();
     });
 
-    // ── GET /v1/user-settings ─────────────────────────────────────────────────
+    // ── GET /v1/user-preference ─────────────────────────────────────────────────
 
-    it("GET /v1/user-settings — returns provider list and empty functionModels", async () => {
-        const res = await app.agent.get("/v1/user-settings").expect(200);
-        const data = res.body as GetUserSettingsResponse;
+    it("GET /v1/user-preference — returns provider list and empty functionModels", async () => {
+        const res = await app.agent.get("/v1/user-preference").expect(200);
+        const data = res.body as GetUserPreferenceResponse;
 
         assert.ok(Array.isArray(data.providers), "providers must be an array");
         assert.equal(data.providers.length, 1);
@@ -56,11 +56,11 @@ describe("UserSettings API", () => {
         assert.equal(data.functionModels.summarize, null);
     });
 
-    // ── POST /v1/user-settings/api-key ────────────────────────────────────────
+    // ── POST /v1/user-preference/api-key ────────────────────────────────────────
 
-    it("POST /v1/user-settings/api-key — sets key for mistral", async () => {
+    it("POST /v1/user-preference/api-key — sets key for mistral", async () => {
         const res = await app.agent
-            .post("/v1/user-settings/api-key")
+            .post("/v1/user-preference/api-key")
             .send({ provider: "mistral", apiKey: "test-key-abc" })
             .expect(200);
         const data = res.body as UpsertApiKeyResponse;
@@ -68,33 +68,33 @@ describe("UserSettings API", () => {
         assert.equal(data.apiKeySet, true);
     });
 
-    it("GET /v1/user-settings — apiKeySet reflects set key", async () => {
-        const res = await app.agent.get("/v1/user-settings").expect(200);
-        const data = res.body as GetUserSettingsResponse;
+    it("GET /v1/user-preference — apiKeySet reflects set key", async () => {
+        const res = await app.agent.get("/v1/user-preference").expect(200);
+        const data = res.body as GetUserPreferenceResponse;
         const mistral = data.providers.find((p) => p.provider === "mistral");
         assert.ok(mistral);
         assert.equal(mistral.apiKeySet, true);
     });
 
-    it("POST /v1/user-settings/api-key — rejects unknown provider with 400", async () => {
+    it("POST /v1/user-preference/api-key — rejects unknown provider with 400", async () => {
         await app.agent
-            .post("/v1/user-settings/api-key")
+            .post("/v1/user-preference/api-key")
             .send({ provider: "openai", apiKey: "key" })
             .expect(400);
     });
 
-    it("POST /v1/user-settings/api-key — rejects empty apiKey with 400", async () => {
+    it("POST /v1/user-preference/api-key — rejects empty apiKey with 400", async () => {
         await app.agent
-            .post("/v1/user-settings/api-key")
+            .post("/v1/user-preference/api-key")
             .send({ provider: "mistral", apiKey: "" })
             .expect(400);
     });
 
-    // ── POST /v1/user-settings/function-model ─────────────────────────────────
+    // ── POST /v1/user-preference/function-model ─────────────────────────────────
 
-    it("POST /v1/user-settings/function-model — assigns chat model", async () => {
+    it("POST /v1/user-preference/function-model — assigns chat model", async () => {
         const res = await app.agent
-            .post("/v1/user-settings/function-model")
+            .post("/v1/user-preference/function-model")
             .send({ function: "chat", provider: "mistral", model: "mistral-large-latest" })
             .expect(200);
         const data = res.body as UpsertFunctionModelResponse;
@@ -103,26 +103,26 @@ describe("UserSettings API", () => {
         assert.equal(data.functionModels.chat!.model, "mistral-large-latest");
     });
 
-    it("GET /v1/user-settings — functionModels.chat persists", async () => {
-        const res = await app.agent.get("/v1/user-settings").expect(200);
-        const data = res.body as GetUserSettingsResponse;
+    it("GET /v1/user-preference — functionModels.chat persists", async () => {
+        const res = await app.agent.get("/v1/user-preference").expect(200);
+        const data = res.body as GetUserPreferenceResponse;
         assert.ok(data.functionModels.chat);
         assert.equal(data.functionModels.chat!.provider, "mistral");
         assert.equal(data.functionModels.chat!.model, "mistral-large-latest");
     });
 
-    it("POST /v1/user-settings/function-model — rejects invalid function name with 400", async () => {
+    it("POST /v1/user-preference/function-model — rejects invalid function name with 400", async () => {
         await app.agent
-            .post("/v1/user-settings/function-model")
+            .post("/v1/user-preference/function-model")
             .send({ function: "unknown-function", provider: "mistral", model: "mistral-large-latest" })
             .expect(400);
     });
 
-    // ── POST /v1/user-settings/list-models ────────────────────────────────────
+    // ── POST /v1/user-preference/list-models ────────────────────────────────────
 
-    it("POST /v1/user-settings/list-models — returns pre-configured models", async () => {
+    it("POST /v1/user-preference/list-models — returns pre-configured models", async () => {
         const res = await app.agent
-            .post("/v1/user-settings/list-models")
+            .post("/v1/user-preference/list-models")
             .send({ provider: "mistral" })
             .expect(200);
         const data = res.body as ListModelsResponse;
@@ -132,18 +132,18 @@ describe("UserSettings API", () => {
         assert.ok(data.models.includes("mistral-small-latest"));
     });
 
-    it("POST /v1/user-settings/list-models — rejects unknown provider with 400", async () => {
+    it("POST /v1/user-preference/list-models — rejects unknown provider with 400", async () => {
         await app.agent
-            .post("/v1/user-settings/list-models")
+            .post("/v1/user-preference/list-models")
             .send({ provider: "openai" })
             .expect(400);
     });
 
-    // ── POST /v1/user-settings/api-key/delete ─────────────────────────────────
+    // ── POST /v1/user-preference/api-key/delete ────────────────────────────────
 
-    it("POST /v1/user-settings/api-key/delete — removes key for mistral", async () => {
+    it("POST /v1/user-preference/api-key/delete — removes key for mistral", async () => {
         const res = await app.agent
-            .post("/v1/user-settings/api-key/delete")
+            .post("/v1/user-preference/api-key/delete")
             .send({ provider: "mistral" })
             .expect(200);
         const data = res.body as DeleteApiKeyResponse;
@@ -151,9 +151,9 @@ describe("UserSettings API", () => {
         assert.equal(data.apiKeySet, false);
     });
 
-    it("GET /v1/user-settings — apiKeySet false after delete", async () => {
-        const res = await app.agent.get("/v1/user-settings").expect(200);
-        const data = res.body as GetUserSettingsResponse;
+    it("GET /v1/user-preference — apiKeySet false after delete", async () => {
+        const res = await app.agent.get("/v1/user-preference").expect(200);
+        const data = res.body as GetUserPreferenceResponse;
         const mistral = data.providers.find((p) => p.provider === "mistral");
         assert.ok(mistral);
         assert.equal(mistral.apiKeySet, false);

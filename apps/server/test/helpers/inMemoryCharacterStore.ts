@@ -22,7 +22,7 @@ export class InMemoryCharacterStore implements CharacterStore {
         const limit = input.limit ?? 50;
         const results = [...this.store.values()]
             .filter(c => c.userId === input.userId)
-            .filter(c => input.status ? c.status === input.status : c.status !== "deleted")
+            .filter(c => input.status ? c.status === input.status : c.status !== "archived")
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
             .slice(0, limit);
         return results;

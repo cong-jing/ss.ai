@@ -1,12 +1,12 @@
 import {
-    ApiGetUserInfo,
-    ApiUpsertUserInfo
+    ApiGetUserProfile,
+    ApiUpsertUserProfile
 } from "@ss-ai/contracts";
 import { registerApi } from "../registerApi.js";
 import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
 
-export function registerUserInfoRoutes(context: HttpApiContext): void {
-    registerApi(context.app, ApiGetUserInfo, {
+export function registerUserProfileRoutes(context: HttpApiContext): void {
+    registerApi(context.app, ApiGetUserProfile, {
         handleRequest: async () => {
             const profile = await context.userProfileStore.getUserProfile(DEFAULT_USER_ID);
             return {
@@ -17,7 +17,7 @@ export function registerUserInfoRoutes(context: HttpApiContext): void {
         },
     });
 
-    registerApi(context.app, ApiUpsertUserInfo, {
+    registerApi(context.app, ApiUpsertUserProfile, {
         handleRequest: async (_, body) => {
             const name = typeof body?.name === "string" ? body.name : "";
             const bio = typeof body?.bio === "string" ? body.bio : "";
