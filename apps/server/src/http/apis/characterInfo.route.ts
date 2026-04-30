@@ -3,28 +3,40 @@ import {
     ApiUpsertCharacterInfo,
     ApiGetActiveCharacter,
     ApiSetActiveCharacter,
+    type Character as ContractCharacter,
 } from "@ss-ai/contracts";
+import type { Character as PFCharacter, CharacterStore } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
 import { toErrorResponse, type HttpApiContext } from "./apiContext.js";
 import type { JsonFileStore } from "../jsonFileStore.js";
-import type { CharacterStore } from "../characterStore.js";
+
+function toContractCharacter(c: PFCharacter): ContractCharacter {
+    return {
+        id: c.id,
+        name: c.name,
+        description: c.description ?? "",
+        personaPrompt: c.personaPrompt,
+        greetingMessage: c.greetingMessage ?? null,
+        status: c.status,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+    };
+}
 
 /**
- * Persisted character data.
+ * Persisted character-info data.
  *
  * - `name`, `description` — legacy single-character identity fields.
  * - `activeConversationId` — the current long-running conversation (single-user stage).
- * - `activeCharacterId` — which Character from CharacterStore is currently selected.
  *
- * Future: move activeCharacterId + activeConversationId to a userId+characterId state store.
+ * Note: `activeCharacterId` has been moved to UserSettings so it persists
+ * alongside other user preferences.
  */
 export interface CharacterInfoData {
     name: string;
     description: string;
     /** The currently active conversationId for this character (single-user stage). */
     activeConversationId?: string;
-    /** The currently selected characterId from the character list. */
-    activeCharacterId?: string;
 }
 
 export function registerCharacterInfoRoutes(
@@ -52,24 +64,24 @@ export function registerCharacterInfoRoutes(
         }
     });
 
-    // GET /v1/active-character
+    // GET /v1/active-character — reads from userSettingsStore
     registerApi(context.app, ApiGetActiveCharacter, {
         handleRequest: () => {
-            const { activeCharacterId } = store.read();
+            const { activeCharacterId } = context.userSettingsStore.read();
             return { characterId: activeCharacterId ?? null };
         }
     });
 
-    // POST /v1/active-character
+    // POST /v1/active-character — validates character exists, persists in userSettingsStore
     registerApi(context.app, ApiSetActiveCharacter, {
-        handleRequest: (_, body) => {
+        handleRequest: async (_, body) => {
             const characterId = typeof body?.characterId === "string" ? body.characterId : "";
-            const character = characterStore.get(characterId);
+            const character = await characterStore.getCharacterById(characterId);
             if (!character) {
                 throw new Error(`Character not found: ${characterId}`);
             }
-            store.update({ activeCharacterId: characterId });
-            return character;
+            context.userSettingsStore.update({ activeCharacterId: characterId });
+            return toContractCharacter(character);
         },
         handleError: (error) => {
             const response = toErrorResponse(error);

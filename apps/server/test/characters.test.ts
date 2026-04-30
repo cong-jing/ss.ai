@@ -7,7 +7,7 @@
 
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import type { Character } from "@ss-ai/contracts";
+import type { Character, ListCharactersResponse } from "@ss-ai/contracts";
 import { startTestServer, type TestServer } from "./helpers/testServer.js";
 import { httpRequest } from "./helpers/http.js";
 
@@ -29,9 +29,10 @@ describe("Character CRUD API", () => {
     // ── List ─────────────────────────────────────────────────────────────────
 
     it("GET /v1/characters — returns empty list initially", async () => {
-        const { status, data } = await httpRequest<Character[]>(server.base, "GET", "/v1/characters");
+        const { status, data } = await httpRequest<ListCharactersResponse>(server.base, "GET", "/v1/characters");
         assert.equal(status, 200);
-        assert.deepEqual(data, []);
+        assert.deepEqual(data.characters, []);
+        assert.equal(data.activeCharacterId, null);
     });
 
     // ── Create ────────────────────────────────────────────────────────────────
@@ -46,6 +47,9 @@ describe("Character CRUD API", () => {
         assert.ok(data.id.length > 0, "id must not be empty");
         assert.equal(data.name, "Alice");
         assert.equal(data.description, "A curious explorer");
+        assert.equal(data.personaPrompt, "");
+        assert.equal(data.greetingMessage, null);
+        assert.equal(data.status, "active");
         assert.equal(typeof data.createdAt, "string");
         assert.equal(typeof data.updatedAt, "string");
         char1 = data;
@@ -69,9 +73,9 @@ describe("Character CRUD API", () => {
     // ── List after creates ────────────────────────────────────────────────────
 
     it("GET /v1/characters — lists both characters", async () => {
-        const { status, data } = await httpRequest<Character[]>(server.base, "GET", "/v1/characters");
+        const { status, data } = await httpRequest<ListCharactersResponse>(server.base, "GET", "/v1/characters");
         assert.equal(status, 200);
-        assert.equal(data.length, 2);
+        assert.equal(data.characters.length, 2);
     });
 
     // ── Get one ───────────────────────────────────────────────────────────────
@@ -114,10 +118,10 @@ describe("Character CRUD API", () => {
     });
 
     it("GET /v1/characters — only Alice remains after delete", async () => {
-        const { status, data } = await httpRequest<Character[]>(server.base, "GET", "/v1/characters");
+        const { status, data } = await httpRequest<ListCharactersResponse>(server.base, "GET", "/v1/characters");
         assert.equal(status, 200);
-        assert.equal(data.length, 1);
-        assert.equal(data[0].id, char1.id);
+        assert.equal(data.characters.length, 1);
+        assert.equal(data.characters[0].id, char1.id);
     });
 
     it("DELETE /v1/characters/:id — returns 404 for already-deleted id", async () => {

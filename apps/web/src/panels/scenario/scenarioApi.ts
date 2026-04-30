@@ -1,16 +1,14 @@
 import {
     ApiGetUserInfo,
     ApiUpsertUserInfo,
-    ApiGetCharacterInfo,
-    ApiUpsertCharacterInfo,
     ApiListCharacters,
     ApiCreateCharacter,
     ApiGetActiveCharacter,
     ApiSetActiveCharacter,
 } from "@ss-ai/contracts";
-import type { Character } from "@ss-ai/contracts";
+import type { Character, ListCharactersResponse } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
-import type { UserInfo, CharacterInfo } from "./scenarioTypes";
+import type { UserInfo } from "./scenarioTypes";
 
 // ── User ─────────────────────────────────────────────────────────────────────
 
@@ -22,27 +20,25 @@ export async function apiSaveUserInfo(info: UserInfo): Promise<UserInfo> {
     return callApi(ApiUpsertUserInfo, { name: info.name, bio: info.bio });
 }
 
-// ── Legacy single-character info (kept for backward compat) ──────────────────
-
-export async function apiGetCharacterInfo(): Promise<CharacterInfo> {
-    return callApi(ApiGetCharacterInfo);
-}
-
-export async function apiSaveCharacterInfo(info: CharacterInfo): Promise<CharacterInfo> {
-    return callApi(ApiUpsertCharacterInfo, { name: info.name, description: info.description });
-}
-
 // ── Character CRUD ────────────────────────────────────────────────────────────
 
-export async function apiListCharacters(): Promise<Character[]> {
+export async function apiListCharacters(): Promise<ListCharactersResponse> {
     return callApi(ApiListCharacters);
 }
 
-export async function apiCreateCharacter(name: string, description = ""): Promise<Character> {
-    return callApi(ApiCreateCharacter, { name, description });
+export async function apiCreateCharacter(
+    name: string,
+    description = "",
+    personaPrompt = "",
+    greetingMessage?: string,
+): Promise<Character> {
+    return callApi(ApiCreateCharacter, { name, description, personaPrompt, greetingMessage });
 }
 
-export async function apiUpdateCharacter(id: string, patch: { name?: string; description?: string }): Promise<Character> {
+export async function apiUpdateCharacter(
+    id: string,
+    patch: { name?: string; description?: string; personaPrompt?: string; greetingMessage?: string }
+): Promise<Character> {
     const res = await fetch(`/v1/characters/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

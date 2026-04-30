@@ -12,6 +12,10 @@ export interface UserSettings {
     currentModel: string | null;
     providerApiKeys: Record<string, string>;
     functionModels: Partial<Record<AiFunction, FunctionModelAssignment>>;
+    /** The currently selected characterId, persisted across sessions. */
+    activeCharacterId: string | null;
+    /** The currently active conversationId (single-user stage). */
+    activeConversationId: string | null;
 }
 
 interface LegacyUserSettings {
@@ -64,7 +68,13 @@ export class UserSettingsStore {
             functionModels: {
                 ...current.functionModels,
                 ...(patch.functionModels ?? {})
-            }
+            },
+            activeCharacterId: Object.prototype.hasOwnProperty.call(patch, "activeCharacterId")
+                ? patch.activeCharacterId ?? null
+                : current.activeCharacterId ?? null,
+            activeConversationId: Object.prototype.hasOwnProperty.call(patch, "activeConversationId")
+                ? patch.activeConversationId ?? null
+                : current.activeConversationId ?? null,
         };
 
         this.write(next);
@@ -154,7 +164,9 @@ export class UserSettingsStore {
             providerApiKeys,
             functionModels: (data.functionModels && typeof data.functionModels === "object" && !Array.isArray(data.functionModels))
                 ? data.functionModels as UserSettings["functionModels"]
-                : {}
+                : {},
+            activeCharacterId: typeof data.activeCharacterId === "string" ? data.activeCharacterId : null,
+            activeConversationId: typeof data.activeConversationId === "string" ? data.activeConversationId : null,
         };
     }
 

@@ -11,7 +11,7 @@ const {
   characters, activeCharacterId, activeCharacter,
   editDraft,
   isLoadingCharacters, isSavingCharacter, characterError,
-  isCreating, newName, newDescription,
+  isCreating, newName, newDescription, newPersonaPrompt, newGreetingMessage,
   loadCharacters,
   selectCharacter,
   openCreateForm, cancelCreate, createCharacter,
@@ -94,8 +94,17 @@ function onSelectChange(e: Event) {
             </div>
             <div class="form-group">
               <label>Description</label>
-              <textarea v-model="newDescription" placeholder="Character description" rows="3"
+              <textarea v-model="newDescription" placeholder="Character description" rows="2"
                 class="textarea" :disabled="isSavingCharacter" />
+            </div>
+            <div class="form-group">
+              <label>Persona Prompt</label>
+              <textarea v-model="newPersonaPrompt" placeholder="Describe the character's personality and speech style…" rows="4"
+                class="textarea" :disabled="isSavingCharacter" />
+            </div>
+            <div class="form-group">
+              <label>Greeting Message</label>
+              <TextInput v-model="newGreetingMessage" placeholder="Opening line when starting a new chat" :disabled="isSavingCharacter" />
             </div>
             <div class="actions">
               <Button :disabled="!newName.trim() || isSavingCharacter" @click="createCharacter">
@@ -115,7 +124,17 @@ function onSelectChange(e: Event) {
           <div class="form-group">
             <label>Description</label>
             <textarea v-model="editDraft.description" :disabled="isSavingCharacter"
-              placeholder="Character description" rows="4" class="textarea" />
+              placeholder="Character description" rows="2" class="textarea" />
+          </div>
+          <div class="form-group">
+            <label>Persona Prompt</label>
+            <textarea v-model="editDraft.personaPrompt" :disabled="isSavingCharacter"
+              placeholder="Describe the character's personality and speech style…" rows="6" class="textarea" />
+          </div>
+          <div class="form-group">
+            <label>Greeting Message</label>
+            <TextInput v-model="editDraft.greetingMessage" :disabled="isSavingCharacter"
+              placeholder="Opening line when starting a new chat" />
           </div>
           <div class="actions">
             <Button :disabled="isSavingCharacter" @click="saveCharacter">

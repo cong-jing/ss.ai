@@ -2,10 +2,17 @@ import { ApiDefine } from "../apiBase.js";
 
 // ── Domain type ────────────────────────────────────────────────────────────────
 
+/**
+ * HTTP API projection of a character card.
+ * Internal-only fields (displayName, avatarUrl, *Config blobs) are excluded.
+ */
 export interface Character {
     id: string;
     name: string;
     description: string;
+    personaPrompt: string;
+    greetingMessage: string | null;
+    status: "active" | "archived";
     createdAt: string;
     updatedAt: string;
 }
@@ -15,17 +22,27 @@ export interface Character {
 export interface CreateCharacterRequest {
     name: string;
     description?: string;
+    personaPrompt?: string;
+    greetingMessage?: string;
 }
 
 export interface UpdateCharacterRequest {
     name?: string;
     description?: string;
+    personaPrompt?: string;
+    greetingMessage?: string;
+}
+
+export interface ListCharactersResponse {
+    characters: Character[];
+    /** null when no character has been selected yet. */
+    activeCharacterId: string | null;
 }
 
 // ── API endpoints ──────────────────────────────────────────────────────────────
 
-/** GET /v1/characters — list all characters */
-export const ApiListCharacters = new ApiDefine<void, Character[]>("/v1/characters", "GET");
+/** GET /v1/characters — list active characters + currently active characterId */
+export const ApiListCharacters = new ApiDefine<void, ListCharactersResponse>("/v1/characters", "GET");
 
 /** POST /v1/characters — create a new character */
 export const ApiCreateCharacter = new ApiDefine<CreateCharacterRequest, Character>("/v1/characters", "POST");

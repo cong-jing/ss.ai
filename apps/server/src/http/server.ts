@@ -6,14 +6,18 @@ import { createAgentServiceFactory } from "./apis/apiContext.js";
 import { registerChatRoute } from "./apis/chat.route.js";
 import { registerUserSettingsRoutes } from "./apis/userSettings.route.js";
 import { registerUserInfoRoutes } from "./apis/userInfo.route.js";
-import { registerCharacterInfoRoutes, type CharacterInfoData } from "./apis/characterInfo.route.js";
 import { registerCharacterRoutes } from "./apis/character.route.js";
-import { CharacterStore } from "./characterStore.js";
 import { UserSettingsStore } from "./userSettingsStore.js";
 import { JsonFileStore } from "./jsonFileStore.js";
-import { openDatabase, SQLiteMessageStore } from "@ss-ai/persona-flow-sqlite";
+import { openDatabase, SQLiteMessageStore, SQLiteCharacterStore } from "@ss-ai/persona-flow-sqlite";
+import type { CharacterStore } from "@ss-ai/persona-flow";
 
-export function createHttpServer(config: RuntimeConfig) {
+export interface ServerStoreOverrides {
+    /** Inject a custom CharacterStore (useful for testing with an in-memory implementation). */
+    characterStore?: CharacterStore;
+}
+
+export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreOverrides) {
     const app = express();
     const logger = getGlobalLogger();
 
@@ -22,6 +26,7 @@ export function createHttpServer(config: RuntimeConfig) {
         (sql: unknown) => logger.verbose("[db]", { sql: String(sql) })
     );
     const messageStore = new SQLiteMessageStore(db);
+    const characterStore = overrides?.characterStore ?? new SQLiteCharacterStore(db);
 
     const userSettingsStore = new UserSettingsStore(
         path.resolve(config.runtimeFiles.userDataDir, "user-settings.json"),
@@ -29,7 +34,9 @@ export function createHttpServer(config: RuntimeConfig) {
             currentProvider: null,
             currentModel: null,
             providerApiKeys: {},
-            functionModels: {}
+            functionModels: {},
+            activeCharacterId: null,
+            activeConversationId: null,
         },
         [
             path.resolve(config.runtimeFiles.userDataDir, "user-settings.json"),
@@ -42,13 +49,6 @@ export function createHttpServer(config: RuntimeConfig) {
         path.resolve(config.runtimeFiles.userDataDir, "user-info.json"),
         { name: "", bio: "" }
     );
-
-    const characterInfoStore = new JsonFileStore<CharacterInfoData>(
-        path.resolve(config.runtimeFiles.userDataDir, "character-info.json"),
-        { name: "", description: "" }
-    );
-
-    const characterStore = new CharacterStore(config.runtimeFiles.userDataDir);
 
     app.use(express.json());
 
@@ -66,9 +66,8 @@ export function createHttpServer(config: RuntimeConfig) {
     };
 
     registerUserSettingsRoutes(apiContext);
-    registerChatRoute(apiContext, characterInfoStore);
+    registerChatRoute(apiContext);
     registerUserInfoRoutes(apiContext, userInfoStore);
-    registerCharacterInfoRoutes(apiContext, characterInfoStore, characterStore);
     registerCharacterRoutes(apiContext, characterStore);
 
     return app;

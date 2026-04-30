@@ -4,6 +4,7 @@ import path from "node:path";
 import { createHttpServer } from "../../src/http/server.js";
 import type { RuntimeConfig } from "../../src/util/config.js";
 import { Logger, setGlobalLogger } from "../../src/util/logger.js";
+import { InMemoryCharacterStore } from "./inMemoryCharacterStore.js";
 
 export interface TestServer {
     /** Base URL, e.g. "http://127.0.0.1:58123" */
@@ -39,7 +40,7 @@ export async function startTestServer(): Promise<TestServer> {
         agent: { timeoutMs: 30000, maxRetries: 2 },
     };
 
-    const app = createHttpServer(config);
+    const app = createHttpServer(config, { characterStore: new InMemoryCharacterStore() });
 
     const server = await new Promise<ReturnType<typeof app.listen>>((resolve) => {
         const s = app.listen(0, "127.0.0.1", () => resolve(s));

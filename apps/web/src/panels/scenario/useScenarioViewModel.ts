@@ -3,7 +3,7 @@ import type { Character } from "@ss-ai/contracts";
 import {
     apiGetUserInfo, apiSaveUserInfo,
     apiListCharacters, apiCreateCharacter, apiUpdateCharacter, apiDeleteCharacter,
-    apiGetActiveCharacterId, apiSetActiveCharacter,
+    apiSetActiveCharacter,
 } from "./scenarioApi";
 import type { UserInfo } from "./scenarioTypes";
 
@@ -53,17 +53,23 @@ export function useScenarioViewModel() {
     );
 
     /** Editable draft for the active character's fields. */
-    const editDraft = ref<{ name: string; description: string }>({ name: "", description: "" });
+    const editDraft = ref<{ name: string; description: string; personaPrompt: string; greetingMessage: string }>({
+        name: "", description: "", personaPrompt: "", greetingMessage: "",
+    });
 
     // ── Inline create form ────────────────────────────────────────────────────
 
     const isCreating = ref(false);
     const newName = ref("");
     const newDescription = ref("");
+    const newPersonaPrompt = ref("");
+    const newGreetingMessage = ref("");
 
     function openCreateForm(): void {
         newName.value = "";
         newDescription.value = "";
+        newPersonaPrompt.value = "";
+        newGreetingMessage.value = "";
         isCreating.value = true;
     }
 
@@ -77,10 +83,7 @@ export function useScenarioViewModel() {
         isLoadingCharacters.value = true;
         characterError.value = null;
         try {
-            const [list, currentId] = await Promise.all([
-                apiListCharacters(),
-                apiGetActiveCharacterId(),
-            ]);
+            const { characters: list, activeCharacterId: currentId } = await apiListCharacters();
             characters.value = list;
             activeCharacterId.value = currentId;
             syncDraft();
@@ -94,7 +97,12 @@ export function useScenarioViewModel() {
     /** Copy active character fields into editDraft. */
     function syncDraft(): void {
         const c = activeCharacter.value;
-        editDraft.value = { name: c?.name ?? "", description: c?.description ?? "" };
+        editDraft.value = {
+            name: c?.name ?? "",
+            description: c?.description ?? "",
+            personaPrompt: c?.personaPrompt ?? "",
+            greetingMessage: c?.greetingMessage ?? "",
+        };
     }
 
     // ── Select ────────────────────────────────────────────────────────────────
@@ -119,7 +127,12 @@ export function useScenarioViewModel() {
         isSavingCharacter.value = true;
         characterError.value = null;
         try {
-            const created = await apiCreateCharacter(name, newDescription.value.trim());
+            const created = await apiCreateCharacter(
+                name,
+                newDescription.value.trim(),
+                newPersonaPrompt.value.trim(),
+                newGreetingMessage.value.trim() || undefined,
+            );
             characters.value.push(created);
             await apiSetActiveCharacter(created.id);
             activeCharacterId.value = created.id;
@@ -142,6 +155,8 @@ export function useScenarioViewModel() {
             const updated = await apiUpdateCharacter(activeCharacterId.value, {
                 name: editDraft.value.name,
                 description: editDraft.value.description,
+                personaPrompt: editDraft.value.personaPrompt,
+                greetingMessage: editDraft.value.greetingMessage,
             });
             const idx = characters.value.findIndex(c => c.id === updated.id);
             if (idx !== -1) characters.value[idx] = updated;
@@ -191,7 +206,7 @@ export function useScenarioViewModel() {
         characters, activeCharacterId, activeCharacter,
         editDraft,
         isLoadingCharacters, isSavingCharacter, characterError,
-        isCreating, newName, newDescription,
+        isCreating, newName, newDescription, newPersonaPrompt, newGreetingMessage,
         loadCharacters,
         selectCharacter,
         openCreateForm, cancelCreate, createCharacter,
