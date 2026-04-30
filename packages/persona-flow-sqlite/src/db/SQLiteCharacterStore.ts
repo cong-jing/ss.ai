@@ -1,4 +1,4 @@
-import { eq, desc, inArray } from "drizzle-orm";
+import { and, eq, desc, inArray } from "drizzle-orm";
 import { characters, type CharacterRow, type NewCharacterRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
 import type { Character, CharacterStatus, CharacterStore } from "@ss-ai/persona-flow";
@@ -21,6 +21,7 @@ function safeParseJsonObject(value: string | null | undefined): Record<string, u
 function rowToCharacter(row: CharacterRow): Character {
     return {
         id: row.id,
+        userId: row.userId,
         name: row.name,
         displayName: row.displayName ?? null,
         description: row.description ?? null,
@@ -39,6 +40,7 @@ function rowToCharacter(row: CharacterRow): Character {
 function characterToInsertRow(character: Character): NewCharacterRow {
     return {
         id: character.id,
+        userId: character.userId,
         name: character.name,
         displayName: character.displayName ?? null,
         description: character.description ?? null,
@@ -63,33 +65,44 @@ export class SQLiteCharacterStore implements CharacterStore {
         await this.db.insert(characters).values(characterToInsertRow(character));
     }
 
-    async getCharacterById(id: string): Promise<Character | null> {
+    async getCharacterById(input: { userId: string; characterId: string }): Promise<Character | null> {
         const rows = await this.db
             .select()
             .from(characters)
-            .where(eq(characters.id, id))
+            .where(and(
+                eq(characters.userId, input.userId),
+                eq(characters.id, input.characterId),
+            ))
             .limit(1);
 
         return rows.length > 0 ? rowToCharacter(rows[0]) : null;
     }
 
-    async listCharacters(input?: {
+    async listCharacters(input: {
+        userId: string;
         status?: CharacterStatus;
         limit?: number;
     }): Promise<Character[]> {
-        const limit = input?.limit ?? 50;
-        const query = this.db.select().from(characters);
+        const limit = input.limit ?? 50;
+        const base = this.db.select().from(characters);
 
-        const rows = input?.status
-            ? await query.where(eq(characters.status, input.status)).orderBy(desc(characters.updatedAt)).limit(limit)
-            : await query.where(inArray(characters.status, ["active", "archived"])).orderBy(desc(characters.updatedAt)).limit(limit);
+        const rows = input.status
+            ? await base
+                .where(and(eq(characters.userId, input.userId), eq(characters.status, input.status)))
+                .orderBy(desc(characters.updatedAt))
+                .limit(limit)
+            : await base
+                .where(and(eq(characters.userId, input.userId), inArray(characters.status, ["active", "archived"])))
+                .orderBy(desc(characters.updatedAt))
+                .limit(limit);
 
         return rows.map(rowToCharacter);
     }
 
     async updateCharacter(input: {
-        id: string;
-        patch: Partial<Omit<Character, "id" | "createdAt">>;
+        userId: string;
+        characterId: string;
+        patch: Partial<Omit<Character, "id" | "userId" | "createdAt">>;
     }): Promise<void> {
         const patch = input.patch;
         const values: Partial<NewCharacterRow> = {};
@@ -109,13 +122,19 @@ export class SQLiteCharacterStore implements CharacterStore {
         await this.db
             .update(characters)
             .set(values)
-            .where(eq(characters.id, input.id));
+            .where(and(
+                eq(characters.userId, input.userId),
+                eq(characters.id, input.characterId),
+            ));
     }
 
-    async archiveCharacter(input: { id: string; updatedAt: string }): Promise<void> {
+    async archiveCharacter(input: { userId: string; characterId: string; updatedAt: string }): Promise<void> {
         await this.db
             .update(characters)
             .set({ status: "archived", updatedAt: input.updatedAt })
-            .where(eq(characters.id, input.id));
+            .where(and(
+                eq(characters.userId, input.userId),
+                eq(characters.id, input.characterId),
+            ));
     }
 }

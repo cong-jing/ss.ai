@@ -1,26 +1,35 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import supertest from "supertest";
 import { createHttpServer } from "../../src/http/server.js";
-import type { RuntimeConfig } from "../../src/util/config.js";
+import type { RuntimeConfig, RuntimeModelEntry } from "../../src/util/config.js";
 import { Logger, setGlobalLogger } from "../../src/util/logger.js";
 import { InMemoryCharacterStore } from "./inMemoryCharacterStore.js";
+import { InMemoryUserProfileStore } from "./inMemoryUserProfileStore.js";
+import { InMemoryUserPreferencesStore } from "./inMemoryUserPreferencesStore.js";
+import { InMemoryUserProviderCredentialStore } from "./inMemoryUserProviderCredentialStore.js";
 
-export interface TestServer {
-    /** Base URL, e.g. "http://127.0.0.1:58123" */
-    base: string;
-    /** Stop the server and delete the temporary data directory. */
+export interface TestApp {
+    /** supertest agent — call `.get()`, `.post()`, `.patch()`, `.delete()` on this. */
+    agent: ReturnType<typeof supertest>;
+    /** Delete the temp data directory. No server to stop — there is none. */
     cleanup: () => void;
 }
 
 /**
- * Start a real HTTP server on a random port backed by a temporary data directory.
- * Call `cleanup()` in an `after()` hook to shut it down and remove test data.
+ * Creates a test Express app backed by an in-memory CharacterStore and a
+ * temporary directory for file-based stores (userSettings, userInfo).
+ *
+ * No real HTTP server is started. supertest drives the Express app in-process,
+ * so stack traces are complete and breakpoints work normally inside route handlers.
+ *
+ * @param models  Optional provider map — inject mock entries for tests that
+ *                exercise userSettings routes.
  */
-export async function startTestServer(): Promise<TestServer> {
+export function createTestApp(models: Record<string, RuntimeModelEntry> = {}): TestApp {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ss-ai-test-"));
 
-    // Suppress all log output during tests
     setGlobalLogger(Logger.noop());
 
     const config: RuntimeConfig = {
@@ -36,24 +45,19 @@ export async function startTestServer(): Promise<TestServer> {
             tempDir: path.join(tmpDir, "tmp"),
             userDataDir: tmpDir,
         },
-        models: {},
+        models,
         agent: { timeoutMs: 30000, maxRetries: 2 },
     };
 
-    const app = createHttpServer(config, { characterStore: new InMemoryCharacterStore() });
-
-    const server = await new Promise<ReturnType<typeof app.listen>>((resolve) => {
-        const s = app.listen(0, "127.0.0.1", () => resolve(s));
+    const app = createHttpServer(config, {
+        characterStore: new InMemoryCharacterStore(),
+        userProfileStore: new InMemoryUserProfileStore(),
+        userPreferencesStore: new InMemoryUserPreferencesStore(),
+        userProviderCredentialStore: new InMemoryUserProviderCredentialStore(),
     });
 
-    const { port } = server.address() as { port: number };
-    const base = `http://127.0.0.1:${port}`;
-
     return {
-        base,
-        cleanup: () => {
-            server.close();
-            fs.rmSync(tmpDir, { recursive: true, force: true });
-        },
+        agent: supertest(app),
+        cleanup: () => fs.rmSync(tmpDir, { recursive: true, force: true }),
     };
 }

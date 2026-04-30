@@ -2,51 +2,49 @@ import type { Character, CharacterStatus } from "./character.js";
 
 /**
  * Persistence interface for Character records.
- *
- * The core persona-flow layer only defines this interface.
- * Concrete implementations (SQLite, in-memory, cloud, …) live in adapter packages.
- * This file must NOT import SQLite, Drizzle, or any database driver.
+ * All queries are scoped to a userId so each user's characters are isolated.
+ * Concrete implementations live in adapter packages.
  */
 export interface CharacterStore {
     /**
      * Insert a new character.
-     * The caller is responsible for setting id, createdAt, and updatedAt.
+     * The caller is responsible for setting id, userId, createdAt, and updatedAt.
      */
     createCharacter(character: Character): Promise<void>;
 
     /**
-     * Fetch a single character by its id.
-     * Returns null when the id does not exist.
+     * Fetch a single character by its id, scoped to a user.
+     * Returns null when not found or belongs to a different user.
      */
-    getCharacterById(id: string): Promise<Character | null>;
+    getCharacterById(input: { userId: string; characterId: string }): Promise<Character | null>;
 
     /**
-     * List characters, optionally filtered by status.
+     * List characters for a user, optionally filtered by status.
      * Results are sorted by updatedAt DESC.
-     * @param input.status  Filter to "active" or "archived". Defaults to all statuses.
-     * @param input.limit   Maximum number of results. Defaults to 50.
      */
-    listCharacters(input?: {
+    listCharacters(input: {
+        userId: string;
         status?: CharacterStatus;
         limit?: number;
     }): Promise<Character[]>;
 
     /**
-     * Apply a partial update to an existing character.
-     * id and createdAt are immutable and cannot be patched.
+     * Apply a partial update to an existing character, scoped to a user.
+     * id, userId, and createdAt are immutable.
      * The caller should set patch.updatedAt to the current timestamp.
      */
     updateCharacter(input: {
-        id: string;
-        patch: Partial<Omit<Character, "id" | "createdAt">>;
+        userId: string;
+        characterId: string;
+        patch: Partial<Omit<Character, "id" | "userId" | "createdAt">>;
     }): Promise<void>;
 
     /**
-     * Soft-delete: set the character's status to "archived".
-     * Prefer archiving over hard deletion so historical references remain valid.
+     * Soft-delete: set the character's status to "archived", scoped to a user.
      */
     archiveCharacter(input: {
-        id: string;
+        userId: string;
+        characterId: string;
         updatedAt: string;
     }): Promise<void>;
 }

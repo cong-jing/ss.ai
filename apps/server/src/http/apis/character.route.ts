@@ -13,11 +13,9 @@ import {
 } from "@ss-ai/contracts";
 import type { Character as PFCharacter, CharacterStore } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
-import { toErrorResponse, type HttpApiContext } from "./apiContext.js";
+import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
 
 // ── Projection ─────────────────────────────────────────────────────────────────
-// Maps a persona-flow Character (rich domain model) to the HTTP API shape.
-// displayName, avatarUrl, and *Config blobs are intentionally excluded.
 
 function toContractCharacter(c: PFCharacter): ContractCharacter {
     return {
@@ -35,19 +33,19 @@ function toContractCharacter(c: PFCharacter): ContractCharacter {
 const ITEM_URL = ApiGetCharacter.apiUrl; // "/v1/characters/:id"
 
 export function registerCharacterRoutes(context: HttpApiContext, store: CharacterStore): void {
-    // GET /v1/characters — list active characters + current active character id
+    // GET /v1/characters
     registerApi(context.app, ApiListCharacters, {
         handleRequest: async (): Promise<ListCharactersResponse> => {
-            const list = await store.listCharacters({ status: "active" });
-            const { activeCharacterId } = context.userSettingsStore.read();
+            const list = await store.listCharacters({ userId: DEFAULT_USER_ID, status: "active" });
+            const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
             return {
                 characters: list.map(toContractCharacter),
-                activeCharacterId: activeCharacterId ?? null,
+                activeCharacterId: prefs?.currentCharacterId ?? null,
             };
         },
     });
 
-    // POST /v1/characters — create
+    // POST /v1/characters
     registerApi(context.app, ApiCreateCharacter, {
         handleRequest: async (_, body: CreateCharacterRequest) => {
             const name = typeof body?.name === "string" ? body.name.trim() : "";
@@ -55,6 +53,7 @@ export function registerCharacterRoutes(context: HttpApiContext, store: Characte
             const now = new Date().toISOString();
             const character: PFCharacter = {
                 id: crypto.randomUUID(),
+                userId: DEFAULT_USER_ID,
                 name,
                 description: typeof body.description === "string" ? body.description.trim() || null : null,
                 personaPrompt: typeof body.personaPrompt === "string" ? body.personaPrompt.trim() : "",
@@ -74,9 +73,9 @@ export function registerCharacterRoutes(context: HttpApiContext, store: Characte
         handleError: (error) => ({ status: 400, body: toErrorResponse(error) }),
     });
 
-    // GET /v1/characters/:id — get one
+    // GET /v1/characters/:id
     context.app.get(ITEM_URL, async (req, res) => {
-        const character = await store.getCharacterById(req.params.id);
+        const character = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId: req.params.id });
         if (!character) {
             res.status(404).json(toErrorResponse(new Error(`Character not found: ${req.params.id}`)));
             return;
@@ -84,15 +83,15 @@ export function registerCharacterRoutes(context: HttpApiContext, store: Characte
         res.json(toContractCharacter(character));
     });
 
-    // PATCH /v1/characters/:id — partial update
+    // PATCH /v1/characters/:id
     context.app.patch(ITEM_URL, async (req, res) => {
         const body = req.body as UpdateCharacterRequest;
-        const existing = await store.getCharacterById(req.params.id);
+        const existing = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId: req.params.id });
         if (!existing || existing.status === "archived") {
             res.status(404).json(toErrorResponse(new Error(`Character not found: ${req.params.id}`)));
             return;
         }
-        const patch: Partial<Omit<PFCharacter, "id" | "createdAt">> = {
+        const patch: Partial<Omit<PFCharacter, "id" | "userId" | "createdAt">> = {
             updatedAt: new Date().toISOString(),
         };
         if (typeof body?.name === "string") patch.name = body.name.trim();
@@ -103,41 +102,43 @@ export function registerCharacterRoutes(context: HttpApiContext, store: Characte
                 ? body.greetingMessage.trim() || null
                 : null;
         }
-        await store.updateCharacter({ id: req.params.id, patch });
-        const updated = await store.getCharacterById(req.params.id);
+        await store.updateCharacter({ userId: DEFAULT_USER_ID, characterId: req.params.id, patch });
+        const updated = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId: req.params.id });
         res.json(toContractCharacter(updated!));
     });
 
-    // DELETE /v1/characters/:id — soft-delete (archive)
+    // DELETE /v1/characters/:id
     context.app.delete(ITEM_URL, async (req, res) => {
-        const existing = await store.getCharacterById(req.params.id);
+        const existing = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId: req.params.id });
         if (!existing || existing.status === "archived") {
             res.status(404).json(toErrorResponse(new Error(`Character not found: ${req.params.id}`)));
             return;
         }
-        await store.archiveCharacter({ id: req.params.id, updatedAt: new Date().toISOString() });
+        await store.archiveCharacter({ userId: DEFAULT_USER_ID, characterId: req.params.id, updatedAt: new Date().toISOString() });
         res.status(204).send();
     });
 
     // ── Active character ────────────────────────────────────────────────────────
 
-    // GET /v1/active-character — reads from userSettingsStore
     registerApi(context.app, ApiGetActiveCharacter, {
-        handleRequest: () => {
-            const { activeCharacterId } = context.userSettingsStore.read();
-            return { characterId: activeCharacterId ?? null };
+        handleRequest: async () => {
+            const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+            return { characterId: prefs?.currentCharacterId ?? null };
         },
     });
 
-    // POST /v1/active-character — validates character exists, persists in userSettingsStore
     registerApi(context.app, ApiSetActiveCharacter, {
         handleRequest: async (_, body) => {
             const characterId = typeof body?.characterId === "string" ? body.characterId : "";
-            const character = await store.getCharacterById(characterId);
+            const character = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId });
             if (!character || character.status === "archived") {
                 throw new Error(`Character not found: ${characterId}`);
             }
-            context.userSettingsStore.update({ activeCharacterId: characterId });
+            await context.userPreferencesStore.setCurrentCharacter({
+                userId: DEFAULT_USER_ID,
+                characterId,
+                updatedAt: new Date().toISOString(),
+            });
             return toContractCharacter(character);
         },
         handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),

@@ -13,34 +13,34 @@ export class InMemoryCharacterStore implements CharacterStore {
         this.store.set(character.id, { ...character });
     }
 
-    async getCharacterById(id: string): Promise<Character | null> {
-        return this.store.get(id) ?? null;
+    async getCharacterById(input: { userId: string; characterId: string }): Promise<Character | null> {
+        const c = this.store.get(input.characterId);
+        return c && c.userId === input.userId ? c : null;
     }
 
-    async listCharacters(input?: {
-        status?: CharacterStatus;
-        limit?: number;
-    }): Promise<Character[]> {
-        const limit = input?.limit ?? 50;
+    async listCharacters(input: { userId: string; status?: CharacterStatus; limit?: number }): Promise<Character[]> {
+        const limit = input.limit ?? 50;
         const results = [...this.store.values()]
-            .filter(c => input?.status ? c.status === input.status : true)
+            .filter(c => c.userId === input.userId)
+            .filter(c => input.status ? c.status === input.status : c.status !== "deleted")
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
             .slice(0, limit);
         return results;
     }
 
     async updateCharacter(input: {
-        id: string;
-        patch: Partial<Omit<Character, "id" | "createdAt">>;
+        userId: string;
+        characterId: string;
+        patch: Partial<Omit<Character, "id" | "userId" | "createdAt">>;
     }): Promise<void> {
-        const existing = this.store.get(input.id);
-        if (!existing) return;
-        this.store.set(input.id, { ...existing, ...input.patch });
+        const existing = this.store.get(input.characterId);
+        if (!existing || existing.userId !== input.userId) return;
+        this.store.set(input.characterId, { ...existing, ...input.patch });
     }
 
-    async archiveCharacter(input: { id: string; updatedAt: string }): Promise<void> {
-        const existing = this.store.get(input.id);
-        if (!existing) return;
-        this.store.set(input.id, { ...existing, status: "archived", updatedAt: input.updatedAt });
+    async archiveCharacter(input: { userId: string; characterId: string; updatedAt: string }): Promise<void> {
+        const existing = this.store.get(input.characterId);
+        if (!existing || existing.userId !== input.userId) return;
+        this.store.set(input.characterId, { ...existing, status: "archived", updatedAt: input.updatedAt });
     }
 }

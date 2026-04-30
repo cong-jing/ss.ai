@@ -4,6 +4,7 @@ export type ChatRole = "user" | "assistant" | "system";
 // 一条消息的完整 domain model
 export type Message = {
     id: string;
+    userId: string;
     conversationId: string;
     role: ChatRole;
     content: string;

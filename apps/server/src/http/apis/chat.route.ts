@@ -2,11 +2,11 @@ import { ApiChat, ApiChatStream, type ChatRequest, type ChatStreamEvent } from "
 import { AgentService, createModelClientFromConfig } from "../../agent/index.js";
 import type { HistoryMessage } from "../../agent/types.js";
 import { registerApi } from "../registerApi.js";
-import { toErrorResponse, type HttpApiContext } from "./apiContext.js";
+import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
 
-function createChatAgentService(context: HttpApiContext): AgentService {
-    const settings = context.userSettingsStore.read();
-    const chatFnModel = settings.functionModels?.chat;
+async function createChatAgentService(context: HttpApiContext): Promise<AgentService> {
+    const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+    const chatFnModel = prefs?.functionModels?.["chat"];
     if (!chatFnModel?.provider || !chatFnModel?.model) {
         throw new Error("Chat model is not configured. Please set it in Settings → Model Assignment.");
     }
@@ -15,42 +15,41 @@ function createChatAgentService(context: HttpApiContext): AgentService {
     if (!modelEntry) {
         throw new Error(`Configured provider "${provider}" is not available.`);
     }
-    const apiKey = context.userSettingsStore.getApiKey(provider);
-    if (!apiKey) {
+    const credential = await context.userProviderCredentialStore.getCredential({ userId: DEFAULT_USER_ID, provider });
+    if (!credential) {
         throw new Error(`API key is not set for provider: ${provider}`);
     }
     const agentConfig = {
         provider: modelEntry.provider,
         apiUrl: modelEntry.apiUrl,
         model,
-        apiKey,
+        apiKey: credential.apiKeyEncrypted,
         timeoutMs: context.config.agent.timeoutMs,
-        maxRetries: context.config.agent.maxRetries
+        maxRetries: context.config.agent.maxRetries,
     };
     return new AgentService(agentConfig, { modelClient: createModelClientFromConfig(agentConfig) });
 }
 
 /**
- * Resolve the active conversationId.
- * Persisted in userSettingsStore so it survives server restarts.
- * In the single-user stage this is a single global value; future:
- * key by userId+characterId.
+ * Resolve the active conversationId for the default user.
+ * Persisted in user_preferences so it survives server restarts.
  */
-function resolveConversationId(context: HttpApiContext): string {
-    const data = context.userSettingsStore.read();
-    if (data.activeConversationId) {
-        return data.activeConversationId;
+async function resolveConversationId(context: HttpApiContext): Promise<string> {
+    const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+    if (prefs?.currentConversationId) {
+        return prefs.currentConversationId;
     }
     const newId = crypto.randomUUID();
-    context.userSettingsStore.update({ activeConversationId: newId });
-    context.logger.debug("chat: created new activeConversationId", { conversationId: newId });
+    await context.userPreferencesStore.setCurrentConversation({
+        userId: DEFAULT_USER_ID,
+        conversationId: newId,
+        updatedAt: new Date().toISOString(),
+    });
+    context.logger.debug("chat: created new conversationId", { conversationId: newId });
     return newId;
 }
 
-async function handleChat(
-    context: HttpApiContext,
-    body: ChatRequest
-) {
+async function handleChat(context: HttpApiContext, body: ChatRequest) {
     const prompt = body?.prompt;
 
     context.logger.debug("chat: request received", {
@@ -58,42 +57,44 @@ async function handleChat(
         prompt,
     });
 
-    // Resolve the long-running conversationId (not a session — the permanent message timeline)
-    const conversationId = resolveConversationId(context);
+    const conversationId = await resolveConversationId(context);
 
     // 1. Append user message
     await context.messageStore.appendMessage({
         id: crypto.randomUUID(),
+        userId: DEFAULT_USER_ID,
         conversationId,
         role: "user",
         content: prompt,
         createdAt: new Date().toISOString(),
     });
 
-    // 2. Get recent messages for conversation context
+    // 2. Get recent messages for context
     const recentMessages = await context.messageStore.getRecentMessages({
+        userId: DEFAULT_USER_ID,
         conversationId,
         limit: 20,
     });
 
-    // 3. Build history — all messages except the one just appended (last entry)
+    // 3. Build history (all except the just-appended user message)
     const history: HistoryMessage[] = recentMessages
         .slice(0, -1)
         .map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-    // 4. Call LLM (requestId is a per-request trace id, not stored in messages)
-    const runtimeAgentService = createChatAgentService(context);
+    // 4. Call LLM
+    const runtimeAgentService = await createChatAgentService(context);
     const response = await runtimeAgentService.chat({ prompt, history });
 
     context.logger.debug("chat: completed", {
         conversationId,
         model: response.model,
-        requestId: response.requestId
+        requestId: response.requestId,
     });
 
     // 5. Append assistant message
     await context.messageStore.appendMessage({
         id: crypto.randomUUID(),
+        userId: DEFAULT_USER_ID,
         conversationId,
         role: "assistant",
         content: response.output,
@@ -122,7 +123,7 @@ export function registerChatRoute(context: HttpApiContext): void {
 
         let agentService: AgentService;
         try {
-            agentService = createChatAgentService(context);
+            agentService = await createChatAgentService(context);
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : "Unknown error";
             context.logger.error("chat/stream: agent setup failed", { message });
@@ -130,8 +131,7 @@ export function registerChatRoute(context: HttpApiContext): void {
             return;
         }
 
-        // Resolve the long-running conversationId
-        const conversationId = resolveConversationId(context);
+        const conversationId = await resolveConversationId(context);
 
         res.writeHead(200, {
             "Content-Type": "text/event-stream",
@@ -143,6 +143,7 @@ export function registerChatRoute(context: HttpApiContext): void {
         // 1. Append user message
         await context.messageStore.appendMessage({
             id: crypto.randomUUID(),
+            userId: DEFAULT_USER_ID,
             conversationId,
             role: "user",
             content: prompt,
@@ -151,6 +152,7 @@ export function registerChatRoute(context: HttpApiContext): void {
 
         // 2. Get recent messages, build history
         const recentMessages = await context.messageStore.getRecentMessages({
+            userId: DEFAULT_USER_ID,
             conversationId,
             limit: 20,
         });
@@ -175,14 +177,15 @@ export function registerChatRoute(context: HttpApiContext): void {
         // 4. Append assistant message
         await context.messageStore.appendMessage({
             id: crypto.randomUUID(),
+            userId: DEFAULT_USER_ID,
             conversationId,
             role: "assistant",
             content: fullResponse,
             createdAt: new Date().toISOString(),
         });
 
-        const settings = context.userSettingsStore.read();
-        const modelName = settings.functionModels?.chat?.model ?? "unknown";
+        const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+        const modelName = prefs?.functionModels?.["chat"]?.model ?? "unknown";
         const tokens = fullResponse.split(/(?<=\s)|(?=\s)/);
 
         let i = 0;

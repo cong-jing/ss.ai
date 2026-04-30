@@ -9,6 +9,7 @@ import type { Message } from "@ss-ai/persona-flow";
 function makeMessage(overrides?: Partial<Message>): Message {
     return {
         id: crypto.randomUUID(),
+        userId: "user_test",
         conversationId: "conv_test",
         role: "user",
         content: "你好",
@@ -29,7 +30,7 @@ describe("SQLiteMessageStore", () => {
         const msg = makeMessage({ content: "hello" });
         await store.appendMessage(msg);
 
-        const result = await store.getRecentMessages({ conversationId: msg.conversationId, limit: 10 });
+        const result = await store.getRecentMessages({ userId: msg.userId, conversationId: msg.conversationId, limit: 10 });
         assert.ok(result.some(m => m.id === msg.id), "should find appended message");
     });
 
@@ -37,10 +38,10 @@ describe("SQLiteMessageStore", () => {
         const convId = "conv_order";
         const m1 = makeMessage({ conversationId: convId, createdAt: "2025-01-01T00:00:00.000Z", content: "first" });
         const m2 = makeMessage({ conversationId: convId, createdAt: "2025-01-02T00:00:00.000Z", content: "second" });
-        await store.appendMessage(m2); // insert out-of-order intentionally
+        await store.appendMessage(m2);
         await store.appendMessage(m1);
 
-        const result = await store.getRecentMessages({ conversationId: convId, limit: 10 });
+        const result = await store.getRecentMessages({ userId: "user_test", conversationId: convId, limit: 10 });
         assert.equal(result[0].content, "first");
         assert.equal(result[1].content, "second");
     });
@@ -53,7 +54,7 @@ describe("SQLiteMessageStore", () => {
                 createdAt: new Date(Date.now() + i * 1000).toISOString(),
             }));
         }
-        const result = await store.getRecentMessages({ conversationId: convId, limit: 3 });
+        const result = await store.getRecentMessages({ userId: "user_test", conversationId: convId, limit: 3 });
         assert.equal(result.length, 3);
     });
 
@@ -61,12 +62,12 @@ describe("SQLiteMessageStore", () => {
         await store.appendMessage(makeMessage({ conversationId: "conv_a", content: "from A" }));
         await store.appendMessage(makeMessage({ conversationId: "conv_b", content: "from B" }));
 
-        const a = await store.getRecentMessages({ conversationId: "conv_a", limit: 10 });
+        const a = await store.getRecentMessages({ userId: "user_test", conversationId: "conv_a", limit: 10 });
         assert.ok(a.every(m => m.conversationId === "conv_a"));
     });
 
     it("getRecentMessages — returns empty array for unknown conversationId", async () => {
-        const result = await store.getRecentMessages({ conversationId: "conv_unknown_xyz", limit: 10 });
+        const result = await store.getRecentMessages({ userId: "user_test", conversationId: "conv_unknown_xyz", limit: 10 });
         assert.deepEqual(result, []);
     });
 });

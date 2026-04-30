@@ -9,3 +9,5 @@
  */
 
 import "./characters.test.js";
+import "./userSettings.test.js";
+import "./userInfo.test.js";

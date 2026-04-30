@@ -1,13 +1,12 @@
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { messages, type MessageRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
 import type { Message, MessageStore, ChatRole } from "@ss-ai/persona-flow";
 
-// 把数据库行转成 domain Message
-// role 从数据库读出是普通 string，这里做一次简单的类型断言
 function rowToMessage(row: MessageRow): Message {
     return {
         id: row.id,
+        userId: row.userId,
         conversationId: row.conversationId,
         role: row.role as ChatRole,
         content: row.content,
@@ -19,9 +18,9 @@ export class SQLiteMessageStore implements MessageStore {
     constructor(private readonly db: DrizzleDb) { }
 
     async appendMessage(message: Message): Promise<void> {
-        // Drizzle insert —— 字段名来自 schema，不手写字符串
         await this.db.insert(messages).values({
             id: message.id,
+            userId: message.userId,
             conversationId: message.conversationId,
             role: message.role,
             content: message.content,
@@ -30,14 +29,17 @@ export class SQLiteMessageStore implements MessageStore {
     }
 
     async getRecentMessages(input: {
+        userId: string;
         conversationId: string;
         limit: number;
     }): Promise<Message[]> {
-        // 按 createdAt DESC 取最新 N 条，再 reverse 成时间升序返回给调用方
         const rows = await this.db
             .select()
             .from(messages)
-            .where(eq(messages.conversationId, input.conversationId))
+            .where(and(
+                eq(messages.userId, input.userId),
+                eq(messages.conversationId, input.conversationId),
+            ))
             .orderBy(desc(messages.createdAt))
             .limit(input.limit);
 

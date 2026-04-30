@@ -4,18 +4,20 @@ export type CharacterStatus = "active" | "archived";
  * Character domain model — the "character card".
  *
  * Scope: identity, persona, and generation configuration.
- * NOT included here: user↔character relationship state, long-term memory,
- * chat history, or per-conversation data.  Those belong in separate tables
- * (relationship_state, memory_items, messages, conversations, …).
+ * Each character belongs to exactly one user (via userId).
+ * NOT included here: relationship state, long-term memory, or chat history.
  */
 export type Character = {
-    /** Unique character ID, e.g. "char_rinrin". */
+    /** Unique character ID. */
     id: string;
+
+    /** Owner user ID. */
+    userId: string;
 
     /** Internal / canonical name, e.g. "Rinrin". */
     name: string;
 
-    /** Display name shown in UI, e.g. "凛凛". May be null if same as name. */
+    /** Display name shown in UI. May be null if same as name. */
     displayName?: string | null;
 
     /** Short description, used in UI and optionally in prompt assembly. */
@@ -23,8 +25,6 @@ export type Character = {
 
     /**
      * Core persona prompt.
-     * Describes the character's personality, speech style, self-perception,
-     * and interaction style with the user.
      */
     personaPrompt: string;
 
@@ -34,27 +34,16 @@ export type Character = {
     /** Avatar image path or URL. null means no avatar configured. */
     avatarUrl?: string | null;
 
-    /**
-     * Model selection config.
-     * Example: { provider: "mistral", model: "mistral-large-latest" }
-     * Kept as a loose Record so different providers can add their own keys
-     * without requiring a schema migration.
-     */
+    /** Model selection config. Example: { provider: "mistral", model: "mistral-large-latest" } */
     modelConfig: Record<string, unknown>;
 
-    /**
-     * LLM generation parameters.
-     * Example: { temperature: 0.8, maxTokens: 1200, topP: 1 }
-     */
+    /** LLM generation parameters. Example: { temperature: 0.8, maxTokens: 1200 } */
     generationConfig: Record<string, unknown>;
 
-    /**
-     * Memory strategy config.
-     * Example: { recentMessageLimit: 20, enableMemorySearch: true, memorySearchLimit: 8 }
-     */
+    /** Memory strategy config. Example: { recentMessageLimit: 20 } */
     memoryConfig: Record<string, unknown>;
 
-    /** Lifecycle status. Use "archived" instead of hard-deleting a character. */
+    /** Lifecycle status. Use "archived" instead of hard-deleting. */
     status: CharacterStatus;
 
     /** ISO 8601 creation timestamp. */
