@@ -3,6 +3,7 @@ const props = withDefaults(defineProps<{
   modelValue: string;
   type?: string;
   placeholder?: string;
+  autocomplete?: string;
 }>(), {
   type: "text",
   placeholder: ""
@@ -23,6 +24,7 @@ function onInput(event: Event) {
     :type="props.type"
     :value="props.modelValue"
     :placeholder="props.placeholder"
+    :autocomplete="props.autocomplete"
     @input="onInput"
   />
 </template>

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import ChatPanel from "../panels/chat/ChatPanel.vue";
-import UserSettingsPanel from "../panels/userSettings/UserSettingsPanel.vue";
+import UserPreferencePanel from "../panels/userPreference/UserPreferencePanel.vue";
 import ScenarioPanel from "../panels/scenario/ScenarioPanel.vue";
 </script>
 
 <template>
   <main class="home-page">
     <aside class="settings-area">
-      <UserSettingsPanel />
+      <UserPreferencePanel />
     </aside>
 
     <section class="chat-area">

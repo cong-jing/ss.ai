@@ -4,10 +4,10 @@ import Button from "../../shared/ui/Button.vue";
 import Panel from "../../shared/ui/Panel.vue";
 import TextInput from "../../shared/ui/TextInput.vue";
 import CollapsibleSection from "../../shared/ui/CollapsibleSection.vue";
-import { useUserSettingsViewModel } from "./useUserSettingsViewModel";
+import { useUserPreferenceViewModel } from "./useUserPreferenceViewModel";
 import { AI_FUNCTION_LABELS, type AiFunction } from "@ss-ai/contracts";
 
-const vm = useUserSettingsViewModel();
+const vm = useUserPreferenceViewModel();
 const {
   providers,
   functionModels,
@@ -89,9 +89,10 @@ onMounted(() => {
             <div class="key-input-row">
               <TextInput
                 v-model="p.apiKeyInput!"
-                type="password"
+                type="text"
                 placeholder="Enter API Key"
-                class="key-input"
+                autocomplete="off"
+                class="key-input key-input--masked"
               />
               <div class="key-actions">
                 <Button size="sm" :disabled="p.isSavingKey || !p.apiKeyInput?.trim()" @click="saveApiKey(p.provider)">
@@ -213,6 +214,12 @@ onMounted(() => {
 
 .key-input {
   width: 100%;
+}
+
+/* Use CSS masking instead of type=password to avoid browser save-password prompts */
+.key-input--masked :deep(input) {
+  -webkit-text-security: disc;
+  font-family: monospace;
 }
 
 .test-message {

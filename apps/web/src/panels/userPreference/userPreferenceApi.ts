@@ -15,7 +15,7 @@ import {
 import { callApi } from "../../shared/api/httpClient";
 import type { AiFunction } from "@ss-ai/contracts";
 
-export async function apiGetUserSettings(): Promise<GetUserPreferenceResponse> {
+export async function apiGetUserPreference(): Promise<GetUserPreferenceResponse> {
     return callApi(ApiGetUserPreference);
 }
 

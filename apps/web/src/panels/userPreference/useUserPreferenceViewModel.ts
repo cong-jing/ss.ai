@@ -1,16 +1,16 @@
 import { ref } from "vue";
 import {
-    apiGetUserSettings,
+    apiGetUserPreference,
     apiUpsertApiKey,
     apiDeleteApiKey,
     apiTestApiKey,
     apiUpsertFunctionModel,
     apiListModels
-} from "./userSettingsApi";
-import type { ProviderState, FunctionModelState } from "./userSettingsTypes";
+} from "./userPreferenceApi";
+import type { ProviderState, FunctionModelState } from "./userPreferenceTypes";
 import { AI_FUNCTIONS, type AiFunction } from "@ss-ai/contracts";
 
-export function useUserSettingsViewModel() {
+export function useUserPreferenceViewModel() {
     const providers = ref<ProviderState[]>([]);
     const functionModels = ref<FunctionModelState[]>([]);
     const isLoading = ref(false);
@@ -21,12 +21,12 @@ export function useUserSettingsViewModel() {
         isLoading.value = true;
         loadError.value = null;
         try {
-            const response = await apiGetUserSettings();
+            const response = await apiGetUserPreference();
 
             providers.value = response.providers.map((p) => ({
                 provider: p.provider,
                 apiKeySet: p.apiKeySet,
-                apiKeyInput: null,
+                apiKeyInput: p.apiKeySet ? null : "",
                 availableModels: p.availableModels,
                 isSavingKey: false,
                 isTestingKey: false,
