@@ -25,7 +25,6 @@ export class AgentService {
         const requestId = crypto.randomUUID();
         const output = await this.modelClient.generate({
             prompt: request.prompt,
-            sessionId: request.sessionId,
             history: request.history,
             timeoutMs: this.config.timeoutMs
         });

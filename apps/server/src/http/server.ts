@@ -6,7 +6,9 @@ import { createAgentServiceFactory } from "./apis/apiContext.js";
 import { registerChatRoute } from "./apis/chat.route.js";
 import { registerUserSettingsRoutes } from "./apis/userSettings.route.js";
 import { registerUserInfoRoutes } from "./apis/userInfo.route.js";
-import { registerCharacterInfoRoutes } from "./apis/characterInfo.route.js";
+import { registerCharacterInfoRoutes, type CharacterInfoData } from "./apis/characterInfo.route.js";
+import { registerCharacterRoutes } from "./apis/character.route.js";
+import { CharacterStore } from "./characterStore.js";
 import { UserSettingsStore } from "./userSettingsStore.js";
 import { JsonFileStore } from "./jsonFileStore.js";
 import { openDatabase, SQLiteMessageStore } from "@ss-ai/persona-flow-sqlite";
@@ -41,10 +43,12 @@ export function createHttpServer(config: RuntimeConfig) {
         { name: "", bio: "" }
     );
 
-    const characterInfoStore = new JsonFileStore(
+    const characterInfoStore = new JsonFileStore<CharacterInfoData>(
         path.resolve(config.runtimeFiles.userDataDir, "character-info.json"),
         { name: "", description: "" }
     );
+
+    const characterStore = new CharacterStore(config.runtimeFiles.userDataDir);
 
     app.use(express.json());
 
@@ -62,9 +66,10 @@ export function createHttpServer(config: RuntimeConfig) {
     };
 
     registerUserSettingsRoutes(apiContext);
-    registerChatRoute(apiContext);
+    registerChatRoute(apiContext, characterInfoStore);
     registerUserInfoRoutes(apiContext, userInfoStore);
-    registerCharacterInfoRoutes(apiContext, characterInfoStore);
+    registerCharacterInfoRoutes(apiContext, characterInfoStore, characterStore);
+    registerCharacterRoutes(apiContext, characterStore);
 
     return app;
 }

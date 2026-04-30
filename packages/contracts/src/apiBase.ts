@@ -1,4 +1,4 @@
-export type HttpMethod = "GET" | "POST";
+export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
 export class ApiDefine<TRequest, TResponse> {
     public readonly method: HttpMethod;

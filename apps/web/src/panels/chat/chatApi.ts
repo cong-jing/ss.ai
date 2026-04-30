@@ -1,8 +1,8 @@
 import { ApiChat, ApiChatStream, type ChatStreamEvent } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
 
-export async function apiSendChatMessage(prompt: string, sessionId?: string) {
-    return callApi(ApiChat, { prompt, sessionId });
+export async function apiSendChatMessage(prompt: string) {
+    return callApi(ApiChat, { prompt });
 }
 
 export async function apiStreamChatMessage(

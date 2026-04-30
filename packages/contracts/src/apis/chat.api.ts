@@ -1,8 +1,9 @@
 import { ApiDefine } from "../apiBase.js";
 
 export interface ChatRequest {
+    /** Which character to chat with. Defaults to the single configured character on the backend. */
+    characterId?: string;
     prompt: string;
-    sessionId?: string;
 }
 
 export interface ChatResponse {
@@ -12,8 +13,9 @@ export interface ChatResponse {
 }
 
 export interface ChatStreamRequest {
+    /** Which character to chat with. Defaults to the single configured character on the backend. */
+    characterId?: string;
     prompt: string;
-    sessionId?: string;
 }
 
 /** SSE stream event — one per `data:` line */

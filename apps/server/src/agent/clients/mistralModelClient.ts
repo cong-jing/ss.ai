@@ -72,7 +72,6 @@ export class MistralModelClient implements ModelClient {
 
     async generate(input: {
         prompt: string;
-        sessionId?: string;
         history?: HistoryMessage[];
         timeoutMs: number;
     }): Promise<string> {

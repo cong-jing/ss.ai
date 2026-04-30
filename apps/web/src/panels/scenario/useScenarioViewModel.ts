@@ -1,18 +1,19 @@
-import { ref } from "vue";
-import { apiGetUserInfo, apiSaveUserInfo, apiGetCharacterInfo, apiSaveCharacterInfo } from "./scenarioApi";
-import type { UserInfo, CharacterInfo } from "./scenarioTypes";
+import { ref, computed } from "vue";
+import type { Character } from "@ss-ai/contracts";
+import {
+    apiGetUserInfo, apiSaveUserInfo,
+    apiListCharacters, apiCreateCharacter, apiUpdateCharacter, apiDeleteCharacter,
+    apiGetActiveCharacterId, apiSetActiveCharacter,
+} from "./scenarioApi";
+import type { UserInfo } from "./scenarioTypes";
 
 export function useScenarioViewModel() {
-    const userInfo = ref<UserInfo>({ name: "", bio: "" });
-    const characterInfo = ref<CharacterInfo>({ name: "", description: "" });
+    // ── User ─────────────────────────────────────────────────────────────────
 
+    const userInfo = ref<UserInfo>({ name: "", bio: "" });
     const isLoadingUser = ref(false);
     const isSavingUser = ref(false);
     const userError = ref<string | null>(null);
-
-    const isLoadingCharacter = ref(false);
-    const isSavingCharacter = ref(false);
-    const characterError = ref<string | null>(null);
 
     async function loadUserInfo(): Promise<void> {
         isLoadingUser.value = true;
@@ -38,23 +39,143 @@ export function useScenarioViewModel() {
         }
     }
 
-    async function loadCharacterInfo(): Promise<void> {
-        isLoadingCharacter.value = true;
+    // ── Character list ────────────────────────────────────────────────────────
+
+    const characters = ref<Character[]>([]);
+    const activeCharacterId = ref<string | null>(null);
+    const isLoadingCharacters = ref(false);
+    const characterError = ref<string | null>(null);
+    const isSavingCharacter = ref(false);
+
+    /** The currently selected Character object (derived from list + activeCharacterId). */
+    const activeCharacter = computed<Character | null>(
+        () => characters.value.find(c => c.id === activeCharacterId.value) ?? null
+    );
+
+    /** Editable draft for the active character's fields. */
+    const editDraft = ref<{ name: string; description: string }>({ name: "", description: "" });
+
+    // ── Inline create form ────────────────────────────────────────────────────
+
+    const isCreating = ref(false);
+    const newName = ref("");
+    const newDescription = ref("");
+
+    function openCreateForm(): void {
+        newName.value = "";
+        newDescription.value = "";
+        isCreating.value = true;
+    }
+
+    function cancelCreate(): void {
+        isCreating.value = false;
+    }
+
+    // ── Load ──────────────────────────────────────────────────────────────────
+
+    async function loadCharacters(): Promise<void> {
+        isLoadingCharacters.value = true;
         characterError.value = null;
         try {
-            characterInfo.value = await apiGetCharacterInfo();
+            const [list, currentId] = await Promise.all([
+                apiListCharacters(),
+                apiGetActiveCharacterId(),
+            ]);
+            characters.value = list;
+            activeCharacterId.value = currentId;
+            syncDraft();
         } catch (e) {
             characterError.value = e instanceof Error ? e.message : String(e);
         } finally {
-            isLoadingCharacter.value = false;
+            isLoadingCharacters.value = false;
         }
     }
 
-    async function saveCharacterInfo(): Promise<void> {
+    /** Copy active character fields into editDraft. */
+    function syncDraft(): void {
+        const c = activeCharacter.value;
+        editDraft.value = { name: c?.name ?? "", description: c?.description ?? "" };
+    }
+
+    // ── Select ────────────────────────────────────────────────────────────────
+
+    async function selectCharacter(id: string): Promise<void> {
+        if (id === activeCharacterId.value) return;
+        characterError.value = null;
+        try {
+            await apiSetActiveCharacter(id);
+            activeCharacterId.value = id;
+            syncDraft();
+        } catch (e) {
+            characterError.value = e instanceof Error ? e.message : String(e);
+        }
+    }
+
+    // ── Create ────────────────────────────────────────────────────────────────
+
+    async function createCharacter(): Promise<void> {
+        const name = newName.value.trim();
+        if (!name) return;
         isSavingCharacter.value = true;
         characterError.value = null;
         try {
-            characterInfo.value = await apiSaveCharacterInfo(characterInfo.value);
+            const created = await apiCreateCharacter(name, newDescription.value.trim());
+            characters.value.push(created);
+            await apiSetActiveCharacter(created.id);
+            activeCharacterId.value = created.id;
+            syncDraft();
+            isCreating.value = false;
+        } catch (e) {
+            characterError.value = e instanceof Error ? e.message : String(e);
+        } finally {
+            isSavingCharacter.value = false;
+        }
+    }
+
+    // ── Save (update) ─────────────────────────────────────────────────────────
+
+    async function saveCharacter(): Promise<void> {
+        if (!activeCharacterId.value) return;
+        isSavingCharacter.value = true;
+        characterError.value = null;
+        try {
+            const updated = await apiUpdateCharacter(activeCharacterId.value, {
+                name: editDraft.value.name,
+                description: editDraft.value.description,
+            });
+            const idx = characters.value.findIndex(c => c.id === updated.id);
+            if (idx !== -1) characters.value[idx] = updated;
+        } catch (e) {
+            characterError.value = e instanceof Error ? e.message : String(e);
+        } finally {
+            isSavingCharacter.value = false;
+        }
+    }
+
+    // ── Delete ────────────────────────────────────────────────────────────────
+
+    async function deleteCharacter(): Promise<void> {
+        if (!activeCharacterId.value) return;
+        const confirmDelete = window.confirm(
+            `Delete character "${activeCharacter.value?.name ?? ""}"? This cannot be undone.`
+        );
+        if (!confirmDelete) return;
+
+        isSavingCharacter.value = true;
+        characterError.value = null;
+        try {
+            const deletedId = activeCharacterId.value;
+            await apiDeleteCharacter(deletedId);
+            characters.value = characters.value.filter(c => c.id !== deletedId);
+            // Select the first remaining character, or clear
+            const next = characters.value[0] ?? null;
+            if (next) {
+                await apiSetActiveCharacter(next.id);
+                activeCharacterId.value = next.id;
+            } else {
+                activeCharacterId.value = null;
+            }
+            syncDraft();
         } catch (e) {
             characterError.value = e instanceof Error ? e.message : String(e);
         } finally {
@@ -63,17 +184,18 @@ export function useScenarioViewModel() {
     }
 
     return {
-        userInfo,
-        characterInfo,
-        isLoadingUser,
-        isSavingUser,
-        userError,
-        isLoadingCharacter,
-        isSavingCharacter,
-        characterError,
-        loadUserInfo,
-        saveUserInfo,
-        loadCharacterInfo,
-        saveCharacterInfo
+        // user
+        userInfo, isLoadingUser, isSavingUser, userError,
+        loadUserInfo, saveUserInfo,
+        // character list
+        characters, activeCharacterId, activeCharacter,
+        editDraft,
+        isLoadingCharacters, isSavingCharacter, characterError,
+        isCreating, newName, newDescription,
+        loadCharacters,
+        selectCharacter,
+        openCreateForm, cancelCreate, createCharacter,
+        saveCharacter,
+        deleteCharacter,
     };
 }

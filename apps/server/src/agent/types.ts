@@ -14,7 +14,6 @@ export interface HistoryMessage {
 
 export interface ChatRequest {
     prompt: string;
-    sessionId?: string;
     history?: HistoryMessage[];
 }
 
@@ -27,7 +26,6 @@ export interface ChatResponse {
 export interface ModelClient {
     generate(input: {
         prompt: string;
-        sessionId?: string;
         history?: HistoryMessage[];
         timeoutMs: number;
     }): Promise<string>;
