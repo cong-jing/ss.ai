@@ -47,6 +47,7 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}): T
         },
         models,
         agent: { timeoutMs: 30000, maxRetries: 2 },
+        promptLog: { enabled: false, filePath: "" },
     };
 
     const app = createHttpServer(config, {

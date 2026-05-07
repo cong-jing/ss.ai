@@ -19,6 +19,10 @@
         "timeoutMs": 30000,
         "maxRetries": 2
     },
+    "promptLog": {
+        "enabled": true,
+        "filePath": ".runtime/logs/ss-ai.prompt.log"
+    },
     "models": {
         "mistral.ai": {
             "apiUrl": "https://api.mistral.ai",

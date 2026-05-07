@@ -1,6 +1,7 @@
 import { ApiChat, ApiChatStream, type ChatRequest, type ChatStreamEvent } from "@ss-ai/contracts";
 import { PromptContextBuilder, promptRenderer } from "@ss-ai/persona-flow";
 import { AgentService, createModelClientFromConfig } from "../../agent/index.js";
+import { PromptLogger } from "../../util/promptLog.js";
 import { registerApi } from "../registerApi.js";
 import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
 
@@ -27,7 +28,10 @@ async function createChatAgentService(context: HttpApiContext): Promise<AgentSer
         timeoutMs: context.config.agent.timeoutMs,
         maxRetries: context.config.agent.maxRetries,
     };
-    return new AgentService(agentConfig, { modelClient: createModelClientFromConfig(agentConfig) });
+    return new AgentService(agentConfig, {
+        modelClient: createModelClientFromConfig(agentConfig),
+        promptLogger: new PromptLogger(context.config.promptLog),
+    });
 }
 
 /**

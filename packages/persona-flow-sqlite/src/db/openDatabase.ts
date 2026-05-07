@@ -44,6 +44,7 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             model_config_json      TEXT NOT NULL DEFAULT '{}',
             generation_config_json TEXT NOT NULL DEFAULT '{}',
             memory_config_json     TEXT NOT NULL DEFAULT '{}',
+            language               TEXT DEFAULT 'zh-CN',
             status                 TEXT NOT NULL DEFAULT 'active',
             created_at             TEXT NOT NULL,
             updated_at             TEXT NOT NULL
@@ -85,6 +86,7 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
     // ALTER TABLE ADD COLUMN throws if the column already exists — silently ignored.
     try { sqlite.exec(`ALTER TABLE messages ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'`); } catch { /* already exists */ }
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'`); } catch { /* already exists */ }
+    try { sqlite.exec(`ALTER TABLE characters ADD COLUMN language TEXT DEFAULT 'zh-CN'`); } catch { /* already exists */ }
 
     const db = drizzle(sqlite, { schema });
 

@@ -71,6 +71,18 @@
                 }
             }
         },
+        "promptLog": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "filePath": {
+                    "type": "string"
+                }
+            }
+        },
         "models": {
             "type": "object",
             "minProperties": 1,

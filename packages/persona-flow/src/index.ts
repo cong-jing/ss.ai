@@ -9,4 +9,6 @@ export * from "./userPreferencesStore.js";
 export * from "./userProviderCredential.js";
 export * from "./userProviderCredentialStore.js";
 export * from "./prompt/promptConext.js";
+export * from "./prompt/systemPromptBuilder.js";
 export * from "./prompt/promptRenderer.js";
+export * from "./prompt/localizedPromptBlocks.js";

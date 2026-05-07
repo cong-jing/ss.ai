@@ -26,6 +26,7 @@ export const characters = sqliteTable("characters", {
     modelConfigJson: text("model_config_json").notNull().default("{}"),
     generationConfigJson: text("generation_config_json").notNull().default("{}"),
     memoryConfigJson: text("memory_config_json").notNull().default("{}"),
+    language: text("language").default("zh-CN"),
     status: text("status").notNull().default("active"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),

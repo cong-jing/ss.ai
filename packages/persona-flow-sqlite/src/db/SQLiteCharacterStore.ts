@@ -1,7 +1,7 @@
 import { and, eq, desc, inArray } from "drizzle-orm";
 import { characters, type CharacterRow, type NewCharacterRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
-import type { Character, CharacterStatus, CharacterStore } from "@ss-ai/persona-flow";
+import type { Character, CharacterStatus, PromptLanguage, CharacterStore } from "@ss-ai/persona-flow";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -31,6 +31,7 @@ function rowToCharacter(row: CharacterRow): Character {
         modelConfig: safeParseJsonObject(row.modelConfigJson),
         generationConfig: safeParseJsonObject(row.generationConfigJson),
         memoryConfig: safeParseJsonObject(row.memoryConfigJson),
+        language: (row.language as PromptLanguage | null) ?? null,
         status: row.status as CharacterStatus,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
@@ -50,6 +51,7 @@ function characterToInsertRow(character: Character): NewCharacterRow {
         modelConfigJson: JSON.stringify(character.modelConfig),
         generationConfigJson: JSON.stringify(character.generationConfig),
         memoryConfigJson: JSON.stringify(character.memoryConfig),
+        language: character.language ?? "zh-CN",
         status: character.status,
         createdAt: character.createdAt,
         updatedAt: character.updatedAt,

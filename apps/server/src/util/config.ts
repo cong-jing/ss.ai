@@ -32,6 +32,10 @@ export interface RuntimeConfig {
         timeoutMs: number;
         maxRetries: number;
     };
+    promptLog: {
+        enabled: boolean;
+        filePath: string;
+    };
 }
 
 interface RawModelConfig {
@@ -62,6 +66,10 @@ interface RawConfig {
     agent?: {
         timeoutMs?: number;
         maxRetries?: number;
+    };
+    promptLog?: {
+        enabled?: boolean;
+        filePath?: string;
     };
 }
 
@@ -218,6 +226,7 @@ export function loadRuntimeConfig(): RuntimeConfig {
     const loggerFilePath = toAbsolutePath(fileConfig.logger?.logFilePath, "app.log");
     const tempDir = toAbsolutePath(fileConfig.runtimeFiles?.tempDir, ".runtime/temp");
     const userDataDir = toAbsolutePath(fileConfig.runtimeFiles?.userDataDir, ".runtime/user-data");
+    const promptLogFilePath = toAbsolutePath(fileConfig.promptLog?.filePath, ".runtime/logs/prompt.log");
 
     return {
         http: {
@@ -239,6 +248,10 @@ export function loadRuntimeConfig(): RuntimeConfig {
         agent: {
             timeoutMs: fileConfig.agent?.timeoutMs ?? 30000,
             maxRetries: fileConfig.agent?.maxRetries ?? 2
-        }
+        },
+        promptLog: {
+            enabled: fileConfig.promptLog?.enabled ?? false,
+            filePath: promptLogFilePath,
+        },
     };
 }

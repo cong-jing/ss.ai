@@ -1,26 +1,30 @@
 import { getGlobalLogger } from "../util/logger.js";
+import { PromptLogger } from "../util/promptLog.js";
 import { PlaceholderModelClient } from "./clients/placeholderModelClient.js";
 import { AgentConfig, ChatRequest, ChatResponse, ModelClient } from "./types.js";
 
 export interface AgentDependencies {
     modelClient?: ModelClient;
+    promptLogger?: PromptLogger;
 }
 
 export class AgentService {
     private readonly logger = getGlobalLogger();
     private readonly modelClient: ModelClient;
+    private readonly promptLogger: PromptLogger;
 
     constructor(
         private readonly config: AgentConfig,
         dependencies: AgentDependencies = {}
     ) {
         this.modelClient = dependencies.modelClient ?? new PlaceholderModelClient();
+        this.promptLogger = dependencies.promptLogger ?? PromptLogger.disabled();
     }
 
     async chat(request: ChatRequest): Promise<ChatResponse> {
         const requestId = crypto.randomUUID();
 
-        this.logger.debug("Agent chat: sending messages to LLM", {
+        this.logger.verbose("Agent chat: sending messages to LLM", {
             requestId,
             messages: request.messages,
         });
@@ -30,7 +34,15 @@ export class AgentService {
             timeoutMs: this.config.timeoutMs,
         });
 
-        this.logger.debug("Agent chat: completed", { requestId, output });
+        this.logger.verbose("Agent chat: completed", { requestId, output });
+
+        this.promptLogger.write({
+            timestamp: new Date().toISOString(),
+            requestId,
+            model: this.config.model,
+            messages: request.messages,
+            output,
+        });
 
         return {
             output,

@@ -1,4 +1,5 @@
 export type CharacterStatus = "active" | "archived";
+export type PromptLanguage = "zh-CN" | "ja-JP" | "en-US";
 
 /**
  * Character domain model — the "character card".
@@ -42,6 +43,9 @@ export type Character = {
 
     /** Memory strategy config. Example: { recentMessageLimit: 20 } */
     memoryConfig: Record<string, unknown>;
+
+    /** Preferred prompt language for this character (e.g. "zh-CN"). Defaults to "zh-CN" if not set. */
+    language?: PromptLanguage | null;
 
     /** Lifecycle status. Use "archived" instead of hard-deleting. */
     status: CharacterStatus;
