@@ -1,12 +1,13 @@
-import { ModelClient, HistoryMessage } from "../types.js";
+import type { RenderedMessage } from "@ss-ai/persona-flow";
+import { ModelClient } from "../types.js";
 
 export class PlaceholderModelClient implements ModelClient {
     async generate(input: {
-        prompt: string;
-        history?: HistoryMessage[];
+        messages: RenderedMessage[];
         timeoutMs: number;
     }): Promise<string> {
-        return `TODO: replace PlaceholderModelClient with real LLM API call. Prompt: ${input.prompt}`;
+        const lastUser = [...input.messages].reverse().find(m => m.role === "user");
+        return `TODO: replace PlaceholderModelClient with real LLM API call. Prompt: ${lastUser?.content ?? ""}`;
     }
 
     async listModels(): Promise<string[]> {

@@ -18,28 +18,24 @@ export class AgentService {
     }
 
     async chat(request: ChatRequest): Promise<ChatResponse> {
-        if (!request.prompt?.trim()) {
-            throw new Error("Prompt must not be empty");
-        }
-
         const requestId = crypto.randomUUID();
-        const output = await this.modelClient.generate({
-            prompt: request.prompt,
-            history: request.history,
-            timeoutMs: this.config.timeoutMs
+
+        this.logger.debug("Agent chat: sending messages to LLM", {
+            requestId,
+            messages: request.messages,
         });
 
-        this.logger.debug("Agent chat request completed", {
-            requestId,
-            prompt: request.prompt,
-            output,
-            history: request.history
+        const output = await this.modelClient.generate({
+            messages: request.messages,
+            timeoutMs: this.config.timeoutMs,
         });
+
+        this.logger.debug("Agent chat: completed", { requestId, output });
 
         return {
             output,
             model: this.config.model,
-            requestId
+            requestId,
         };
     }
 

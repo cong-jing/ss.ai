@@ -8,3 +8,5 @@ export * from "./userPreferences.js";
 export * from "./userPreferencesStore.js";
 export * from "./userProviderCredential.js";
 export * from "./userProviderCredentialStore.js";
+export * from "./prompt/promptConext.js";
+export * from "./prompt/promptRenderer.js";

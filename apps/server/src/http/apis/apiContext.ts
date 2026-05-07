@@ -3,6 +3,7 @@ import type { RuntimeConfig } from "../../util/config.js";
 import { Logger } from "../../util/logger.js";
 import type { ErrorResponse } from "@ss-ai/contracts";
 import type {
+    CharacterStore,
     MessageStore,
     UserProfileStore,
     UserPreferencesStore,
@@ -16,6 +17,7 @@ export interface HttpApiContext {
     app: Express;
     logger: Logger;
     config: RuntimeConfig;
+    characterStore: CharacterStore;
     userProfileStore: UserProfileStore;
     userPreferencesStore: UserPreferencesStore;
     userProviderCredentialStore: UserProviderCredentialStore;

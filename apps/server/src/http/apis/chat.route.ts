@@ -1,6 +1,6 @@
 import { ApiChat, ApiChatStream, type ChatRequest, type ChatStreamEvent } from "@ss-ai/contracts";
+import { PromptContextBuilder, promptRenderer } from "@ss-ai/persona-flow";
 import { AgentService, createModelClientFromConfig } from "../../agent/index.js";
-import type { HistoryMessage } from "../../agent/types.js";
 import { registerApi } from "../registerApi.js";
 import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
 
@@ -60,36 +60,34 @@ async function handleChat(context: HttpApiContext, body: ChatRequest) {
     const conversationId = await resolveConversationId(context);
 
     // 1. Append user message
-    await context.messageStore.appendMessage({
+    const userMessage = {
         id: crypto.randomUUID(),
         userId: DEFAULT_USER_ID,
         conversationId,
-        role: "user",
+        role: "user" as const,
         content: prompt,
         createdAt: new Date().toISOString(),
-    });
+    };
+    await context.messageStore.appendMessage(userMessage);
 
-    // 2. Get recent messages for context
-    const recentMessages = await context.messageStore.getRecentMessages({
+    // 2. Build prompt context (loads profile, character, and history)
+    const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+    const promptContext = await PromptContextBuilder.build({
         userId: DEFAULT_USER_ID,
+        characterId: prefs?.currentCharacterId,
         conversationId,
-        limit: 20,
+        currentUserMessage: userMessage,
+        messageStore: context.messageStore,
+        userProfileStore: context.userProfileStore,
+        characterStore: context.characterStore,
     });
 
-    // 3. Build history (all except the just-appended user message)
-    const history: HistoryMessage[] = recentMessages
-        .slice(0, -1)
-        .map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
+    // 3. Render prompt
+    const rendered = promptRenderer.render(promptContext);
 
     // 4. Call LLM
     const runtimeAgentService = await createChatAgentService(context);
-    const response = await runtimeAgentService.chat({ prompt, history });
-
-    context.logger.debug("chat: completed", {
-        conversationId,
-        model: response.model,
-        requestId: response.requestId,
-    });
+    const response = await runtimeAgentService.chat({ messages: rendered.messages });
 
     // 5. Append assistant message
     await context.messageStore.appendMessage({
@@ -141,29 +139,33 @@ export function registerChatRoute(context: HttpApiContext): void {
         });
 
         // 1. Append user message
-        await context.messageStore.appendMessage({
+        const userMessage = {
             id: crypto.randomUUID(),
             userId: DEFAULT_USER_ID,
             conversationId,
-            role: "user",
+            role: "user" as const,
             content: prompt,
             createdAt: new Date().toISOString(),
-        });
+        };
+        await context.messageStore.appendMessage(userMessage);
 
-        // 2. Get recent messages, build history
-        const recentMessages = await context.messageStore.getRecentMessages({
+        // 2. Build prompt context and render
+        const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+        const promptContext = await PromptContextBuilder.build({
             userId: DEFAULT_USER_ID,
+            characterId: prefs?.currentCharacterId,
             conversationId,
-            limit: 20,
+            currentUserMessage: userMessage,
+            messageStore: context.messageStore,
+            userProfileStore: context.userProfileStore,
+            characterStore: context.characterStore,
         });
-        const history: HistoryMessage[] = recentMessages
-            .slice(0, -1)
-            .map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
+        const rendered = promptRenderer.render(promptContext);
 
         // 3. Call LLM
         let fullResponse: string;
         try {
-            const chatResponse = await agentService.chat({ prompt, history });
+            const chatResponse = await agentService.chat({ messages: rendered.messages });
             fullResponse = chatResponse.output;
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : "Unknown error";
@@ -184,10 +186,8 @@ export function registerChatRoute(context: HttpApiContext): void {
             createdAt: new Date().toISOString(),
         });
 
-        const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
         const modelName = prefs?.functionModels?.["chat"]?.model ?? "unknown";
         const tokens = fullResponse.split(/(?<=\s)|(?=\s)/);
-
         let i = 0;
         const timer = setInterval(() => {
             if (i < tokens.length) {

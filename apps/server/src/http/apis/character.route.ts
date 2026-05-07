@@ -11,7 +11,7 @@ import {
     type ListCharactersResponse,
     type Character as ContractCharacter,
 } from "@ss-ai/contracts";
-import type { Character as PFCharacter, CharacterStore } from "@ss-ai/persona-flow";
+import type { Character as PFCharacter } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
 import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
 
@@ -32,7 +32,8 @@ function toContractCharacter(c: PFCharacter): ContractCharacter {
 
 const ITEM_URL = ApiGetCharacter.apiUrl; // "/v1/characters/:id"
 
-export function registerCharacterRoutes(context: HttpApiContext, store: CharacterStore): void {
+export function registerCharacterRoutes(context: HttpApiContext): void {
+    const store = context.characterStore;
     // GET /v1/characters
     registerApi(context.app, ApiListCharacters, {
         handleRequest: async (): Promise<ListCharactersResponse> => {

@@ -53,6 +53,7 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
         app,
         logger,
         config,
+        characterStore,
         userProfileStore,
         userPreferencesStore,
         userProviderCredentialStore,
@@ -62,7 +63,7 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
     registerUserPreferenceRoutes(apiContext);
     registerChatRoute(apiContext);
     registerUserProfileRoutes(apiContext);
-    registerCharacterRoutes(apiContext, characterStore);
+    registerCharacterRoutes(apiContext);
 
     return app;
 }

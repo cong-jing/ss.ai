@@ -1,3 +1,6 @@
+import type { RenderedMessage } from "@ss-ai/persona-flow";
+export type { RenderedMessage };
+
 export interface AgentConfig {
     provider: string;
     apiUrl: string;
@@ -13,8 +16,7 @@ export interface HistoryMessage {
 }
 
 export interface ChatRequest {
-    prompt: string;
-    history?: HistoryMessage[];
+    messages: RenderedMessage[];
 }
 
 export interface ChatResponse {
@@ -25,8 +27,7 @@ export interface ChatResponse {
 
 export interface ModelClient {
     generate(input: {
-        prompt: string;
-        history?: HistoryMessage[];
+        messages: RenderedMessage[];
         timeoutMs: number;
     }): Promise<string>;
     listModels(): Promise<string[]>;
