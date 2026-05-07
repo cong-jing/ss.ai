@@ -5,6 +5,7 @@ import type { ChatMessage } from "./chatTypes";
 
 const props = defineProps<{
   messages: ChatMessage[];
+  showDebug?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -47,7 +48,9 @@ watch(
 
 <template>
   <section ref="listEl" class="message-list" @scroll="onScroll">
-    <ChatMessageBlock v-for="message in messages" :key="message.id" :message="message" />
+    <template v-for="message in messages" :key="message.id">
+      <ChatMessageBlock v-if="message.role !== 'debug' || props.showDebug" :message="message" />
+    </template>
   </section>
 </template>
 

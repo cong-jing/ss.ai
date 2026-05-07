@@ -34,23 +34,25 @@ function onKeydown(event: KeyboardEvent) {
 
 <template>
   <footer class="chat-input-box">
-    <div class="input-row">
-      <textarea
-        v-model="text"
-        :disabled="disabled"
-        class="chat-input"
-        placeholder="Input message, Enter to send, Shift+Enter for newline"
-        @keydown="onKeydown"
-      />
-      <Button :disabled="disabled" @click="submit">Send</Button>
+    <textarea
+      v-model="text"
+      :disabled="disabled"
+      class="chat-input"
+      placeholder="Input message, Enter to send, Shift+Enter for newline"
+      @keydown="onKeydown"
+    />
+    <div class="toolbar">
+      <label class="stream-toggle">
+        <input type="checkbox" v-model="streamMode" :disabled="disabled" />
+        Stream
+      </label>
+      <div class="toolbar-right">
+        <button class="dry-run-btn" :disabled="disabled" @click="emit('dryRun', text)">
+          Dry Run
+        </button>
+        <Button :disabled="disabled" @click="submit">Send</Button>
+      </div>
     </div>
-    <label class="stream-toggle">
-      <input type="checkbox" v-model="streamMode" :disabled="disabled" />
-      Stream
-    </label>
-    <button class="dry-run-btn" :disabled="disabled" @click="emit('dryRun', text)">
-      Dry Run
-    </button>
   </footer>
 </template>
 
@@ -60,34 +62,43 @@ function onKeydown(event: KeyboardEvent) {
   flex: 0 0 auto;
   flex-direction: column;
   gap: 6px;
-  padding: 10px 12px;
+  padding: 8px 12px 10px;
   border-top: 1px solid #e5e7eb;
   background: #fff;
 }
 
-.input-row {
-  display: flex;
-  gap: 8px;
-}
-
 .chat-input {
-  flex: 1 1 auto;
+  width: 100%;
   min-height: 68px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
   padding: 8px;
   resize: vertical;
   font: inherit;
+  box-sizing: border-box;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .stream-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-size: 12px;
   color: #6b7280;
   cursor: pointer;
   user-select: none;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .dry-run-btn {
@@ -96,8 +107,9 @@ function onKeydown(event: KeyboardEvent) {
   background: none;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  padding: 2px 8px;
+  padding: 3px 10px;
   cursor: pointer;
+  line-height: 1.5;
 }
 
 .dry-run-btn:hover:not(:disabled) {

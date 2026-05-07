@@ -7,7 +7,7 @@ import ChatMessageList from "./ChatMessageList.vue";
 import { useChatViewModel } from "./useChatViewModel";
 
 const vm = useChatViewModel();
-const { messages, isSending, error, sendMessage, clearMessages, dryRunPrompt } = vm;
+const { messages, isSending, error, showDebug, sendMessage, clearMessages, dryRunPrompt } = vm;
 
 onMounted(() => {
   clearMessages();
@@ -15,14 +15,18 @@ onMounted(() => {
 </script>
 
 <template>
-  <Panel title="Chat" class="chat-panel">
+  <Panel title="Chat" class="chat-panel" padding="none">
+    <template #header-actions>
+      <span v-if="isSending" class="sending">Sending...</span>
+      <button class="header-btn" :class="{ active: showDebug }" @click="showDebug = !showDebug">
+        {{ showDebug ? 'Hide Debug' : 'Show Debug' }}
+      </button>
+      <Button :disabled="isSending" @click="clearMessages">Clear</Button>
+    </template>
+
     <div class="chat-layout">
-      <div class="chat-actions">
-        <Button :disabled="isSending" @click="clearMessages">Clear</Button>
-        <span v-if="isSending" class="sending">Sending...</span>
-      </div>
       <div class="chat-messages">
-        <ChatMessageList :messages="messages" />
+        <ChatMessageList :messages="messages" :show-debug="showDebug" />
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
@@ -44,33 +48,12 @@ onMounted(() => {
   min-height: 0;
 }
 
-.content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  height: auto;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
 .chat-layout {
   flex: 1 1 auto;
   min-height: 0;
-
   display: flex;
   flex-direction: column;
-
   overflow: hidden;
-}
-
-.chat-actions {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #fff;
 }
 
 .chat-messages {
@@ -94,5 +77,26 @@ onMounted(() => {
   font-size: 12px;
   color: #b91c1c;
   background: #fee2e2;
+}
+
+.header-btn {
+  font-size: 12px;
+  color: #6b7280;
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.header-btn:hover {
+  background: #f3f4f6;
+}
+
+.header-btn.active {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
 }
 </style>

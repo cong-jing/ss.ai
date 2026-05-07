@@ -1,4 +1,9 @@
-export type ChatRole = "user" | "assistant" | "system";
+export type ChatRole = "user" | "assistant" | "system" | "debug";
+
+export interface DebugMessage {
+    role: string;
+    content: string;
+}
 
 export interface ChatMessage {
     id: string;
@@ -6,4 +11,5 @@ export interface ChatMessage {
     content: string;
     createdAt?: string;
     status?: "normal" | "streaming" | "failed";
+    debugMessages?: DebugMessage[];
 }

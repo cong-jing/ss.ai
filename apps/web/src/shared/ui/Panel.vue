@@ -20,8 +20,11 @@ withDefaults(
       `panel--padding-${padding}`,
     ]"
   >
-    <header v-if="title" class="panel-title">
-      {{ title }}
+    <header v-if="title || $slots['header-actions']" class="panel-title">
+      <span class="panel-title-text">{{ title }}</span>
+      <div v-if="$slots['header-actions']" class="panel-title-actions">
+        <slot name="header-actions" />
+      </div>
     </header>
 
     <div class="panel-body">
@@ -63,12 +66,28 @@ withDefaults(
 .panel-title {
   flex: 0 0 auto;
 
-  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  padding: 8px 12px;
   border-bottom: 1px solid #e5e7eb;
   font-weight: 600;
   background: #fff;
 
   box-sizing: border-box;
+}
+
+.panel-title-text {
+  flex: 1;
+}
+
+.panel-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: normal;
 }
 
 .panel-body {

@@ -174,6 +174,8 @@ export function useChatViewModel() {
         messages.value = [];
     }
 
+    const showDebug = ref(false);
+
     async function dryRunPrompt(text: string) {
         const prompt = text.trim();
         if (!prompt) return;
@@ -186,6 +188,15 @@ export function useChatViewModel() {
                 console.log(msg.content);
             }
             console.groupEnd();
+            messages.value.push({
+                id: createId("debug"),
+                role: "debug",
+                content: "",
+                createdAt: new Date().toISOString(),
+                status: "normal",
+                debugMessages: result.messages,
+            });
+            showDebug.value = true;
         } catch (e) {
             console.error("[dry-run] error:", e);
         }
@@ -196,6 +207,7 @@ export function useChatViewModel() {
         isSending,
         isLoading,
         error,
+        showDebug,
         sendMessage,
         clearMessages,
         dryRunPrompt,
