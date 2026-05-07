@@ -8,27 +8,12 @@ import { registerUserProfileRoutes } from "./apis/userProfile.route.js";
 import { registerCharacterRoutes } from "./apis/character.route.js";
 import {
     openDatabase,
-    SQLiteMessageStore,
-    SQLiteCharacterStore,
-    SQLiteUserProfileStore,
-    SQLiteUserPreferencesStore,
-    SQLiteUserProviderCredentialStore,
-    SQLiteUserCharacterStateStore,
+    createSqliteStores,
 } from "@ss-ai/persona-flow-sqlite";
-import type {
-    CharacterStore,
-    UserProfileStore,
-    UserPreferencesStore,
-    UserProviderCredentialStore,
-    UserCharacterStateStore,
-} from "@ss-ai/persona-flow";
+import type { AppStores } from "@ss-ai/persona-flow";
 
 export interface ServerStoreOverrides {
-    characterStore?: CharacterStore;
-    userProfileStore?: UserProfileStore;
-    userPreferencesStore?: UserPreferencesStore;
-    userCharacterStateStore?: UserCharacterStateStore;
-    userProviderCredentialStore?: UserProviderCredentialStore;
+    stores?: AppStores;
 }
 
 export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreOverrides) {
@@ -40,12 +25,7 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
         (sql: unknown) => logger.verbose("[db]", { sql: String(sql) })
     );
 
-    const messageStore = new SQLiteMessageStore(db);
-    const characterStore = overrides?.characterStore ?? new SQLiteCharacterStore(db);
-    const userProfileStore = overrides?.userProfileStore ?? new SQLiteUserProfileStore(db);
-    const userPreferencesStore = overrides?.userPreferencesStore ?? new SQLiteUserPreferencesStore(db);
-    const userCharacterStateStore = overrides?.userCharacterStateStore ?? new SQLiteUserCharacterStateStore(db);
-    const userProviderCredentialStore = overrides?.userProviderCredentialStore ?? new SQLiteUserProviderCredentialStore(db);
+    const stores = overrides?.stores ?? createSqliteStores({ db });
 
     app.use(express.json());
 
@@ -57,12 +37,7 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
         app,
         logger,
         config,
-        characterStore,
-        userProfileStore,
-        userPreferencesStore,
-        userCharacterStateStore,
-        userProviderCredentialStore,
-        messageStore,
+        stores,
     };
 
     registerUserPreferenceRoutes(apiContext);

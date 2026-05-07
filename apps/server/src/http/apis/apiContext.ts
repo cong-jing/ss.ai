@@ -2,14 +2,7 @@ import type { Express } from "express";
 import type { RuntimeConfig } from "../../util/config.js";
 import { Logger } from "../../util/logger.js";
 import type { ErrorResponse } from "@ss-ai/contracts";
-import type {
-    CharacterStore,
-    MessageStore,
-    UserProfileStore,
-    UserPreferencesStore,
-    UserProviderCredentialStore,
-    UserCharacterStateStore,
-} from "@ss-ai/persona-flow";
+import type { AppStores } from "@ss-ai/persona-flow";
 
 /** The userId used for all single-user operations. */
 export const DEFAULT_USER_ID = "default";
@@ -18,12 +11,7 @@ export interface HttpApiContext {
     app: Express;
     logger: Logger;
     config: RuntimeConfig;
-    characterStore: CharacterStore;
-    userProfileStore: UserProfileStore;
-    userPreferencesStore: UserPreferencesStore;
-    userCharacterStateStore: UserCharacterStateStore;
-    userProviderCredentialStore: UserProviderCredentialStore;
-    messageStore: MessageStore;
+    stores: AppStores;
 }
 
 export function toErrorResponse(error: unknown): ErrorResponse {

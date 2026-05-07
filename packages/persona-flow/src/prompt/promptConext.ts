@@ -1,9 +1,9 @@
-import type { Character } from "../character.js";
-import type { CharacterStore } from "../characterStore.js";
-import type { Message } from "../message.js";
-import type { MessageStore } from "../messageStore.js";
-import type { UserProfile } from "../userProfile.js";
-import type { UserProfileStore } from "../userProfileStore.js";
+import type { Character } from "../stores/character.js";
+import type { CharacterStore } from "../stores/characterStore.js";
+import type { Message } from "../stores/message.js";
+import type { MessageStore } from "../stores/messageStore.js";
+import type { UserProfile } from "../stores/userProfile.js";
+import type { UserProfileStore } from "../stores/userProfileStore.js";
 
 export type PromptContext = {
     userProfile: UserProfile | null;

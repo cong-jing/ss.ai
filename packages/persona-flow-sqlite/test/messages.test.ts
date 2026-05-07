@@ -1,9 +1,9 @@
 /**
- * Message store integration tests — SQLiteMessageStore
+ * Message store integration tests — SQLiteChatStore (message operations)
  */
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
-import { openDatabase, SQLiteMessageStore } from "../src/index.js";
+import { openDatabase, SQLiteChatStore } from "../src/index.js";
 import type { Message } from "@ss-ai/persona-flow";
 
 function makeMessage(overrides?: Partial<Message>): Message {
@@ -18,12 +18,12 @@ function makeMessage(overrides?: Partial<Message>): Message {
     };
 }
 
-describe("SQLiteMessageStore", () => {
-    let store: SQLiteMessageStore;
+describe("SQLiteChatStore — message operations", () => {
+    let store: SQLiteChatStore;
 
     before(() => {
         const { db } = openDatabase(":memory:");
-        store = new SQLiteMessageStore(db);
+        store = new SQLiteChatStore(db);
     });
 
     it("appendMessage and getRecentMessages — round-trips a single message", async () => {
@@ -31,7 +31,7 @@ describe("SQLiteMessageStore", () => {
         await store.appendMessage(msg);
 
         const result = await store.getRecentMessages({ userId: msg.userId, conversationId: msg.conversationId, limit: 10 });
-        assert.ok(result.some(m => m.id === msg.id), "should find appended message");
+        assert.ok(result.some((m: Message) => m.id === msg.id), "should find appended message");
     });
 
     it("getRecentMessages — returns messages in ascending time order", async () => {
@@ -63,7 +63,7 @@ describe("SQLiteMessageStore", () => {
         await store.appendMessage(makeMessage({ conversationId: "conv_b", content: "from B" }));
 
         const a = await store.getRecentMessages({ userId: "user_test", conversationId: "conv_a", limit: 10 });
-        assert.ok(a.every(m => m.conversationId === "conv_a"));
+        assert.ok(a.every((m: Message) => m.conversationId === "conv_a"));
     });
 
     it("getRecentMessages — returns empty array for unknown conversationId", async () => {

@@ -13,7 +13,7 @@ async function listModelsForProvider(context: HttpApiContext, provider: string):
         return [...modelEntry.availableModels].sort();
     }
 
-    const credential = await context.userProviderCredentialStore.getCredential({ userId: DEFAULT_USER_ID, provider });
+    const credential = await context.stores.providerCredential.getCredential({ userId: DEFAULT_USER_ID, provider });
     if (!credential) return [];
 
     const client = createModelClientFromConfig({
@@ -27,8 +27,8 @@ async function listModelsForProvider(context: HttpApiContext, provider: string):
 }
 
 async function getUserPreference(context: HttpApiContext): Promise<UserPreferenceApi.GetUserPreferenceResponse> {
-    const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
-    const credentials = await context.userProviderCredentialStore.listCredentials(DEFAULT_USER_ID);
+    const prefs = await context.stores.userPreferences.getUserPreferences(DEFAULT_USER_ID);
+    const credentials = await context.stores.providerCredential.listCredentials(DEFAULT_USER_ID);
     const credsByProvider = new Map(credentials.map(c => [c.provider, c]));
 
     const providerKeys = Object.keys(context.config.models);
@@ -61,8 +61,8 @@ async function upsertApiKey(
     if (!apiKey) throw new Error("apiKey is required");
 
     const now = new Date().toISOString();
-    const existing = await context.userProviderCredentialStore.getCredential({ userId: DEFAULT_USER_ID, provider });
-    await context.userProviderCredentialStore.upsertCredential({
+    const existing = await context.stores.providerCredential.getCredential({ userId: DEFAULT_USER_ID, provider });
+    await context.stores.providerCredential.upsertCredential({
         userId: DEFAULT_USER_ID,
         provider,
         apiKeyEncrypted: apiKey,
@@ -81,7 +81,7 @@ async function deleteApiKey(
     const provider = (body?.provider ?? "").trim().toLowerCase();
     if (!provider) throw new Error("provider is required");
 
-    await context.userProviderCredentialStore.deleteCredential({ userId: DEFAULT_USER_ID, provider });
+    await context.stores.providerCredential.deleteCredential({ userId: DEFAULT_USER_ID, provider });
     return { provider, apiKeySet: false };
 }
 
@@ -95,7 +95,7 @@ async function testApiKey(
     const modelEntry = context.config.models[provider];
     if (!modelEntry) throw new Error(`Unsupported provider: ${provider}`);
 
-    const credential = await context.userProviderCredentialStore.getCredential({ userId: DEFAULT_USER_ID, provider });
+    const credential = await context.stores.providerCredential.getCredential({ userId: DEFAULT_USER_ID, provider });
     if (!credential) {
         return { provider, ok: false, message: "API key not set" };
     }
@@ -130,14 +130,14 @@ async function upsertFunctionModel(
     if (!model) throw new Error("model is required");
 
     const now = new Date().toISOString();
-    await context.userPreferencesStore.setFunctionModel({
+    await context.stores.userPreferences.setFunctionModel({
         userId: DEFAULT_USER_ID,
         functionName: fn,
         selection: { provider, model },
         updatedAt: now,
     });
 
-    const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+    const prefs = await context.stores.userPreferences.getUserPreferences(DEFAULT_USER_ID);
     const functionModels: UserPreferenceApi.FunctionModelMap = {};
     for (const f of AI_FUNCTIONS) {
         functionModels[f] = prefs?.functionModels?.[f] ?? null;

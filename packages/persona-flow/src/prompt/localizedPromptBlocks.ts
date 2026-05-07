@@ -3,7 +3,7 @@
  * Supports multiple languages; currently implements zh-CN.
  */
 
-import type { PromptLanguage } from "../character.js";
+import type { PromptLanguage } from "../stores/character.js";
 
 export interface SectionLabels {
     character: string;

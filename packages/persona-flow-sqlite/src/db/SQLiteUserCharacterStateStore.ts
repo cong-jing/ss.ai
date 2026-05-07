@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { userCharacterStates, type UserCharacterStateRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
-import type { UserCharacterState, UserCharacterStateStore } from "@ss-ai/persona-flow";
+import type { UserCharacterState } from "@ss-ai/persona-flow";
 
 function rowToState(row: UserCharacterStateRow): UserCharacterState {
     return {
@@ -13,7 +13,7 @@ function rowToState(row: UserCharacterStateRow): UserCharacterState {
     };
 }
 
-export class SQLiteUserCharacterStateStore implements UserCharacterStateStore {
+export class SQLiteUserCharacterStateStore {
     constructor(private readonly db: DrizzleDb) { }
 
     async getState(input: { userId: string; characterId: string }): Promise<UserCharacterState | null> {

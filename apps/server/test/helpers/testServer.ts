@@ -9,7 +9,8 @@ import { InMemoryCharacterStore } from "./inMemoryCharacterStore.js";
 import { InMemoryUserProfileStore } from "./inMemoryUserProfileStore.js";
 import { InMemoryUserPreferencesStore } from "./inMemoryUserPreferencesStore.js";
 import { InMemoryUserProviderCredentialStore } from "./inMemoryUserProviderCredentialStore.js";
-import { InMemoryUserCharacterStateStore } from "./inMemoryUserCharacterStateStore.js";
+import { InMemoryChatStore } from "./inMemoryChatStore.js";
+import type { AppStores } from "@ss-ai/persona-flow";
 
 export interface TestApp {
     /** supertest agent — call `.get()`, `.post()`, `.patch()`, `.delete()` on this. */
@@ -51,13 +52,15 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}): T
         promptLog: { enabled: false, filePath: "" },
     };
 
-    const app = createHttpServer(config, {
-        characterStore: new InMemoryCharacterStore(),
-        userProfileStore: new InMemoryUserProfileStore(),
-        userPreferencesStore: new InMemoryUserPreferencesStore(),
-        userCharacterStateStore: new InMemoryUserCharacterStateStore(),
-        userProviderCredentialStore: new InMemoryUserProviderCredentialStore(),
-    });
+    const stores: AppStores = {
+        character: new InMemoryCharacterStore(),
+        userProfile: new InMemoryUserProfileStore(),
+        userPreferences: new InMemoryUserPreferencesStore(),
+        chat: new InMemoryChatStore(),
+        providerCredential: new InMemoryUserProviderCredentialStore(),
+    };
+
+    const app = createHttpServer(config, { stores });
 
     return {
         agent: supertest(app),

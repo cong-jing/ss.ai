@@ -8,7 +8,7 @@ import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiCont
 export function registerUserProfileRoutes(context: HttpApiContext): void {
     registerApi(context.app, ApiGetUserProfile, {
         handleRequest: async () => {
-            const profile = await context.userProfileStore.getUserProfile(DEFAULT_USER_ID);
+            const profile = await context.stores.userProfile.getUserProfile(DEFAULT_USER_ID);
             return {
                 name: profile?.name ?? "",
                 bio: profile?.bio ?? "",
@@ -26,8 +26,8 @@ export function registerUserProfileRoutes(context: HttpApiContext): void {
                 : null;
 
             const now = new Date().toISOString();
-            const existing = await context.userProfileStore.getUserProfile(DEFAULT_USER_ID);
-            await context.userProfileStore.upsertUserProfile({
+            const existing = await context.stores.userProfile.getUserProfile(DEFAULT_USER_ID);
+            await context.stores.userProfile.upsertUserProfile({
                 userId: DEFAULT_USER_ID,
                 name,
                 bio,

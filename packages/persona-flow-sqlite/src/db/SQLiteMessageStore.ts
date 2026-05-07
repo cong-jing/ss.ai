@@ -1,7 +1,7 @@
 import { and, eq, desc } from "drizzle-orm";
 import { messages, type MessageRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
-import type { Message, MessageStore, ChatRole } from "@ss-ai/persona-flow";
+import type { Message, ChatRole } from "@ss-ai/persona-flow";
 
 function rowToMessage(row: MessageRow): Message {
     return {
@@ -14,7 +14,7 @@ function rowToMessage(row: MessageRow): Message {
     };
 }
 
-export class SQLiteMessageStore implements MessageStore {
+export class SQLiteMessageStore {
     constructor(private readonly db: DrizzleDb) { }
 
     async appendMessage(message: Message): Promise<void> {

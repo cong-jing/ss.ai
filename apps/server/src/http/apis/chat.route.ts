@@ -6,7 +6,7 @@ import { registerApi } from "../registerApi.js";
 import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
 
 async function createChatAgentService(context: HttpApiContext): Promise<AgentService> {
-    const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+    const prefs = await context.stores.userPreferences.getUserPreferences(DEFAULT_USER_ID);
     const chatFnModel = prefs?.functionModels?.["chat"];
     if (!chatFnModel?.provider || !chatFnModel?.model) {
         throw new Error("Chat model is not configured. Please set it in Settings → Model Assignment.");
@@ -16,7 +16,7 @@ async function createChatAgentService(context: HttpApiContext): Promise<AgentSer
     if (!modelEntry) {
         throw new Error(`Configured provider "${provider}" is not available.`);
     }
-    const credential = await context.userProviderCredentialStore.getCredential({ userId: DEFAULT_USER_ID, provider });
+    const credential = await context.stores.providerCredential.getCredential({ userId: DEFAULT_USER_ID, provider });
     if (!credential) {
         throw new Error(`API key is not set for provider: ${provider}`);
     }
@@ -41,13 +41,13 @@ async function createChatAgentService(context: HttpApiContext): Promise<AgentSer
  * Throws if no character is selected.
  */
 async function resolveConversationId(context: HttpApiContext): Promise<{ characterId: string; conversationId: string }> {
-    const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+    const prefs = await context.stores.userPreferences.getUserPreferences(DEFAULT_USER_ID);
     const characterId = prefs?.currentCharacterId;
     if (!characterId) {
         throw new Error("No active character selected. Please select a character before chatting.");
     }
 
-    const existing = await context.userCharacterStateStore.getState({ userId: DEFAULT_USER_ID, characterId });
+    const existing = await context.stores.chat.getCharacterState({ userId: DEFAULT_USER_ID, characterId });
     if (existing) {
         return { characterId, conversationId: existing.currentConversationId };
     }
@@ -55,7 +55,7 @@ async function resolveConversationId(context: HttpApiContext): Promise<{ charact
     // Auto-create state (migration: character exists but has no state record)
     const conversationId = crypto.randomUUID();
     const now = new Date().toISOString();
-    await context.userCharacterStateStore.upsertState({
+    await context.stores.chat.upsertCharacterState({
         userId: DEFAULT_USER_ID,
         characterId,
         currentConversationId: conversationId,
@@ -85,7 +85,7 @@ async function handleChat(context: HttpApiContext, body: ChatRequest) {
         content: prompt,
         createdAt: new Date().toISOString(),
     };
-    await context.messageStore.appendMessage(userMessage);
+    await context.stores.chat.appendMessage(userMessage);
 
     // 2. Build prompt context (loads profile, character, and history)
     const promptContext = await PromptContextBuilder.build({
@@ -93,9 +93,9 @@ async function handleChat(context: HttpApiContext, body: ChatRequest) {
         characterId: conversationId.characterId,
         conversationId: conversationId.conversationId,
         currentUserMessage: userMessage,
-        messageStore: context.messageStore,
-        userProfileStore: context.userProfileStore,
-        characterStore: context.characterStore,
+        messageStore: context.stores.chat,
+        userProfileStore: context.stores.userProfile,
+        characterStore: context.stores.character,
     });
 
     // 3. Render prompt
@@ -106,7 +106,7 @@ async function handleChat(context: HttpApiContext, body: ChatRequest) {
     const response = await runtimeAgentService.chat({ messages: rendered.messages });
 
     // 5. Append assistant message
-    await context.messageStore.appendMessage({
+    await context.stores.chat.appendMessage({
         id: crypto.randomUUID(),
         userId: DEFAULT_USER_ID,
         conversationId: conversationId.conversationId,
@@ -172,7 +172,7 @@ export function registerChatRoute(context: HttpApiContext): void {
             content: prompt,
             createdAt: new Date().toISOString(),
         };
-        await context.messageStore.appendMessage(userMessage);
+        await context.stores.chat.appendMessage(userMessage);
 
         // 2. Build prompt context and render
         const promptContext = await PromptContextBuilder.build({
@@ -180,9 +180,9 @@ export function registerChatRoute(context: HttpApiContext): void {
             characterId,
             conversationId,
             currentUserMessage: userMessage,
-            messageStore: context.messageStore,
-            userProfileStore: context.userProfileStore,
-            characterStore: context.characterStore,
+            messageStore: context.stores.chat,
+            userProfileStore: context.stores.userProfile,
+            characterStore: context.stores.character,
         });
         const rendered = promptRenderer.render(promptContext);
 
@@ -201,7 +201,7 @@ export function registerChatRoute(context: HttpApiContext): void {
         }
 
         // 4. Append assistant message
-        await context.messageStore.appendMessage({
+        await context.stores.chat.appendMessage({
             id: crypto.randomUUID(),
             userId: DEFAULT_USER_ID,
             conversationId,
@@ -210,7 +210,7 @@ export function registerChatRoute(context: HttpApiContext): void {
             createdAt: new Date().toISOString(),
         });
 
-        const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+        const prefs = await context.stores.userPreferences.getUserPreferences(DEFAULT_USER_ID);
         const modelName = prefs?.functionModels?.["chat"]?.model ?? "unknown";
         const tokens = fullResponse.split(/(?<=\s)|(?=\s)/);
         let i = 0;
@@ -255,9 +255,9 @@ export function registerChatRoute(context: HttpApiContext): void {
                 characterId,
                 conversationId,
                 currentUserMessage: userMessage,
-                messageStore: context.messageStore,
-                userProfileStore: context.userProfileStore,
-                characterStore: context.characterStore,
+                messageStore: context.stores.chat,
+                userProfileStore: context.stores.userProfile,
+                characterStore: context.stores.character,
             });
 
             const rendered = promptRenderer.render(promptContext);

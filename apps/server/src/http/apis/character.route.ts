@@ -33,12 +33,12 @@ function toContractCharacter(c: PFCharacter): ContractCharacter {
 const ITEM_URL = ApiGetCharacter.apiUrl; // "/v1/characters/:id"
 
 export function registerCharacterRoutes(context: HttpApiContext): void {
-    const store = context.characterStore;
+    const store = context.stores.character;
     // GET /v1/characters
     registerApi(context.app, ApiListCharacters, {
         handleRequest: async (): Promise<ListCharactersResponse> => {
             const list = await store.listCharacters({ userId: DEFAULT_USER_ID, status: "active" });
-            const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+            const prefs = await context.stores.userPreferences.getUserPreferences(DEFAULT_USER_ID);
             return {
                 characters: list.map(toContractCharacter),
                 activeCharacterId: prefs?.currentCharacterId ?? null,
@@ -72,7 +72,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
 
             // Auto-create per-character conversation state
             const conversationId = crypto.randomUUID();
-            await context.userCharacterStateStore.upsertState({
+            await context.stores.chat.upsertCharacterState({
                 userId: DEFAULT_USER_ID,
                 characterId: character.id,
                 currentConversationId: conversationId,
@@ -134,7 +134,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
 
     registerApi(context.app, ApiGetActiveCharacter, {
         handleRequest: async () => {
-            const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+            const prefs = await context.stores.userPreferences.getUserPreferences(DEFAULT_USER_ID);
             return { characterId: prefs?.currentCharacterId ?? null };
         },
     });
@@ -146,7 +146,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
             if (!character || character.status === "archived") {
                 throw new Error(`Character not found: ${characterId}`);
             }
-            await context.userPreferencesStore.setCurrentCharacter({
+            await context.stores.userPreferences.setCurrentCharacter({
                 userId: DEFAULT_USER_ID,
                 characterId,
                 updatedAt: new Date().toISOString(),
