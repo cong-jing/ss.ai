@@ -1,4 +1,4 @@
-import { ApiChat, ApiChatStream, type ChatRequest, type ChatStreamEvent } from "@ss-ai/contracts";
+import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatRequest, type ChatStreamEvent } from "@ss-ai/contracts";
 import { PromptContextBuilder, promptRenderer } from "@ss-ai/persona-flow";
 import { AgentService, createModelClientFromConfig } from "../../agent/index.js";
 import { PromptLogger } from "../../util/promptLog.js";
@@ -209,6 +209,45 @@ export function registerChatRoute(context: HttpApiContext): void {
         res.on("close", () => {
             clearInterval(timer);
         });
+    });
+
+    // Dry-run endpoint: assembles the prompt without calling the LLM or persisting anything
+    registerApi(context.app, ApiChatDryRun, {
+        handleRequest: async (_, body) => {
+            const prompt = body?.prompt ?? "";
+            context.logger.debug("chat/dry-run: request received", { promptLength: prompt.length });
+
+            const conversationId = await resolveConversationId(context);
+            const prefs = await context.userPreferencesStore.getUserPreferences(DEFAULT_USER_ID);
+
+            // Transient user message — not persisted
+            const userMessage = {
+                id: crypto.randomUUID(),
+                userId: DEFAULT_USER_ID,
+                conversationId,
+                role: "user" as const,
+                content: prompt,
+                createdAt: new Date().toISOString(),
+            };
+
+            const promptContext = await PromptContextBuilder.build({
+                userId: DEFAULT_USER_ID,
+                characterId: prefs?.currentCharacterId,
+                conversationId,
+                currentUserMessage: userMessage,
+                messageStore: context.messageStore,
+                userProfileStore: context.userProfileStore,
+                characterStore: context.characterStore,
+            });
+
+            const rendered = promptRenderer.render(promptContext);
+            return { messages: rendered.messages };
+        },
+        handleError: (error) => {
+            const response = toErrorResponse(error);
+            context.logger.error("chat/dry-run: failed", { message: response.message });
+            return { status: 400, body: response };
+        }
     });
 }
 

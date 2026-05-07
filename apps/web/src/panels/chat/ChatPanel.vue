@@ -7,7 +7,7 @@ import ChatMessageList from "./ChatMessageList.vue";
 import { useChatViewModel } from "./useChatViewModel";
 
 const vm = useChatViewModel();
-const { messages, isSending, error, sendMessage, clearMessages } = vm;
+const { messages, isSending, error, sendMessage, clearMessages, dryRunPrompt } = vm;
 
 onMounted(() => {
   clearMessages();
@@ -30,6 +30,7 @@ onMounted(() => {
       <ChatInputBox
         :disabled="isSending"
         @send="(text, stream) => sendMessage(text, stream)"
+        @dry-run="(text) => dryRunPrompt(text)"
       />
     </div>
   </Panel>

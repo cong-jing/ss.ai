@@ -30,3 +30,19 @@ export const ApiChat = new ApiDefine<ChatRequest, ChatResponse>("/v1/chat", "POS
  * Exported so frontend and backend share the same URL / method.
  */
 export const ApiChatStream = new ApiDefine<ChatStreamRequest, never>("/v1/chat/stream", "POST");
+
+export interface ChatDryRunRequest {
+    prompt: string;
+}
+
+export interface ChatDryRunMessage {
+    role: "system" | "user" | "assistant";
+    content: string;
+}
+
+export interface ChatDryRunResponse {
+    messages: ChatDryRunMessage[];
+}
+
+/** Dry-run endpoint: assembles the prompt without sending to the LLM. */
+export const ApiChatDryRun = new ApiDefine<ChatDryRunRequest, ChatDryRunResponse>("/v1/chat/dry-run", "POST");

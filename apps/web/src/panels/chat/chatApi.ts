@@ -1,8 +1,12 @@
-import { ApiChat, ApiChatStream, type ChatStreamEvent } from "@ss-ai/contracts";
+import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
 
 export async function apiSendChatMessage(prompt: string) {
     return callApi(ApiChat, { prompt });
+}
+
+export async function apiDryRunChat(prompt: string) {
+    return callApi(ApiChatDryRun, { prompt });
 }
 
 export async function apiStreamChatMessage(

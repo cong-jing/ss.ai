@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import { apiSendChatMessage, apiStreamChatMessage } from "./chatApi";
+import { apiDryRunChat, apiSendChatMessage, apiStreamChatMessage } from "./chatApi";
 import type { ChatMessage } from "./chatTypes";
 
 function createId(prefix: string): string {
@@ -174,12 +174,30 @@ export function useChatViewModel() {
         messages.value = [];
     }
 
+    async function dryRunPrompt(text: string) {
+        const prompt = text.trim();
+        if (!prompt) return;
+
+        try {
+            const result = await apiDryRunChat(prompt);
+            console.group("[dry-run] Assembled prompt messages");
+            for (const msg of result.messages) {
+                console.log(`--- [${msg.role}] ---`);
+                console.log(msg.content);
+            }
+            console.groupEnd();
+        } catch (e) {
+            console.error("[dry-run] error:", e);
+        }
+    }
+
     return {
         messages,
         isSending,
         isLoading,
         error,
         sendMessage,
-        clearMessages
+        clearMessages,
+        dryRunPrompt,
     };
 }

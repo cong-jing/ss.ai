@@ -8,6 +8,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   send: [text: string, stream: boolean];
+  dryRun: [text: string];
 }>();
 
 const text = ref("");
@@ -47,6 +48,9 @@ function onKeydown(event: KeyboardEvent) {
       <input type="checkbox" v-model="streamMode" :disabled="disabled" />
       Stream
     </label>
+    <button class="dry-run-btn" :disabled="disabled" @click="emit('dryRun', text)">
+      Dry Run
+    </button>
   </footer>
 </template>
 
@@ -84,5 +88,24 @@ function onKeydown(event: KeyboardEvent) {
   color: #6b7280;
   cursor: pointer;
   user-select: none;
+}
+
+.dry-run-btn {
+  font-size: 12px;
+  color: #6b7280;
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.dry-run-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.dry-run-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 </style>
