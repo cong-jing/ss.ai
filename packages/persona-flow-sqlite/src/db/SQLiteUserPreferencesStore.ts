@@ -17,7 +17,6 @@ function rowToPreferences(row: UserPreferencesRow): UserPreferences {
     return {
         userId: row.userId,
         currentCharacterId: row.currentCharacterId ?? null,
-        currentConversationId: row.currentConversationId ?? null,
         functionModels: safeParseModels(row.functionModelsJson),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
@@ -41,7 +40,6 @@ export class SQLiteUserPreferencesStore implements UserPreferencesStore {
         const row = {
             userId: preferences.userId,
             currentCharacterId: preferences.currentCharacterId ?? null,
-            currentConversationId: preferences.currentConversationId ?? null,
             functionModelsJson: JSON.stringify(preferences.functionModels),
             createdAt: preferences.createdAt,
             updatedAt: preferences.updatedAt,
@@ -54,7 +52,6 @@ export class SQLiteUserPreferencesStore implements UserPreferencesStore {
                 target: userPreferences.userId,
                 set: {
                     currentCharacterId: row.currentCharacterId,
-                    currentConversationId: row.currentConversationId,
                     functionModelsJson: row.functionModelsJson,
                     updatedAt: row.updatedAt,
                 },
@@ -66,14 +63,6 @@ export class SQLiteUserPreferencesStore implements UserPreferencesStore {
         await this.db
             .update(userPreferences)
             .set({ currentCharacterId: input.characterId, updatedAt: input.updatedAt })
-            .where(eq(userPreferences.userId, input.userId));
-    }
-
-    async setCurrentConversation(input: { userId: string; conversationId: string | null; updatedAt: string }): Promise<void> {
-        await this.#ensureRow(input.userId);
-        await this.db
-            .update(userPreferences)
-            .set({ currentConversationId: input.conversationId, updatedAt: input.updatedAt })
             .where(eq(userPreferences.userId, input.userId));
     }
 

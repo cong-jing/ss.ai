@@ -8,6 +8,7 @@ import type {
     UserProfileStore,
     UserPreferencesStore,
     UserProviderCredentialStore,
+    UserCharacterStateStore,
 } from "@ss-ai/persona-flow";
 
 /** The userId used for all single-user operations. */
@@ -20,6 +21,7 @@ export interface HttpApiContext {
     characterStore: CharacterStore;
     userProfileStore: UserProfileStore;
     userPreferencesStore: UserPreferencesStore;
+    userCharacterStateStore: UserCharacterStateStore;
     userProviderCredentialStore: UserProviderCredentialStore;
     messageStore: MessageStore;
 }

@@ -13,18 +13,21 @@ import {
     SQLiteUserProfileStore,
     SQLiteUserPreferencesStore,
     SQLiteUserProviderCredentialStore,
+    SQLiteUserCharacterStateStore,
 } from "@ss-ai/persona-flow-sqlite";
 import type {
     CharacterStore,
     UserProfileStore,
     UserPreferencesStore,
     UserProviderCredentialStore,
+    UserCharacterStateStore,
 } from "@ss-ai/persona-flow";
 
 export interface ServerStoreOverrides {
     characterStore?: CharacterStore;
     userProfileStore?: UserProfileStore;
     userPreferencesStore?: UserPreferencesStore;
+    userCharacterStateStore?: UserCharacterStateStore;
     userProviderCredentialStore?: UserProviderCredentialStore;
 }
 
@@ -41,6 +44,7 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
     const characterStore = overrides?.characterStore ?? new SQLiteCharacterStore(db);
     const userProfileStore = overrides?.userProfileStore ?? new SQLiteUserProfileStore(db);
     const userPreferencesStore = overrides?.userPreferencesStore ?? new SQLiteUserPreferencesStore(db);
+    const userCharacterStateStore = overrides?.userCharacterStateStore ?? new SQLiteUserCharacterStateStore(db);
     const userProviderCredentialStore = overrides?.userProviderCredentialStore ?? new SQLiteUserProviderCredentialStore(db);
 
     app.use(express.json());
@@ -56,6 +60,7 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
         characterStore,
         userProfileStore,
         userPreferencesStore,
+        userCharacterStateStore,
         userProviderCredentialStore,
         messageStore,
     };

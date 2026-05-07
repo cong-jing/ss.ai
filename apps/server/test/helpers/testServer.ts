@@ -9,6 +9,7 @@ import { InMemoryCharacterStore } from "./inMemoryCharacterStore.js";
 import { InMemoryUserProfileStore } from "./inMemoryUserProfileStore.js";
 import { InMemoryUserPreferencesStore } from "./inMemoryUserPreferencesStore.js";
 import { InMemoryUserProviderCredentialStore } from "./inMemoryUserProviderCredentialStore.js";
+import { InMemoryUserCharacterStateStore } from "./inMemoryUserCharacterStateStore.js";
 
 export interface TestApp {
     /** supertest agent — call `.get()`, `.post()`, `.patch()`, `.delete()` on this. */
@@ -54,6 +55,7 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}): T
         characterStore: new InMemoryCharacterStore(),
         userProfileStore: new InMemoryUserProfileStore(),
         userPreferencesStore: new InMemoryUserPreferencesStore(),
+        userCharacterStateStore: new InMemoryUserCharacterStateStore(),
         userProviderCredentialStore: new InMemoryUserProviderCredentialStore(),
     });
 

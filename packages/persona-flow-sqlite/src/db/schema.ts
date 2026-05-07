@@ -53,7 +53,6 @@ export type NewUserProfileRow = typeof userProfiles.$inferInsert;
 export const userPreferences = sqliteTable("user_preferences", {
     userId: text("user_id").primaryKey(),
     currentCharacterId: text("current_character_id"),
-    currentConversationId: text("current_conversation_id"),
     functionModelsJson: text("function_models_json").notNull().default("{}"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -61,6 +60,20 @@ export const userPreferences = sqliteTable("user_preferences", {
 
 export type UserPreferencesRow = typeof userPreferences.$inferSelect;
 export type NewUserPreferencesRow = typeof userPreferences.$inferInsert;
+
+// ── user_character_states ─────────────────────────────────────────────────────
+export const userCharacterStates = sqliteTable("user_character_states", {
+    userId: text("user_id").notNull(),
+    characterId: text("character_id").notNull(),
+    currentConversationId: text("current_conversation_id").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.characterId] }),
+}));
+
+export type UserCharacterStateRow = typeof userCharacterStates.$inferSelect;
+export type NewUserCharacterStateRow = typeof userCharacterStates.$inferInsert;
 
 // ── user_provider_credentials ─────────────────────────────────────────────────
 export const userProviderCredentials = sqliteTable("user_provider_credentials", {

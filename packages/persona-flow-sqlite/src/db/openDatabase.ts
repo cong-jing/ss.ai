@@ -80,6 +80,15 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             updated_at        TEXT NOT NULL,
             PRIMARY KEY (user_id, provider)
         );
+
+        CREATE TABLE IF NOT EXISTS user_character_states (
+            user_id                 TEXT NOT NULL,
+            character_id            TEXT NOT NULL,
+            current_conversation_id TEXT NOT NULL,
+            created_at              TEXT NOT NULL,
+            updated_at              TEXT NOT NULL,
+            PRIMARY KEY (user_id, character_id)
+        );
     `);
 
     // Schema migrations: add user_id to pre-existing tables that lacked it.

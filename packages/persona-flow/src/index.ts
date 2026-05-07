@@ -6,6 +6,8 @@ export * from "./userProfile.js";
 export * from "./userProfileStore.js";
 export * from "./userPreferences.js";
 export * from "./userPreferencesStore.js";
+export * from "./userCharacterState.js";
+export * from "./userCharacterStateStore.js";
 export * from "./userProviderCredential.js";
 export * from "./userProviderCredentialStore.js";
 export * from "./prompt/promptConext.js";

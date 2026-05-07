@@ -6,7 +6,6 @@ export type ModelSelection = {
 export type UserPreferences = {
     userId: string;
     currentCharacterId?: string | null;
-    currentConversationId?: string | null;
     /** Map from function name (e.g. "chat", "summarize") to provider+model. */
     functionModels: Record<string, ModelSelection>;
     createdAt: string;

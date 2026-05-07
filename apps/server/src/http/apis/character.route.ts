@@ -69,6 +69,17 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 updatedAt: now,
             };
             await store.createCharacter(character);
+
+            // Auto-create per-character conversation state
+            const conversationId = crypto.randomUUID();
+            await context.userCharacterStateStore.upsertState({
+                userId: DEFAULT_USER_ID,
+                characterId: character.id,
+                currentConversationId: conversationId,
+                createdAt: now,
+                updatedAt: now,
+            });
+
             return toContractCharacter(character);
         },
         handleError: (error) => ({ status: 400, body: toErrorResponse(error) }),

@@ -16,11 +16,6 @@ export class InMemoryUserPreferencesStore implements UserPreferencesStore {
         this.store.set(input.userId, { ...p, currentCharacterId: input.characterId, updatedAt: input.updatedAt });
     }
 
-    async setCurrentConversation(input: { userId: string; conversationId: string | null; updatedAt: string }): Promise<void> {
-        const p = this.store.get(input.userId) ?? this.#defaultPrefs(input.userId);
-        this.store.set(input.userId, { ...p, currentConversationId: input.conversationId, updatedAt: input.updatedAt });
-    }
-
     async setFunctionModel(input: { userId: string; functionName: string; selection: ModelSelection; updatedAt: string }): Promise<void> {
         const p = this.store.get(input.userId) ?? this.#defaultPrefs(input.userId);
         this.store.set(input.userId, {
