@@ -6,7 +6,15 @@ import {
     ApiGetActiveCharacter,
     ApiSetActiveCharacter,
 } from "@ss-ai/contracts";
-import type { Character, ListCharactersResponse } from "@ss-ai/contracts";
+import type {
+    Character,
+    ListCharactersResponse,
+    SetActiveCharacterResponse,
+    ListConversationsResponse,
+    CreateConversationResponse,
+    SelectConversationResponse,
+    DeleteConversationResponse,
+} from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
 import type { UserInfo } from "./scenarioTypes";
 
@@ -61,12 +69,58 @@ export async function apiDeleteCharacter(id: string): Promise<void> {
 
 // ── Active character ──────────────────────────────────────────────────────────
 
-export async function apiGetActiveCharacterId(): Promise<string | null> {
-    const res = await callApi(ApiGetActiveCharacter);
-    return res.characterId;
+export async function apiGetActiveCharacter() {
+    return callApi(ApiGetActiveCharacter);
 }
 
-export async function apiSetActiveCharacter(characterId: string): Promise<Character> {
-    return callApi(ApiSetActiveCharacter, { characterId });
+export async function apiSetActiveCharacter(id: string): Promise<SetActiveCharacterResponse> {
+    return callApi(ApiSetActiveCharacter, { characterId: id });
+}
+
+// ── Conversations ─────────────────────────────────────────────────────────────
+
+export async function apiListConversations(characterId: string): Promise<ListConversationsResponse> {
+    const res = await fetch(`/v1/characters/${encodeURIComponent(characterId)}/conversations`);
+    if (!res.ok) {
+        const err = await res.json() as { message?: string };
+        throw new Error(err.message ?? `Request failed: ${res.status}`);
+    }
+    return res.json() as Promise<ListConversationsResponse>;
+}
+
+export async function apiCreateConversation(characterId: string): Promise<CreateConversationResponse> {
+    const res = await fetch(`/v1/characters/${encodeURIComponent(characterId)}/conversations`, {
+        method: "POST",
+    });
+    if (!res.ok) {
+        const err = await res.json() as { message?: string };
+        throw new Error(err.message ?? `Request failed: ${res.status}`);
+    }
+    return res.json() as Promise<CreateConversationResponse>;
+}
+
+export async function apiSelectConversation(characterId: string, conversationId: string): Promise<SelectConversationResponse> {
+    const res = await fetch(`/v1/characters/${encodeURIComponent(characterId)}/active-conversation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId }),
+    });
+    if (!res.ok) {
+        const err = await res.json() as { message?: string };
+        throw new Error(err.message ?? `Request failed: ${res.status}`);
+    }
+    return res.json() as Promise<SelectConversationResponse>;
+}
+
+export async function apiDeleteConversation(characterId: string, conversationId: string): Promise<DeleteConversationResponse> {
+    const res = await fetch(
+        `/v1/characters/${encodeURIComponent(characterId)}/conversations/${encodeURIComponent(conversationId)}`,
+        { method: "DELETE" },
+    );
+    if (!res.ok) {
+        const err = await res.json() as { message?: string };
+        throw new Error(err.message ?? `Request failed: ${res.status}`);
+    }
+    return res.json() as Promise<DeleteConversationResponse>;
 }
 

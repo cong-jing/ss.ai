@@ -3,20 +3,21 @@ import type { UserProfileStore } from "./userProfileStore.js";
 import type { UserPreferencesStore } from "./userPreferencesStore.js";
 import type { UserProviderCredentialStore } from "./userProviderCredentialStore.js";
 import type { ChatStore } from "./chatStore.js";
+import type { ConversationStore } from "./conversationStore.js";
 
 /**
  * Grouped collection of all application stores.
  *
  * Design rules:
  * - Add a new top-level store only when introducing a genuinely new business domain.
- * - Internal SQLite tables that support existing domains (conversations, summaries,
- *   tags, embeddings, etc.) should be hidden inside the relevant concrete store,
- *   not exposed here as separate store slots.
+ * - Internal SQLite tables that support existing domains (summaries, tags, embeddings,
+ *   etc.) should be hidden inside the relevant concrete store, not exposed here.
  */
 export interface AppStores {
     character: CharacterStore;
     userProfile: UserProfileStore;
     userPreferences: UserPreferencesStore;
+    conversation: ConversationStore;
     chat: ChatStore;
     providerCredential: UserProviderCredentialStore;
 }

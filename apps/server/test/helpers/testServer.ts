@@ -9,6 +9,7 @@ import { InMemoryCharacterStore } from "./inMemoryCharacterStore.js";
 import { InMemoryUserProfileStore } from "./inMemoryUserProfileStore.js";
 import { InMemoryUserPreferencesStore } from "./inMemoryUserPreferencesStore.js";
 import { InMemoryUserProviderCredentialStore } from "./inMemoryUserProviderCredentialStore.js";
+import { InMemoryConversationStore } from "./inMemoryConversationStore.js";
 import { InMemoryChatStore } from "./inMemoryChatStore.js";
 import type { AppStores } from "@ss-ai/persona-flow";
 
@@ -56,6 +57,7 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}): T
         character: new InMemoryCharacterStore(),
         userProfile: new InMemoryUserProfileStore(),
         userPreferences: new InMemoryUserPreferencesStore(),
+        conversation: new InMemoryConversationStore(),
         chat: new InMemoryChatStore(),
         providerCredential: new InMemoryUserProviderCredentialStore(),
     };

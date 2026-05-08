@@ -1,4 +1,6 @@
 export * from "./stores/message.js";
+export * from "./stores/conversation.js";
+export * from "./stores/conversationStore.js";
 export * from "./stores/character.js";
 export * from "./stores/characterStore.js";
 export * from "./stores/userProfile.js";

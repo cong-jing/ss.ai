@@ -13,6 +13,19 @@ export const messages = sqliteTable("messages", {
 export type MessageRow = typeof messages.$inferSelect;
 export type NewMessageRow = typeof messages.$inferInsert;
 
+// ── conversations ─────────────────────────────────────────────────────────────
+export const conversations = sqliteTable("conversations", {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    characterId: text("character_id").notNull(),
+    title: text("title"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+});
+
+export type ConversationRow = typeof conversations.$inferSelect;
+export type NewConversationRow = typeof conversations.$inferInsert;
+
 // ── characters ────────────────────────────────────────────────────────────────
 export const characters = sqliteTable("characters", {
     id: text("id").primaryKey(),

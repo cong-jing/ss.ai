@@ -81,6 +81,18 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             PRIMARY KEY (user_id, provider)
         );
 
+        CREATE TABLE IF NOT EXISTS conversations (
+            id           TEXT PRIMARY KEY,
+            user_id      TEXT NOT NULL,
+            character_id TEXT NOT NULL,
+            title        TEXT,
+            created_at   TEXT NOT NULL,
+            updated_at   TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_conversations_user_character_created
+            ON conversations(user_id, character_id, created_at DESC);
+
         CREATE TABLE IF NOT EXISTS user_character_states (
             user_id                 TEXT NOT NULL,
             character_id            TEXT NOT NULL,

@@ -1,4 +1,5 @@
 import { ApiDefine } from "../apiBase.js";
+import type { ConversationInfo } from "./conversation.api.js";
 
 // ── Domain type ────────────────────────────────────────────────────────────────
 
@@ -76,8 +77,16 @@ export interface SetActiveCharacterRequest {
     characterId: string;
 }
 
+export interface SetActiveCharacterResponse {
+    character: Character;
+    /** All conversations for this character, newest first. */
+    conversations: ConversationInfo[];
+    /** Currently active conversationId (null if none). */
+    activeConversationId: string | null;
+}
+
 /** GET /v1/active-character — returns the currently active characterId (may be null). */
 export const ApiGetActiveCharacter = new ApiDefine<void, ActiveCharacterResponse>("/v1/active-character", "GET");
 
-/** POST /v1/active-character — set the active character; returns the full Character object. */
-export const ApiSetActiveCharacter = new ApiDefine<SetActiveCharacterRequest, Character>("/v1/active-character", "POST");
+/** POST /v1/active-character — set the active character; returns character + conversations. */
+export const ApiSetActiveCharacter = new ApiDefine<SetActiveCharacterRequest, SetActiveCharacterResponse>("/v1/active-character", "POST");

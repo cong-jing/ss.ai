@@ -7,26 +7,29 @@ import type { Message, UserCharacterState } from "@ss-ai/persona-flow";
 /**
  * SQLite implementation of ChatStore.
  *
- * Delegates to SQLiteMessageStore and SQLiteUserCharacterStateStore internally.
- * Future chat-related tables (conversations, summaries, tags, embeddings, etc.)
- * can be added here without exposing them as separate stores.
+ * Covers messages and per-character active-conversation state.
+ * Conversation lifecycle (create / list / delete) is handled by SQLiteConversationStore.
  */
 export class SQLiteChatStore implements ChatStore {
-    private readonly messages: SQLiteMessageStore;
+    private readonly msgs: SQLiteMessageStore;
     private readonly characterStates: SQLiteUserCharacterStateStore;
 
-    constructor(db: DrizzleDb) {
-        this.messages = new SQLiteMessageStore(db);
+    constructor(private readonly db: DrizzleDb) {
+        this.msgs = new SQLiteMessageStore(db);
         this.characterStates = new SQLiteUserCharacterStateStore(db);
     }
 
+    // ── Messages ──────────────────────────────────────────────────────────────
+
     appendMessage(message: Message): Promise<void> {
-        return this.messages.appendMessage(message);
+        return this.msgs.appendMessage(message);
     }
 
     getRecentMessages(input: { userId: string; conversationId: string; limit: number }): Promise<Message[]> {
-        return this.messages.getRecentMessages(input);
+        return this.msgs.getRecentMessages(input);
     }
+
+    // ── Per-character conversation state ──────────────────────────────────────
 
     getCharacterState(input: { userId: string; characterId: string }): Promise<UserCharacterState | null> {
         return this.characterStates.getState(input);

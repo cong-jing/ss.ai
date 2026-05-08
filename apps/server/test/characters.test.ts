@@ -120,7 +120,10 @@ describe("Character CRUD API", () => {
             .post("/v1/active-character")
             .send({ characterId: char1.id })
             .expect(200);
-        assert.equal(res.body.id, char1.id);
+        // Response is now { character, conversations, activeConversationId }
+        assert.equal(res.body.character.id, char1.id);
+        assert.ok(Array.isArray(res.body.conversations));
+        assert.equal(typeof res.body.activeConversationId, "string");
     });
 
     it("GET /v1/active-character — returns Alice id after setting", async () => {

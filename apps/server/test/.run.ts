@@ -11,3 +11,4 @@
 import "./characters.test.js";
 import "./userPreference.test.js";
 import "./userProfile.test.js";
+import "./conversations.test.js";

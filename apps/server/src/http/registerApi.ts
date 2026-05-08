@@ -20,7 +20,11 @@ export function registerApi<TRequest, TResponse>(
         try {
             const body = (api.method === "GET" ? undefined : request.body) as TRequest;
             const result = await handler.handleRequest(request, body);
-            response.json(result);
+            if (result === undefined || result === null) {
+                response.status(204).send();
+            } else {
+                response.json(result);
+            }
         } catch (error) {
             const fallback = {
                 status: 400,
@@ -35,10 +39,10 @@ export function registerApi<TRequest, TResponse>(
         }
     };
 
-    if (api.method === "GET") {
-        app.get(api.apiUrl, wrappedHandler);
-        return;
+    switch (api.method) {
+        case "GET": app.get(api.apiUrl, wrappedHandler); break;
+        case "POST": app.post(api.apiUrl, wrappedHandler); break;
+        case "PATCH": app.patch(api.apiUrl, wrappedHandler); break;
+        case "DELETE": app.delete(api.apiUrl, wrappedHandler); break;
     }
-
-    app.post(api.apiUrl, wrappedHandler);
 }

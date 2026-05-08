@@ -1,13 +1,12 @@
-import type { Message } from "../message.js";
+import type { Message } from "./message.js";
 import type { UserCharacterState } from "./userCharacterState.js";
 
 /**
- * Unified store for chat-related operations.
+ * Store for chat messages and per-character active-conversation state.
  *
- * Covers messages and per-character conversation state.
- * Internal SQLite tables (conversations, summaries, tags, embeddings, etc.)
+ * Conversation lifecycle (create / list / delete) lives in ConversationStore.
+ * Internal SQLite tables (summaries, tags, embeddings, etc.)
  * are implementation details of the concrete adapter.
- * Only add methods here when exposing a new public business capability.
  */
 export interface ChatStore {
     // ── Messages ──────────────────────────────────────────────────────────────

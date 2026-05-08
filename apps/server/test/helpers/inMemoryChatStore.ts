@@ -1,7 +1,7 @@
 import type { ChatStore, Message, UserCharacterState } from "@ss-ai/persona-flow";
 
 export class InMemoryChatStore implements ChatStore {
-    private readonly messages = new Map<string, Message[]>();
+    private readonly messagesByConv = new Map<string, Message[]>();
     private readonly characterStates = new Map<string, UserCharacterState>();
 
     private messageKey(userId: string, conversationId: string): string {
@@ -12,10 +12,12 @@ export class InMemoryChatStore implements ChatStore {
         return `${userId}::${characterId}`;
     }
 
+    // ── Messages ──────────────────────────────────────────────────────────────
+
     async appendMessage(message: Message): Promise<void> {
         const key = this.messageKey(message.userId, message.conversationId);
-        const existing = this.messages.get(key) ?? [];
-        this.messages.set(key, [...existing, message]);
+        const existing = this.messagesByConv.get(key) ?? [];
+        this.messagesByConv.set(key, [...existing, message]);
     }
 
     async getRecentMessages(input: {
@@ -24,9 +26,11 @@ export class InMemoryChatStore implements ChatStore {
         limit: number;
     }): Promise<Message[]> {
         const key = this.messageKey(input.userId, input.conversationId);
-        const all = this.messages.get(key) ?? [];
+        const all = this.messagesByConv.get(key) ?? [];
         return all.slice(-input.limit);
     }
+
+    // ── Per-character conversation state ──────────────────────────────────────
 
     async getCharacterState(input: {
         userId: string;

@@ -55,6 +55,14 @@ async function resolveConversationId(context: HttpApiContext): Promise<{ charact
     // Auto-create state (migration: character exists but has no state record)
     const conversationId = crypto.randomUUID();
     const now = new Date().toISOString();
+    await context.stores.conversation.createConversation({
+        id: conversationId,
+        userId: DEFAULT_USER_ID,
+        characterId,
+        title: null,
+        createdAt: now,
+        updatedAt: now,
+    });
     await context.stores.chat.upsertCharacterState({
         userId: DEFAULT_USER_ID,
         characterId,

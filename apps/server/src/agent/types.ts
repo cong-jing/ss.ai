@@ -10,11 +10,6 @@ export interface AgentConfig {
     maxRetries: number;
 }
 
-export interface HistoryMessage {
-    role: "user" | "assistant";
-    content: string;
-}
-
 export interface ChatRequest {
     messages: RenderedMessage[];
 }
