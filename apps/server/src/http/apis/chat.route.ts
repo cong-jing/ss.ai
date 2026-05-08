@@ -34,6 +34,14 @@ async function createChatAgentService(context: HttpApiContext): Promise<AgentSer
     });
 }
 
+function requirePrompt(prompt: unknown, endpoint: string): string {
+    if (typeof prompt !== "string" || prompt.trim().length === 0) {
+        throw new Error(`${endpoint}: prompt is required.`);
+    }
+
+    return prompt;
+}
+
 /**
  * Resolve the active conversationId for the given character.
  * Stored in user_character_states (userId + characterId).
@@ -75,7 +83,7 @@ async function resolveConversationId(context: HttpApiContext): Promise<{ charact
 }
 
 async function handleChat(context: HttpApiContext, body: ChatRequest) {
-    const prompt = body?.prompt;
+    const prompt = requirePrompt(body?.prompt, "chat");
 
     context.logger.debug("chat: request received", {
         promptLength: typeof prompt === "string" ? prompt.length : 0,
@@ -138,8 +146,17 @@ export function registerChatRoute(context: HttpApiContext): void {
 
     // SSE streaming endpoint
     context.app.post(ApiChatStream.apiUrl, async (req, res) => {
-        const prompt = typeof req.body?.prompt === "string" ? req.body.prompt : "";
         const requestId = `stream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+        let prompt: string;
+        try {
+            prompt = requirePrompt(req.body?.prompt, "chat/stream");
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "Unknown error";
+            context.logger.error("chat/stream: invalid request", { message });
+            res.status(400).json({ message });
+            return;
+        }
 
         context.logger.debug("chat/stream: request received", { promptLength: prompt.length, prompt });
 

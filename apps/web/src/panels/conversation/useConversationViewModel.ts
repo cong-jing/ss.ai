@@ -28,6 +28,7 @@ export function useConversationViewModel() {
             const res = await apiListConversations(charId)
             conversations.value = res.conversations
             activeConversationId.value = res.activeConversationId
+            bumpContextVersion()
         } catch (e) {
             toast.error(e instanceof Error ? e.message : String(e))
         } finally {
