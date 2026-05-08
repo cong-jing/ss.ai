@@ -9,17 +9,17 @@ import {
 } from "./userPreferenceApi";
 import type { ProviderState, FunctionModelState } from "./userPreferenceTypes";
 import { AI_FUNCTIONS, type AiFunction } from "@ss-ai/contracts";
+import { useToast } from "../../shared/ui/useToast";
 
 export function useUserPreferenceViewModel() {
+    const toast = useToast();
     const providers = ref<ProviderState[]>([]);
     const functionModels = ref<FunctionModelState[]>([]);
     const isLoading = ref(false);
-    const loadError = ref<string | null>(null);
     const isSavingFunctionModel = ref(false);
 
     async function loadSettings(): Promise<void> {
         isLoading.value = true;
-        loadError.value = null;
         try {
             const response = await apiGetUserPreference();
 
@@ -47,7 +47,7 @@ export function useUserPreferenceViewModel() {
             }
             functionModels.value = fnStates;
         } catch (e) {
-            loadError.value = e instanceof Error ? e.message : String(e);
+            toast.error(e instanceof Error ? e.message : String(e));
         } finally {
             isLoading.value = false;
         }
@@ -78,6 +78,8 @@ export function useUserPreferenceViewModel() {
             p.apiKeySet = res.apiKeySet;
             p.availableModels = res.availableModels;
             p.apiKeyInput = null;
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : String(e));
         } finally {
             p.isSavingKey = false;
         }
@@ -94,6 +96,8 @@ export function useUserPreferenceViewModel() {
             p.apiKeySet = res.apiKeySet;
             p.availableModels = [];
             p.apiKeyInput = null;
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : String(e));
         } finally {
             p.isSavingKey = false;
         }
@@ -126,6 +130,8 @@ export function useUserPreferenceViewModel() {
         try {
             const res = await apiListModels(providerName);
             p.availableModels = res.models;
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : String(e));
         } finally {
             p.isLoadingModels = false;
         }
@@ -143,6 +149,8 @@ export function useUserPreferenceViewModel() {
                     state.model = assignment.model;
                 }
             }
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : String(e));
         } finally {
             isSavingFunctionModel.value = false;
         }
@@ -152,7 +160,6 @@ export function useUserPreferenceViewModel() {
         providers,
         functionModels,
         isLoading,
-        loadError,
         isSavingFunctionModel,
         loadSettings,
         startEditApiKey,

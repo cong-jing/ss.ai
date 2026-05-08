@@ -12,7 +12,6 @@ const {
   providers,
   functionModels,
   isLoading,
-  loadError,
   isSavingFunctionModel,
   loadSettings,
   startEditApiKey,
@@ -58,7 +57,6 @@ onMounted(() => {
   <Panel title="Settings" class="user-settings-panel" :height-mode="'auto'">
     <div class="settings-content">
       <p v-if="isLoading" class="hint">Loading...</p>
-      <p v-if="loadError" class="error">{{ loadError }}</p>
 
       <!-- Section 1: API Keys -->
       <CollapsibleSection title="API Keys">

@@ -7,6 +7,8 @@ const props = withDefaults(defineProps<{
   modal?: boolean
   /** 点击弹窗外部区域关闭（不暗化背景）。modal=false 时有效。默认 false */
   closeOnClickOutside?: boolean
+  /** 是否显示标题栏（含关闭按钮）。默认 true */
+  showHeader?: boolean
   /** 是否允许拖拽移动。默认 false */
   draggable?: boolean
   width?: string
@@ -23,6 +25,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   modal: true,
   closeOnClickOutside: false,
+  showHeader: true,
   draggable: false,
   width: '480px',
   placement: 'center',
@@ -136,6 +139,7 @@ onUnmounted(() => {
         :aria-label="title"
       >
         <div
+          v-if="showHeader"
           class="popup-header"
           :class="{ 'popup-header--draggable': draggable }"
           @mousedown="onHeaderMouseDown"

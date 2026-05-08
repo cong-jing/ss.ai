@@ -3,10 +3,12 @@ import { ref } from 'vue'
 import PopupWindow from '../ui/PopupWindow.vue'
 import Button from '../ui/Button.vue'
 import { debugActions } from './debugActions'
+import { useToast } from '../ui/useToast'
 
 const showMenu = ref(false)
 const showDemoModal = ref(false)
 const showDemoDraggable = ref(false)
+const toast = useToast()
 
 function runAction(action: { run: () => void }) {
   showMenu.value = false
@@ -23,14 +25,14 @@ function runAction(action: { run: () => void }) {
   <!-- Debug menu popup: anchored above the trigger button -->
   <PopupWindow
     v-model="showMenu"
-    title="Debug Menu"
+    :show-header="false"
     :modal="false"
     :close-on-click-outside="true"
-    :draggable="true"
+    :draggable="false"
     placement="bottom-right"
     :offset-x="16"
     :offset-y="52"
-    width="260px"
+    width="200px"
   >
     <div class="debug-actions">
       <p class="debug-section-label">Popup demos</p>
@@ -39,6 +41,18 @@ function runAction(action: { run: () => void }) {
       </Button>
       <Button size="sm" @click="showDemoDraggable = true; showMenu = false">
         Test: Draggable popup
+      </Button>
+
+      <hr class="debug-divider" />
+      <p class="debug-section-label">Toast demos</p>
+      <Button size="sm" @click="toast.error('Something went wrong. This is an error toast.'); showMenu = false">
+        Test: Error toast
+      </Button>
+      <Button size="sm" @click="toast.success('Saved successfully!'); showMenu = false">
+        Test: Success toast
+      </Button>
+      <Button size="sm" @click="toast.info('Here is some information.'); showMenu = false">
+        Test: Info toast
       </Button>
 
       <!-- Externally registered actions -->

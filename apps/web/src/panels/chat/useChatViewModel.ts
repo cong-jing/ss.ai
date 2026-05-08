@@ -1,6 +1,7 @@
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import { apiDryRunChat, apiSendChatMessage, apiStreamChatMessage } from "./chatApi";
 import type { ChatMessage } from "./chatTypes";
+import { contextVersion } from "../../shared/state/appState";
 
 function createId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -201,6 +202,12 @@ export function useChatViewModel() {
             console.error("[dry-run] error:", e);
         }
     }
+
+    // Clear messages whenever character or conversation context changes
+    watch(contextVersion, () => {
+        messages.value = [];
+        error.value = null;
+    })
 
     return {
         messages,

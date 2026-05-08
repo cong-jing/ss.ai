@@ -1,22 +1,41 @@
 <script setup lang="ts">
+import { onMounted } from "vue";
 import ChatPanel from "../panels/chat/ChatPanel.vue";
-import UserPreferencePanel from "../panels/userPreference/UserPreferencePanel.vue";
 import ScenarioPanel from "../panels/scenario/ScenarioPanel.vue";
+import CharacterCard from "../panels/character/CharacterCard.vue";
+import ConversationList from "../panels/conversation/ConversationList.vue";
+import UserPreferencePopup from "../panels/userPreference/UserPreferencePopup.vue";
+import { useCharacterViewModel } from "../panels/character/useCharacterViewModel";
+
+const { load } = useCharacterViewModel();
+
+onMounted(() => {
+  void load();
+});
 </script>
 
 <template>
   <main class="home-page">
-    <aside class="settings-area">
-      <UserPreferencePanel />
+
+    <!-- LEFT: Conversation list -->
+    <aside class="conversations-area">
+      <ConversationList />
     </aside>
 
+    <!-- CENTER: Chat -->
     <section class="chat-area">
       <ChatPanel />
     </section>
 
+    <!-- RIGHT: Character card + User info + Settings -->
     <aside class="info-area">
-      <ScenarioPanel />
+      <CharacterCard />
+      <div class="info-scrollable">
+        <ScenarioPanel />
+      </div>
+      <UserPreferencePopup />
     </aside>
+
   </main>
 </template>
 
@@ -29,12 +48,16 @@ import ScenarioPanel from "../panels/scenario/ScenarioPanel.vue";
     overflow: hidden;
 }
 
-.settings-area {
-    width: 280px;
-    min-width: 280px;
+.conversations-area {
+    width: 220px;
+    min-width: 220px;
     border-right: 1px solid #e5e7eb;
     background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
+
 .chat-area {
     display: flex;
     flex-direction: column;
@@ -46,10 +69,19 @@ import ScenarioPanel from "../panels/scenario/ScenarioPanel.vue";
 }
 
 .info-area {
-    width: 280px;
-    min-width: 280px;
+    width: 260px;
+    min-width: 260px;
     border-left: 1px solid #e5e7eb;
     background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.info-scrollable {
+    flex: 1;
     overflow-y: auto;
+    min-height: 0;
 }
 </style>
+
