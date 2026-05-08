@@ -1,5 +1,5 @@
 import type { Message } from "./message.js";
-import type { UserCharacterState } from "./userCharacterState.js";
+import type { UserCharacterState } from "../character/userCharacterState.js";
 
 /**
  * Store for chat messages and per-character active-conversation state.

@@ -1,9 +1,9 @@
-import type { CharacterStore } from "./characterStore.js";
-import type { UserProfileStore } from "./userProfileStore.js";
-import type { UserPreferencesStore } from "./userPreferencesStore.js";
-import type { UserProviderCredentialStore } from "./userProviderCredentialStore.js";
-import type { ChatStore } from "./chatStore.js";
-import type { ConversationStore } from "./conversationStore.js";
+import type { CharacterStore } from "./character/characterStore.js";
+import type { UserProfileStore } from "./user/userProfileStore.js";
+import type { UserPreferencesStore } from "./user/userPreferencesStore.js";
+import type { UserProviderCredentialStore } from "./user/userProviderCredentialStore.js";
+import type { ChatStore } from "./chat/chatStore.js";
+import type { ConversationStore } from "./character/conversationStore.js";
 
 /**
  * Grouped collection of all application stores.
