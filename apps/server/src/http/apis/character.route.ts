@@ -23,12 +23,23 @@ import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiCont
 // ── Projections ────────────────────────────────────────────────────────────────
 
 function toContractCharacter(c: PFCharacter): ContractCharacter {
+    const rawConfig = c.modelConfig as Record<string, unknown>;
+    const modelConfig: ContractCharacter['modelConfig'] = {} as ContractCharacter['modelConfig'];
+    for (const [key, val] of Object.entries(rawConfig)) {
+        if (val && typeof val === 'object') {
+            const v = val as Record<string, unknown>;
+            if (typeof v.provider === 'string' && typeof v.model === 'string') {
+                (modelConfig as Record<string, { provider: string; model: string }>)[key] = { provider: v.provider, model: v.model };
+            }
+        }
+    }
     return {
         id: c.id,
         name: c.name,
         description: c.description ?? "",
         personaPrompt: c.personaPrompt,
         greetingMessage: c.greetingMessage ?? null,
+        modelConfig,
         status: c.status,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
@@ -127,6 +138,9 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 patch.greetingMessage = typeof body.greetingMessage === "string"
                     ? body.greetingMessage.trim() || null
                     : null;
+            }
+            if (body?.modelConfig && typeof body.modelConfig === "object") {
+                patch.modelConfig = body.modelConfig as Record<string, unknown>;
             }
             await store.updateCharacter({ userId: DEFAULT_USER_ID, characterId: req.params.id, patch });
             const updated = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId: req.params.id });
@@ -310,6 +324,4 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
         },
         handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
     });
-
-    context.logger.debug("character routes registered", { base: ApiListCharacters.apiUrl });
 }

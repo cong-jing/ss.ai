@@ -20,6 +20,31 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
     const app = express();
     const logger = getGlobalLogger();
 
+    app.use((req, res, next) => {
+        const start = Date.now()
+        let responseBody: unknown
+        const originalJson = res.json.bind(res)
+        res.json = (body) => {
+            responseBody = body
+            return originalJson(body)
+        }
+        res.on("finish", () => {
+            const ms = Date.now() - start
+            const level = res.statusCode >= 500 ? "error"
+                : res.statusCode >= 400 ? "warn"
+                    : "debug"
+            logger[level](`[http] ${req.method} ${req.path} → ${res.statusCode} (${ms}ms)`)
+            const reqBody = req.body && Object.keys(req.body).length > 0
+                ? " req:" + JSON.stringify(req.body).slice(0, 300)
+                : ""
+            const resBody = responseBody !== undefined
+                ? " res:" + JSON.stringify(responseBody).slice(0, 300)
+                : ""
+            if (reqBody || resBody) logger.verbose(`[http]${reqBody}${resBody}`)
+        })
+        next()
+    })
+
     const { db } = openDatabase(
         path.join(config.runtimeFiles.userDataDir, "app.db"),
         (sql: unknown) => logger.verbose("[db]", { sql: String(sql) })

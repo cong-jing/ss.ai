@@ -8,6 +8,7 @@ import {
 } from "@ss-ai/contracts";
 import type {
     Character,
+    CharacterModelConfig,
     ListCharactersResponse,
     SetActiveCharacterResponse,
     ListConversationsResponse,
@@ -45,7 +46,7 @@ export async function apiCreateCharacter(
 
 export async function apiUpdateCharacter(
     id: string,
-    patch: { name?: string; description?: string; personaPrompt?: string; greetingMessage?: string }
+    patch: { name?: string; description?: string; personaPrompt?: string; greetingMessage?: string; modelConfig?: CharacterModelConfig }
 ): Promise<Character> {
     const res = await fetch(`/v1/characters/${encodeURIComponent(id)}`, {
         method: "PATCH",

@@ -5,6 +5,7 @@ import Panel from "../../shared/ui/Panel.vue";
 import TextInput from "../../shared/ui/TextInput.vue";
 import CollapsibleSection from "../../shared/ui/CollapsibleSection.vue";
 import { useUserPreferenceViewModel } from "./useUserPreferenceViewModel";
+import { useScenarioViewModel } from "../scenario/useScenarioViewModel";
 import { AI_FUNCTION_LABELS, type AiFunction } from "@ss-ai/contracts";
 
 const vm = useUserPreferenceViewModel();
@@ -51,12 +52,37 @@ async function onFnModelChange(idx: number, fn: AiFunction, model: string) {
 onMounted(() => {
   void loadSettings();
 });
+
+const userVm = useScenarioViewModel();
+const { userInfo, isLoadingUser, isSavingUser, loadUserInfo, saveUserInfo } = userVm;
+onMounted(() => {
+  void loadUserInfo();
+});
 </script>
 
 <template>
   <Panel title="Settings" class="user-settings-panel" :height-mode="'auto'">
     <div class="settings-content">
       <p v-if="isLoading" class="hint">Loading...</p>
+
+      <!-- Section 0: User Info -->
+      <CollapsibleSection title="User Info">
+        <div class="section-body">
+          <div class="form-group">
+            <label>Name</label>
+            <TextInput v-model="userInfo.name" :disabled="isLoadingUser || isSavingUser" placeholder="Enter your name" />
+          </div>
+          <div class="form-group">
+            <label>Profile</label>
+            <textarea v-model="userInfo.bio" :disabled="isLoadingUser || isSavingUser" placeholder="Enter your profile" rows="3" class="info-textarea" />
+          </div>
+          <div class="form-actions">
+            <Button :disabled="isSavingUser || isLoadingUser" @click="saveUserInfo()">
+              {{ isSavingUser ? 'Saving...' : 'Save' }}
+            </Button>
+          </div>
+        </div>
+      </CollapsibleSection>
 
       <!-- Section 1: API Keys -->
       <CollapsibleSection title="API Keys">
@@ -270,6 +296,39 @@ onMounted(() => {
   font-size: 12px;
   color: #6b7280;
   margin: 0;
+}
+
+/* User info section */
+.section-body {
+  padding: 4px 0 8px;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.form-group label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b7280;
+}
+.info-textarea {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  line-height: 1.5;
+}
+.info-textarea:focus {
+  outline: none;
+  border-color: #6b7280;
+}
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .error {

@@ -2,12 +2,12 @@
 defineProps<{
   disabled?: boolean;
   size?: "sm" | "md";
-  variant?: "default" | "danger";
+  variant?: "default" | "danger" | "primary";
 }>();
 </script>
 
 <template>
-  <button class="btn" :class="[size === 'sm' ? 'btn--sm' : '', variant === 'danger' ? 'btn--danger' : '']" :disabled="disabled" type="button">
+  <button class="btn" :class="[size === 'sm' ? 'btn--sm' : '', variant === 'danger' ? 'btn--danger' : '', variant === 'primary' ? 'btn--primary' : '']" :disabled="disabled" type="button">
     <slot />
   </button>
 </template>
@@ -39,6 +39,17 @@ defineProps<{
 
 .btn--danger:hover:not(:disabled) {
   background: #fee2e2;
+}
+
+.btn--primary {
+  background: #4f46e5;
+  color: #fff;
+  border-color: #4f46e5;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: #4338ca;
+  border-color: #4338ca;
 }
 
 .btn:disabled {

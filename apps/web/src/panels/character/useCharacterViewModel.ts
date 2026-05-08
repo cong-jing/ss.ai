@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
-import type { Character } from '@ss-ai/contracts'
+import type { Character, CharacterModelConfig } from '@ss-ai/contracts'
+import { AI_FUNCTIONS, type AiFunction } from '@ss-ai/contracts'
 import {
     apiListCharacters, apiCreateCharacter, apiUpdateCharacter,
     apiDeleteCharacter, apiSetActiveCharacter,
@@ -18,18 +19,41 @@ export const activeCharacter = computed<Character | null>(
     () => characters.value.find(c => c.id === activeCharacterId.value) ?? null,
 )
 
+export type FnOverride = { enabled: boolean; provider: string; model: string }
+
+function emptyOverrides(): Record<AiFunction, FnOverride> {
+    return Object.fromEntries(
+        AI_FUNCTIONS.map(fn => [fn, { enabled: false, provider: '', model: '' }])
+    ) as Record<AiFunction, FnOverride>
+}
+
 export const editDraft = ref<{
     name: string; description: string; personaPrompt: string; greetingMessage: string
-}>({ name: '', description: '', personaPrompt: '', greetingMessage: '' })
+    modelOverrides: Record<AiFunction, FnOverride>
+}>({ name: '', description: '', personaPrompt: '', greetingMessage: '', modelOverrides: emptyOverrides() })
+
+const savedDraftJson = ref('')
+export const isDirty = computed(() => JSON.stringify(editDraft.value) !== savedDraftJson.value)
 
 function syncDraft(): void {
     const c = activeCharacter.value
+    const overrides = emptyOverrides()
+    if (c?.modelConfig) {
+        for (const fn of AI_FUNCTIONS) {
+            const cfg = c.modelConfig[fn]
+            if (cfg) {
+                overrides[fn] = { enabled: true, provider: cfg.provider, model: cfg.model }
+            }
+        }
+    }
     editDraft.value = {
         name: c?.name ?? '',
         description: c?.description ?? '',
         personaPrompt: c?.personaPrompt ?? '',
         greetingMessage: c?.greetingMessage ?? '',
+        modelOverrides: overrides,
     }
+    savedDraftJson.value = JSON.stringify(editDraft.value)
 }
 
 // ── Composable ────────────────────────────────────────────────────────────────
@@ -91,14 +115,23 @@ export function useCharacterViewModel() {
         if (!activeCharacterId.value) return
         isSavingCharacter.value = true
         try {
+            const modelConfig: CharacterModelConfig = {}
+            for (const fn of AI_FUNCTIONS) {
+                const ov = editDraft.value.modelOverrides[fn]
+                if (ov.enabled && ov.provider && ov.model) {
+                    modelConfig[fn] = { provider: ov.provider, model: ov.model }
+                }
+            }
             const updated = await apiUpdateCharacter(activeCharacterId.value, {
                 name: editDraft.value.name,
                 description: editDraft.value.description,
                 personaPrompt: editDraft.value.personaPrompt,
                 greetingMessage: editDraft.value.greetingMessage,
+                modelConfig,
             })
             const idx = characters.value.findIndex(c => c.id === updated.id)
             if (idx !== -1) characters.value[idx] = updated
+            syncDraft()
         } catch (e) {
             toast.error(e instanceof Error ? e.message : String(e))
         } finally {
@@ -135,6 +168,6 @@ export function useCharacterViewModel() {
 
     return {
         characters, activeCharacterId, activeCharacter, isLoadingCharacters, isSavingCharacter,
-        editDraft, load, select, create, save, remove, syncDraft,
+        editDraft, isDirty, load, select, create, save, remove, syncDraft,
     }
 }

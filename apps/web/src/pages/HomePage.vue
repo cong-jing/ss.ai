@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
 import ChatPanel from "../panels/chat/ChatPanel.vue";
-import ScenarioPanel from "../panels/scenario/ScenarioPanel.vue";
-import CharacterCard from "../panels/character/CharacterCard.vue";
+import CharacterPanel from "../panels/character/CharacterPanel.vue";
 import ConversationList from "../panels/conversation/ConversationList.vue";
 import UserPreferencePopup from "../panels/userPreference/UserPreferencePopup.vue";
 import { useCharacterViewModel } from "../panels/character/useCharacterViewModel";
@@ -27,11 +26,10 @@ onMounted(() => {
       <ChatPanel />
     </section>
 
-    <!-- RIGHT: Character card + User info + Settings -->
+    <!-- RIGHT: Character editor + Settings trigger -->
     <aside class="info-area">
-      <CharacterCard />
       <div class="info-scrollable">
-        <ScenarioPanel />
+        <CharacterPanel />
       </div>
       <UserPreferencePopup />
     </aside>

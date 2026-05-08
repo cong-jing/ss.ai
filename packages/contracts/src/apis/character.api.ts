@@ -1,11 +1,20 @@
 import { ApiDefine } from "../apiBase.js";
+import type { AiFunction } from "../aiFunctions.js";
 import type { ConversationInfo } from "./conversation.api.js";
 
 // ── Domain type ────────────────────────────────────────────────────────────────
 
+export interface CharacterFunctionModel {
+    provider: string;
+    model: string;
+}
+
+/** Per-function model overrides. Absent key = inherit from user preference. */
+export type CharacterModelConfig = Partial<Record<AiFunction, CharacterFunctionModel>>;
+
 /**
  * HTTP API projection of a character card.
- * Internal-only fields (displayName, avatarUrl, *Config blobs) are excluded.
+ * Internal-only fields (displayName, avatarUrl) are excluded.
  */
 export interface Character {
     id: string;
@@ -13,6 +22,7 @@ export interface Character {
     description: string;
     personaPrompt: string;
     greetingMessage: string | null;
+    modelConfig: CharacterModelConfig;
     status: "active" | "archived";
     createdAt: string;
     updatedAt: string;
@@ -32,6 +42,8 @@ export interface UpdateCharacterRequest {
     description?: string;
     personaPrompt?: string;
     greetingMessage?: string;
+    /** Full replacement of modelConfig. Absent keys inherit from user preference. */
+    modelConfig?: CharacterModelConfig;
 }
 
 export interface ListCharactersResponse {
