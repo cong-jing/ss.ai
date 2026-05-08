@@ -139,7 +139,8 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                     ? body.greetingMessage.trim() || null
                     : null;
             }
-            if (body?.modelConfig && typeof body.modelConfig === "object") {
+            if (Object.prototype.hasOwnProperty.call(body, "modelConfig")
+                && body.modelConfig !== null && typeof body.modelConfig === "object") {
                 patch.modelConfig = body.modelConfig as Record<string, unknown>;
             }
             await store.updateCharacter({ userId: DEFAULT_USER_ID, characterId: req.params.id, patch });

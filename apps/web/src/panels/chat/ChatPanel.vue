@@ -7,10 +7,10 @@ import ChatMessageList from "./ChatMessageList.vue";
 import { useChatViewModel } from "./useChatViewModel";
 
 const vm = useChatViewModel();
-const { messages, isSending, error, showDebug, sendMessage, clearMessages, dryRunPrompt } = vm;
+const { messages, isSending, isLoading, error, showDebug, sendMessage, clearMessages, loadHistory, dryRunPrompt } = vm;
 
 onMounted(() => {
-  clearMessages();
+  void loadHistory();
 });
 </script>
 
@@ -26,7 +26,8 @@ onMounted(() => {
 
     <div class="chat-layout">
       <div class="chat-messages">
-        <ChatMessageList :messages="messages" :show-debug="showDebug" />
+        <div v-if="isLoading" class="loading-history">Loading messages...</div>
+        <ChatMessageList v-else :messages="messages" :show-debug="showDebug" />
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
@@ -77,6 +78,15 @@ onMounted(() => {
   font-size: 12px;
   color: #b91c1c;
   background: #fee2e2;
+}
+
+.loading-history {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #9ca3af;
 }
 
 .header-btn {

@@ -90,8 +90,14 @@ function buildSystemPrompt(input: BuildSystemMessagesInput, language: PromptLang
     const sections: string[] = [];
 
     // Character persona prompt
+    if (input.character?.name) {
+        sections.push(buildSection(blocks.sectionLabels.characterName, input.character.name));
+    }
+    if (input.character?.description) {
+        sections.push(buildSection(blocks.sectionLabels.characterDescription, input.character.description));
+    }
     if (input.character?.personaPrompt) {
-        sections.push(buildSection(blocks.sectionLabels.character, input.character.personaPrompt));
+        sections.push(buildSection(blocks.sectionLabels.characterPersona, input.character.personaPrompt));
     }
 
     // User profile

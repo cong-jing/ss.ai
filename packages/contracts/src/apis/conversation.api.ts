@@ -75,3 +75,22 @@ export const ApiDeleteConversation = new ApiDefine<void, DeleteConversationRespo
     "/v1/characters/:id/conversations/:convId",
     "DELETE",
 );
+
+// ── Messages ──────────────────────────────────────────────────────────────────
+
+export interface ConversationMessage {
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    createdAt: string;
+}
+
+export interface GetMessagesResponse {
+    messages: ConversationMessage[];
+}
+
+/** GET /v1/conversations/:id/messages — fetch recent messages for a conversation. */
+export const ApiGetMessages = new ApiDefine<void, GetMessagesResponse>(
+    "/v1/conversations/:id/messages",
+    "GET",
+);

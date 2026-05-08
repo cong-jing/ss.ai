@@ -76,24 +76,27 @@ onMounted(() => {
           :disabled="isSavingCharacter" />
       </div>
 
+      <!-- ── Section divider ───────────────────────────────────────────── -->
+      <div class="section-divider">
+        <span class="section-divider-label">Model Overrides</span>
+      </div>
+      <p class="section-hint">Override the per-function model for this character. Unset = inherit from Settings.</p>
+
       <!-- Model Overrides -->
-      <div class="overrides-section">
-        <div class="overrides-title">Model Overrides</div>
-        <div v-for="fn in AI_FUNCTIONS" :key="fn" class="override-block">
-          <label class="override-check-row">
-            <input type="checkbox" v-model="editDraft.modelOverrides[fn].enabled" :disabled="isSavingCharacter" />
-            <span class="override-fn-label">{{ AI_FUNCTION_LABELS[fn] }}</span>
-          </label>
-          <div v-if="editDraft.modelOverrides[fn].enabled" class="override-selector">
-            <ModelSelector
-              :provider="editDraft.modelOverrides[fn].provider"
-              :model="editDraft.modelOverrides[fn].model"
-              :providers="providers"
-              :disabled="isSavingCharacter"
-              @update:provider="editDraft.modelOverrides[fn].provider = $event; editDraft.modelOverrides[fn].model = ''"
-              @update:model="editDraft.modelOverrides[fn].model = $event"
-            />
-          </div>
+      <div v-for="fn in AI_FUNCTIONS" :key="fn" class="override-block">
+        <label class="override-check-row">
+          <input type="checkbox" v-model="editDraft.modelOverrides[fn].enabled" :disabled="isSavingCharacter" />
+          <span class="override-fn-label">{{ AI_FUNCTION_LABELS[fn] }}</span>
+        </label>
+        <div v-if="editDraft.modelOverrides[fn].enabled" class="override-selector">
+          <ModelSelector
+            :provider="editDraft.modelOverrides[fn].provider"
+            :model="editDraft.modelOverrides[fn].model"
+            :providers="providers"
+            :disabled="isSavingCharacter"
+            @update:provider="editDraft.modelOverrides[fn].provider = $event; editDraft.modelOverrides[fn].model = ''"
+            @update:model="editDraft.modelOverrides[fn].model = $event"
+          />
         </div>
       </div>
 
@@ -248,23 +251,39 @@ onMounted(() => {
   padding-top: 4px;
 }
 
-/* Model overrides */
-.overrides-section {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 8px 10px;
+/* Section divider */
+.section-divider {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
+  margin-top: 4px;
 }
 
-.overrides-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.section-divider::before,
+.section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e5e7eb;
 }
+
+.section-divider-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.section-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  margin: -4px 0 0;
+  line-height: 1.4;
+}
+
+/* Model overrides */
 
 .override-block {
   display: flex;

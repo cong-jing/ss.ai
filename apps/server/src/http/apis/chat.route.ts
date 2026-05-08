@@ -1,4 +1,4 @@
-import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatRequest, type ChatStreamEvent } from "@ss-ai/contracts";
+import { ApiChat, ApiChatDryRun, ApiChatStream, ApiGetMessages, type ChatRequest, type ChatStreamEvent } from "@ss-ai/contracts";
 import { PromptContextBuilder, promptRenderer } from "@ss-ai/persona-flow";
 import { AgentService, createModelClientFromConfig } from "../../agent/index.js";
 import { PromptLogger } from "../../util/promptLog.js";
@@ -276,5 +276,28 @@ export function registerChatRoute(context: HttpApiContext): void {
             context.logger.error("chat/dry-run: failed", { message: response.message });
             return { status: 400, body: response };
         }
+    });
+
+    // GET /v1/conversations/:id/messages
+    registerApi(context.app, ApiGetMessages, {
+        handleRequest: async (req) => {
+            const conversationId = req.params.id;
+            const messages = await context.stores.chat.getRecentMessages({
+                userId: DEFAULT_USER_ID,
+                conversationId,
+                limit: 200,
+            });
+            return {
+                messages: messages
+                    .filter(m => m.role === "user" || m.role === "assistant")
+                    .map(m => ({
+                        id: m.id,
+                        role: m.role as "user" | "assistant",
+                        content: m.content,
+                        createdAt: m.createdAt,
+                    })),
+            };
+        },
+        handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
     });
 }

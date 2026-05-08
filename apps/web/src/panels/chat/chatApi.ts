@@ -1,5 +1,14 @@
-import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent } from "@ss-ai/contracts";
+import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMessagesResponse } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
+
+export async function apiGetMessages(conversationId: string): Promise<GetMessagesResponse> {
+    const res = await fetch(`/v1/conversations/${encodeURIComponent(conversationId)}/messages`);
+    if (!res.ok) {
+        const err = await res.json() as { message?: string };
+        throw new Error(err.message ?? `Request failed: ${res.status}`);
+    }
+    return res.json() as Promise<GetMessagesResponse>;
+}
 
 export async function apiSendChatMessage(prompt: string) {
     return callApi(ApiChat, { prompt });
