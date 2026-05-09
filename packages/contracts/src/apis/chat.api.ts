@@ -4,24 +4,31 @@ export interface ChatRequest {
     /** Which character to chat with. Defaults to the single configured character on the backend. */
     characterId?: string;
     prompt: string;
+    /** When true, the response will include the assembled prompt messages for debugging. */
+    includePrompt?: boolean;
 }
 
 export interface ChatResponse {
     output: string;
     model: string;
     requestId: string;
+    /** Assembled prompt messages, only present when request included `includePrompt: true`. */
+    promptMessages?: ChatDryRunMessage[];
 }
 
 export interface ChatStreamRequest {
     /** Which character to chat with. Defaults to the single configured character on the backend. */
     characterId?: string;
     prompt: string;
+    /** When true, a `prompt` SSE event is sent first with the assembled prompt messages. */
+    includePrompt?: boolean;
 }
 
 /** SSE stream event — one per `data:` line */
 export type ChatStreamEvent =
     | { type: "chunk"; content: string }
-    | { type: "done"; requestId: string; model: string };
+    | { type: "done"; requestId: string; model: string }
+    | { type: "prompt"; messages: ChatDryRunMessage[] };
 
 export const ApiChat = new ApiDefine<ChatRequest, ChatResponse>("/v1/chat", "POST");
 

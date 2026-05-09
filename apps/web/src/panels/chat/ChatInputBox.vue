@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import Button from "../../shared/ui/Button.vue";
+import { useLocalStorage } from "../../shared/ui/useLocalStorage";
 
 const props = defineProps<{
   disabled?: boolean;
@@ -12,7 +13,7 @@ const emit = defineEmits<{
 }>();
 
 const text = ref("");
-const streamMode = ref(false);
+const streamMode = useLocalStorage("chat.streamMode", false);
 
 function submit() {
   const value = text.value.trim();

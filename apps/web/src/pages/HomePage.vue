@@ -5,25 +5,20 @@ import CharacterPanel from "../panels/character/CharacterPanel.vue";
 import ConversationList from "../panels/conversation/ConversationList.vue";
 import UserPreferencePopup from "../panels/userPreference/UserPreferencePopup.vue";
 import { useCharacterViewModel } from "../panels/character/useCharacterViewModel";
+import { useLocalStorage } from "../shared/ui/useLocalStorage";
 
 const { load } = useCharacterViewModel();
 onMounted(() => { void load(); });
 
 // ── Resizable panels ──────────────────────────────────────────────────────────
 
-const LS_KEY_LEFT  = "ui.leftPanelWidth";
-const LS_KEY_RIGHT = "ui.rightPanelWidth";
 const MIN = 160;
 const MAX = 480;
 
 function clamp(v: number) { return Math.max(MIN, Math.min(MAX, v)); }
-function loadWidth(key: string, def: number): number {
-  const s = localStorage.getItem(key);
-  return s ? clamp(parseInt(s, 10)) : def;
-}
 
-const leftWidth  = ref(loadWidth(LS_KEY_LEFT,  220));
-const rightWidth = ref(loadWidth(LS_KEY_RIGHT, 280));
+const leftWidth  = useLocalStorage("ui.leftPanelWidth",  220);
+const rightWidth = useLocalStorage("ui.rightPanelWidth", 280);
 
 type Side = "left" | "right";
 let dragging: Side | null = null;
@@ -51,8 +46,6 @@ function onMouseMove(e: MouseEvent) {
 
 function onMouseUp() {
   if (!dragging) return;
-  localStorage.setItem(LS_KEY_LEFT,  String(leftWidth.value));
-  localStorage.setItem(LS_KEY_RIGHT, String(rightWidth.value));
   dragging = null;
   document.removeEventListener("mousemove", onMouseMove);
   document.removeEventListener("mouseup", onMouseUp);

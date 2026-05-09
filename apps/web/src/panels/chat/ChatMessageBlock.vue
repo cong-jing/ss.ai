@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import type { ChatMessage } from "./chatTypes";
 
 defineProps<{
   message: ChatMessage;
 }>();
+
+const showPrompt = ref(false);
 </script>
 
 <template>
@@ -33,9 +36,30 @@ defineProps<{
   <article v-else class="message-block" :class="[`role-${message.role}`, `status-${message.status ?? 'normal'}`]">
     <header class="message-meta">
       <span>{{ message.role }}</span>
-      <time v-if="message.createdAt">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
+      <div class="message-meta-right">
+        <button
+          v-if="message.role === 'assistant' && message.promptMessages"
+          class="view-prompt-btn"
+          :class="{ active: showPrompt }"
+          @click="showPrompt = !showPrompt"
+        >
+          {{ showPrompt ? 'Hide Prompt' : 'View Prompt' }}
+        </button>
+        <time v-if="message.createdAt">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
+      </div>
     </header>
     <p class="message-content">{{ message.content }}</p>
+    <div v-if="showPrompt && message.promptMessages" class="prompt-expand">
+      <div
+        v-for="(m, i) in message.promptMessages"
+        :key="i"
+        class="debug-msg"
+        :class="`debug-role-${m.role}`"
+      >
+        <span class="debug-role-label">{{ m.role }}</span>
+        <pre class="debug-content">{{ m.content }}</pre>
+      </div>
+    </div>
   </article>
 </template>
 
@@ -85,6 +109,45 @@ defineProps<{
   font-size: 11px;
   color: #6b7280;
   margin-bottom: 4px;
+  align-items: center;
+}
+
+.message-meta-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.view-prompt-btn {
+  font-size: 10px;
+  color: #6b7280;
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 1px 6px;
+  cursor: pointer;
+  line-height: 1.5;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.view-prompt-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.view-prompt-btn.active {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.prompt-expand {
+  margin-top: 8px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .message-content {

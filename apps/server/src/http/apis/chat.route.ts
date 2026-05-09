@@ -131,7 +131,10 @@ async function handleChat(context: HttpApiContext, body: ChatRequest) {
         createdAt: new Date().toISOString(),
     });
 
-    return response;
+    return {
+        ...response,
+        ...(body.includePrompt ? { promptMessages: rendered.messages } : {}),
+    };
 }
 
 export function registerChatRoute(context: HttpApiContext): void {
@@ -210,6 +213,12 @@ export function registerChatRoute(context: HttpApiContext): void {
             characterStore: context.stores.character,
         });
         const rendered = promptRenderer.render(promptContext);
+
+        // 2b. Emit assembled prompt as SSE event when requested
+        if (req.body?.includePrompt) {
+            const promptEvent: ChatStreamEvent = { type: "prompt", messages: rendered.messages };
+            res.write(`data: ${JSON.stringify(promptEvent)}\n\n`);
+        }
 
         // 3. Call LLM
         let fullResponse: string;

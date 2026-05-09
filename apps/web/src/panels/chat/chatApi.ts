@@ -10,8 +10,8 @@ export async function apiGetMessages(conversationId: string): Promise<GetMessage
     return res.json() as Promise<GetMessagesResponse>;
 }
 
-export async function apiSendChatMessage(prompt: string) {
-    return callApi(ApiChat, { prompt });
+export async function apiSendChatMessage(prompt: string, includePrompt = false) {
+    return callApi(ApiChat, { prompt, includePrompt });
 }
 
 export async function apiDryRunChat(prompt: string) {
@@ -21,12 +21,14 @@ export async function apiDryRunChat(prompt: string) {
 export async function apiStreamChatMessage(
     prompt: string,
     onChunk: (content: string) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    includePrompt = false,
+    onPrompt?: (messages: { role: string; content: string }[]) => void
 ): Promise<{ requestId: string; model: string }> {
     const response = await fetch(ApiChatStream.apiUrl, {
         method: ApiChatStream.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, includePrompt }),
         signal
     });
 
@@ -55,6 +57,8 @@ export async function apiStreamChatMessage(
                 onChunk(event.content);
             } else if (event.type === "done") {
                 result = { requestId: event.requestId, model: event.model };
+            } else if (event.type === "prompt") {
+                onPrompt?.(event.messages);
             }
         }
     }

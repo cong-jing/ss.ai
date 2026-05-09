@@ -4,6 +4,7 @@ import type { ChatMessage } from "./chatTypes";
 import { contextVersion } from "../../shared/state/appState";
 import { activeConversationId } from "../conversation/useConversationViewModel";
 import { useToast } from "../../shared/ui/useToast";
+import { useLocalStorage } from "../../shared/ui/useLocalStorage";
 
 function createId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -43,15 +44,23 @@ export function useChatViewModel() {
             });
 
             try {
-                const result = await apiStreamChatMessage(prompt, (chunk) => {
-                    const msg = messages.value.find(m => m.id === msgId);
-                    if (msg) msg.content += chunk;
-                });
+                let capturedPromptMessages: import("./chatTypes").DebugMessage[] | undefined;
+                const result = await apiStreamChatMessage(
+                    prompt,
+                    (chunk) => {
+                        const msg = messages.value.find(m => m.id === msgId);
+                        if (msg) msg.content += chunk;
+                    },
+                    undefined,
+                    showDebug.value,
+                    (msgs) => { capturedPromptMessages = msgs; }
+                );
 
                 const msg = messages.value.find(m => m.id === msgId);
                 if (msg) {
                     msg.status = "normal";
                     msg.id = result.requestId || msgId;
+                    if (capturedPromptMessages) msg.promptMessages = capturedPromptMessages;
                 }
             } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
@@ -69,13 +78,14 @@ export function useChatViewModel() {
         }
 
         try {
-            const response = await apiSendChatMessage(prompt);
+            const response = await apiSendChatMessage(prompt, showDebug.value);
             messages.value.push({
                 id: response.requestId,
                 role: "assistant",
                 content: response.output,
                 createdAt: new Date().toISOString(),
-                status: "normal"
+                status: "normal",
+                ...(response.promptMessages ? { promptMessages: response.promptMessages } : {}),
             });
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
@@ -97,7 +107,7 @@ export function useChatViewModel() {
         messages.value = [];
     }
 
-    const showDebug = ref(false);
+    const showDebug = useLocalStorage("chat.showDebug", false);
 
     async function dryRunPrompt(text: string) {
         const prompt = text.trim();
