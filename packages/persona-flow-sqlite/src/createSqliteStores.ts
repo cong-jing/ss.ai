@@ -3,6 +3,7 @@ import type { DrizzleDb } from "./db/openDatabase.js";
 import { SQLiteChatStore } from "./db/SQLiteChatStore.js";
 import { SQLiteCharacterStore } from "./db/SQLiteCharacterStore.js";
 import { SQLiteConversationStore } from "./db/SQLiteConversationStore.js";
+import { SQLiteConversationParticipantStore } from "./db/SQLiteConversationParticipantStore.js";
 import { SQLiteUserProfileStore } from "./db/SQLiteUserProfileStore.js";
 import { SQLiteUserPreferencesStore } from "./db/SQLiteUserPreferencesStore.js";
 import { SQLiteUserProviderCredentialStore } from "./db/SQLiteUserProviderCredentialStore.js";
@@ -20,6 +21,7 @@ export function createSqliteStores(options: { db: DrizzleDb }): AppStores {
         userProfile: new SQLiteUserProfileStore(db),
         userPreferences: new SQLiteUserPreferencesStore(db),
         conversation: new SQLiteConversationStore(db),
+        conversationParticipant: new SQLiteConversationParticipantStore(db),
         chat: new SQLiteChatStore(db),
         providerCredential: new SQLiteUserProviderCredentialStore(db),
     };

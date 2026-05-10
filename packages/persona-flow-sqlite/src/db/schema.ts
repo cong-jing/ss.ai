@@ -1,11 +1,28 @@
 import { sqliteTable, text, primaryKey } from "drizzle-orm/sqlite-core";
 
+// ── conversation_participants ─────────────────────────────────────────────────
+export const conversationParticipants = sqliteTable("conversation_participants", {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id").notNull(),
+    role: text("role").notNull(), // "self" | "system" | "other"
+    sourceType: text("source_type").notNull(), // "ai_character" | "system" | "logged_user" | "local_actor"
+    displayName: text("display_name").notNull(),
+    userProfileId: text("user_profile_id"),
+    characterId: text("character_id"),
+    profileSnapshotJson: text("profile_snapshot_json"),
+    leftAt: text("left_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+});
+
+export type ConversationParticipantRow = typeof conversationParticipants.$inferSelect;
+export type NewConversationParticipantRow = typeof conversationParticipants.$inferInsert;
+
 // ── messages ──────────────────────────────────────────────────────────────────
 export const messages = sqliteTable("messages", {
     id: text("id").primaryKey(),
-    userId: text("user_id").notNull(),
     conversationId: text("conversation_id").notNull(),
-    role: text("role").notNull(),
+    senderParticipantId: text("sender_participant_id").notNull(),
     content: text("content").notNull(),
     createdAt: text("created_at").notNull(),
 });

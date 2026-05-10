@@ -7,6 +7,7 @@
  */
 
 import type { Character, PromptLanguage, UserProfile } from "../index.js";
+import type { ConversationParticipant } from "../stores/character/conversationParticipant.js";
 import { getPromptBlocks, type LocalizedPromptBlock } from "./localizedPromptBlocks.js";
 
 /**
@@ -24,6 +25,8 @@ export type RenderedMessage = {
 export interface BuildSystemMessagesInput {
     character: Character | null;
     userProfile: UserProfile | null;
+    /** Active (leftAt=null) participants in the current conversation. */
+    participants?: ConversationParticipant[] | null;
     relationshipState?: string | null;
     memories?: string[] | null;
     language?: PromptLanguage;
@@ -62,6 +65,29 @@ function renderUserProfile(userProfile: UserProfile | null, fieldLabels: Localiz
     }
 
     return parts.join("\n");
+}
+
+/**
+ * Render the active participant list into a text block.
+ */
+function renderParticipants(participants: ConversationParticipant[] | null | undefined): string {
+    if (!participants || participants.length === 0) return "";
+    return participants.map(p => {
+        const lines: string[] = [`${p.displayName}（${p.role} / ${p.sourceType}）`];
+        if (p.profileSnapshotJson) {
+            try {
+                const snapshot = JSON.parse(p.profileSnapshotJson);
+                if (typeof snapshot === "object" && snapshot !== null) {
+                    for (const [k, v] of Object.entries(snapshot)) {
+                        lines.push(`  ${k}：${v}`);
+                    }
+                }
+            } catch {
+                lines.push(`  ${p.profileSnapshotJson}`);
+            }
+        }
+        return lines.join("\n");
+    }).join("\n\n");
 }
 
 /**
@@ -104,6 +130,12 @@ function buildSystemPrompt(input: BuildSystemMessagesInput, language: PromptLang
     const userProfileContent = renderUserProfile(input.userProfile, blocks.fieldLabels);
     if (userProfileContent) {
         sections.push(buildSection(blocks.sectionLabels.userProfile, userProfileContent));
+    }
+
+    // Active conversation participants
+    const participantsContent = renderParticipants(input.participants);
+    if (participantsContent) {
+        sections.push(buildSection(blocks.sectionLabels.conversationParticipants, participantsContent));
     }
 
     // Relationship state (if provided)

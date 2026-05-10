@@ -25,7 +25,7 @@ export class SQLiteChatStore implements ChatStore {
         return this.msgs.appendMessage(message);
     }
 
-    getRecentMessages(input: { userId: string; conversationId: string; limit: number }): Promise<Message[]> {
+    getRecentMessages(input: { userId?: string; conversationId: string; limit: number }): Promise<Message[]> {
         return this.msgs.getRecentMessages(input);
     }
 

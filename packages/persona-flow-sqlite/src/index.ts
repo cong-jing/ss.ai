@@ -5,6 +5,7 @@ export type { OpenDatabaseResult, SqliteDb, DrizzleDb, DbLog } from "./db/openDa
 export { createSqliteStores } from "./createSqliteStores.js";
 export { SQLiteChatStore } from "./db/SQLiteChatStore.js";
 export { SQLiteConversationStore } from "./db/SQLiteConversationStore.js";
+export { SQLiteConversationParticipantStore } from "./db/SQLiteConversationParticipantStore.js";
 export { SQLiteCharacterStore } from "./db/SQLiteCharacterStore.js";
 export { SQLiteUserProfileStore } from "./db/SQLiteUserProfileStore.js";
 export { SQLiteUserPreferencesStore } from "./db/SQLiteUserPreferencesStore.js";

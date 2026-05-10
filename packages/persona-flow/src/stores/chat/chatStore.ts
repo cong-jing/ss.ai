@@ -12,7 +12,8 @@ export interface ChatStore {
     // ── Messages ──────────────────────────────────────────────────────────────
     appendMessage(message: Message): Promise<void>;
     getRecentMessages(input: {
-        userId: string;
+        /** @deprecated userId is no longer stored on messages; retained for call-site backwards compat only. */
+        userId?: string;
         conversationId: string;
         limit: number;
     }): Promise<Message[]>;
