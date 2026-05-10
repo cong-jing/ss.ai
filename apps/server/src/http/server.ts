@@ -34,6 +34,10 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
                 : res.statusCode >= 400 ? "warn"
                     : "debug"
             logger[level](`[http] ${req.method} ${req.path} → ${res.statusCode} (${ms}ms)`)
+            if (res.locals.routeError) {
+                const err = res.locals.routeError
+                logger.error(`[http] route error:`, { message: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined })
+            }
             const reqBody = req.body && Object.keys(req.body).length > 0
                 ? " req:" + JSON.stringify(req.body).slice(0, 300)
                 : ""

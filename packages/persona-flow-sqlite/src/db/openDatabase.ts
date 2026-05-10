@@ -101,6 +101,23 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             updated_at              TEXT NOT NULL,
             PRIMARY KEY (user_id, character_id)
         );
+
+        CREATE TABLE IF NOT EXISTS conversation_participants (
+            id                    TEXT PRIMARY KEY,
+            conversation_id       TEXT NOT NULL,
+            role                  TEXT NOT NULL,
+            source_type           TEXT NOT NULL,
+            display_name          TEXT NOT NULL,
+            user_profile_id       TEXT,
+            character_id          TEXT,
+            profile_snapshot_json TEXT,
+            left_at               TEXT,
+            created_at            TEXT NOT NULL,
+            updated_at            TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_conv_participants_conversation
+            ON conversation_participants(conversation_id);
     `);
 
     // Schema migrations: add user_id to pre-existing tables that lacked it.
@@ -108,6 +125,31 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
     try { sqlite.exec(`ALTER TABLE messages ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'`); } catch { /* already exists */ }
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'`); } catch { /* already exists */ }
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN language TEXT DEFAULT 'zh-CN'`); } catch { /* already exists */ }
+    // Migrate messages: add sender_participant_id if not present (pre-schema-change rows)
+    try { sqlite.exec(`ALTER TABLE messages ADD COLUMN sender_participant_id TEXT NOT NULL DEFAULT ''`); } catch { /* already exists */ }
+
+    // Recreate messages table to drop legacy user_id / role columns if they still exist.
+    // We do this by checking for the role column; if present, migrate via table swap.
+    const hasRoleColumn = (sqlite.prepare(
+        `SELECT COUNT(*) as cnt FROM pragma_table_info('messages') WHERE name = 'role'`
+    ).get() as { cnt: number }).cnt > 0;
+
+    if (hasRoleColumn) {
+        sqlite.exec(`
+            CREATE TABLE IF NOT EXISTS messages_new (
+                id                   TEXT PRIMARY KEY,
+                conversation_id      TEXT NOT NULL,
+                sender_participant_id TEXT NOT NULL DEFAULT '',
+                content              TEXT NOT NULL,
+                created_at           TEXT NOT NULL
+            );
+            INSERT INTO messages_new (id, conversation_id, sender_participant_id, content, created_at)
+                SELECT id, conversation_id, COALESCE(sender_participant_id, ''), content, created_at
+                FROM messages;
+            DROP TABLE messages;
+            ALTER TABLE messages_new RENAME TO messages;
+        `);
+    }
 
     const db = drizzle(sqlite, { schema });
 

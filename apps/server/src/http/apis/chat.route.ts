@@ -1,4 +1,4 @@
-import { ApiChat, ApiChatDryRun, ApiChatStream, ApiGetMessages, type ChatRequest, type ChatStreamEvent } from "@ss-ai/contracts";
+﻿import { ApiChat, ApiChatDryRun, ApiChatStream, ApiGetMessages, type ChatRequest, type ChatStreamEvent } from "@ss-ai/contracts";
 import { PromptContextBuilder, promptRenderer } from "@ss-ai/persona-flow";
 import { AgentService, createModelClientFromConfig } from "../../agent/index.js";
 import { PromptLogger } from "../../util/promptLog.js";
@@ -38,14 +38,12 @@ function requirePrompt(prompt: unknown, endpoint: string): string {
     if (typeof prompt !== "string" || prompt.trim().length === 0) {
         throw new Error(`${endpoint}: prompt is required.`);
     }
-
     return prompt;
 }
 
 /**
  * Resolve the active conversationId for the given character.
- * Stored in user_character_states (userId + characterId).
- * Auto-creates a new conversationId if no state exists yet (migration path).
+ * Auto-creates a new conversation (with self + system participants) if no state exists yet.
  * Throws if no character is selected.
  */
 async function resolveConversationId(context: HttpApiContext): Promise<{ characterId: string; conversationId: string }> {
@@ -60,17 +58,16 @@ async function resolveConversationId(context: HttpApiContext): Promise<{ charact
         return { characterId, conversationId: existing.currentConversationId };
     }
 
-    // Auto-create state (migration: character exists but has no state record)
+    // Auto-create state (character exists but has no state record yet)
+    const character = await context.stores.character.getCharacterById({ userId: DEFAULT_USER_ID, characterId });
+    const selfDisplayName = character?.displayName ?? character?.name ?? "AI";
+
     const conversationId = crypto.randomUUID();
     const now = new Date().toISOString();
-    await context.stores.conversation.createConversation({
-        id: conversationId,
-        userId: DEFAULT_USER_ID,
-        characterId,
-        title: null,
-        createdAt: now,
-        updatedAt: now,
-    });
+    await context.stores.conversation.createConversation(
+        { id: conversationId, userId: DEFAULT_USER_ID, characterId, title: null, createdAt: now, updatedAt: now },
+        { selfDisplayName },
+    );
     await context.stores.chat.upsertCharacterState({
         userId: DEFAULT_USER_ID,
         characterId,
@@ -82,36 +79,89 @@ async function resolveConversationId(context: HttpApiContext): Promise<{ charact
     return { characterId, conversationId };
 }
 
-async function handleChat(context: HttpApiContext, body: ChatRequest) {
-    const prompt = requirePrompt(body?.prompt, "chat");
+/**
+ * Find the self (AI) participant for a conversation.
+ */
+async function resolveSelfParticipantId(context: HttpApiContext, conversationId: string): Promise<string> {
+    const participants = await context.stores.conversationParticipant.listConversationParticipants({
+        conversationId,
+        activeOnly: true,
+    });
+    const self = participants.find(p => p.role === "self");
+    if (!self) throw new Error(`Self participant not found for conversation ${conversationId}`);
+    return self.id;
+}
 
-    context.logger.debug("chat: request received", {
-        promptLength: typeof prompt === "string" ? prompt.length : 0,
-        prompt,
+/**
+ * Ensure a logged_user participant exists for the given userId in this conversation.
+ * Creates one if it does not yet exist. Returns the participant ID.
+ *
+ * userId defaults to DEFAULT_USER_ID.
+ */
+async function ensureUserParticipant(
+    context: HttpApiContext,
+    conversationId: string,
+    userId: string = DEFAULT_USER_ID,
+): Promise<string> {
+    const participants = await context.stores.conversationParticipant.listConversationParticipants({
+        conversationId,
+        activeOnly: true,
     });
 
-    const conversationId = await resolveConversationId(context);
+    const existing = participants.find(
+        p => p.sourceType === "logged_user" && p.userProfileId === userId,
+    );
+    if (existing) return existing.id;
+
+    // Determine display name from user profile (fall back to userId)
+    const userProfile = await context.stores.userProfile.getUserProfile(userId);
+    const displayName = userProfile?.name ?? userId;
+
+    const added = await context.stores.conversationParticipant.addConversationParticipant({
+        conversationId,
+        role: "other",
+        sourceType: "logged_user",
+        displayName,
+        userProfileId: userId,
+    });
+    context.logger.debug("chat: added user participant", { conversationId, userId, participantId: added.id });
+    return added.id;
+}
+
+async function handleChat(context: HttpApiContext, body: ChatRequest & { userId?: string }) {
+    const prompt = requirePrompt(body?.prompt, "chat");
+    const userId = typeof body?.userId === "string" ? body.userId : DEFAULT_USER_ID;
+
+    context.logger.debug("chat: request received", { promptLength: prompt.length, userId });
+
+    const { characterId, conversationId } = await resolveConversationId(context);
+
+    // Resolve participant IDs (both may be fetched in parallel after we have conversationId)
+    const [selfParticipantId, userParticipantId] = await Promise.all([
+        resolveSelfParticipantId(context, conversationId),
+        ensureUserParticipant(context, conversationId, userId),
+    ]);
 
     // 1. Append user message
     const userMessage = {
         id: crypto.randomUUID(),
-        userId: DEFAULT_USER_ID,
-        conversationId: conversationId.conversationId,
-        role: "user" as const,
+        conversationId,
+        senderParticipantId: userParticipantId,
         content: prompt,
         createdAt: new Date().toISOString(),
     };
     await context.stores.chat.appendMessage(userMessage);
 
-    // 2. Build prompt context (loads profile, character, and history)
+    // 2. Build prompt context
     const promptContext = await PromptContextBuilder.build({
         userId: DEFAULT_USER_ID,
-        characterId: conversationId.characterId,
-        conversationId: conversationId.conversationId,
+        characterId,
+        conversationId,
         currentUserMessage: userMessage,
         messageStore: context.stores.chat,
         userProfileStore: context.stores.userProfile,
         characterStore: context.stores.character,
+        conversationParticipantStore: context.stores.conversationParticipant,
     });
 
     // 3. Render prompt
@@ -124,9 +174,8 @@ async function handleChat(context: HttpApiContext, body: ChatRequest) {
     // 5. Append assistant message
     await context.stores.chat.appendMessage({
         id: crypto.randomUUID(),
-        userId: DEFAULT_USER_ID,
-        conversationId: conversationId.conversationId,
-        role: "assistant",
+        conversationId,
+        senderParticipantId: selfParticipantId,
         content: response.output,
         createdAt: new Date().toISOString(),
     });
@@ -161,7 +210,8 @@ export function registerChatRoute(context: HttpApiContext): void {
             return;
         }
 
-        context.logger.debug("chat/stream: request received", { promptLength: prompt.length, prompt });
+        const userId: string = typeof req.body?.userId === "string" ? req.body.userId : DEFAULT_USER_ID;
+        context.logger.debug("chat/stream: request received", { promptLength: prompt.length, userId });
 
         let agentService: AgentService;
         try {
@@ -184,19 +234,23 @@ export function registerChatRoute(context: HttpApiContext): void {
         }
         const { characterId, conversationId } = resolved;
 
+        const [selfParticipantId, userParticipantId] = await Promise.all([
+            resolveSelfParticipantId(context, conversationId),
+            ensureUserParticipant(context, conversationId, userId),
+        ]);
+
         res.writeHead(200, {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache, no-transform",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
+            "X-Accel-Buffering": "no",
         });
 
         // 1. Append user message
         const userMessage = {
             id: crypto.randomUUID(),
-            userId: DEFAULT_USER_ID,
             conversationId,
-            role: "user" as const,
+            senderParticipantId: userParticipantId,
             content: prompt,
             createdAt: new Date().toISOString(),
         };
@@ -211,6 +265,7 @@ export function registerChatRoute(context: HttpApiContext): void {
             messageStore: context.stores.chat,
             userProfileStore: context.stores.userProfile,
             characterStore: context.stores.character,
+            conversationParticipantStore: context.stores.conversationParticipant,
         });
         const rendered = promptRenderer.render(promptContext);
 
@@ -237,9 +292,8 @@ export function registerChatRoute(context: HttpApiContext): void {
         // 4. Append assistant message
         await context.stores.chat.appendMessage({
             id: crypto.randomUUID(),
-            userId: DEFAULT_USER_ID,
             conversationId,
-            role: "assistant",
+            senderParticipantId: selfParticipantId,
             content: fullResponse,
             createdAt: new Date().toISOString(),
         });
@@ -270,16 +324,22 @@ export function registerChatRoute(context: HttpApiContext): void {
     registerApi(context.app, ApiChatDryRun, {
         handleRequest: async (_, body) => {
             const prompt = body?.prompt ?? "";
+            const userId: string = typeof (body as { userId?: string })?.userId === "string"
+                ? (body as { userId?: string }).userId!
+                : DEFAULT_USER_ID;
             context.logger.debug("chat/dry-run: request received", { promptLength: prompt.length });
 
             const { characterId, conversationId } = await resolveConversationId(context);
+            const [selfParticipantId, userParticipantId] = await Promise.all([
+                resolveSelfParticipantId(context, conversationId),
+                ensureUserParticipant(context, conversationId, userId),
+            ]);
 
             // Transient user message — not persisted
             const userMessage = {
                 id: crypto.randomUUID(),
-                userId: DEFAULT_USER_ID,
                 conversationId,
-                role: "user" as const,
+                senderParticipantId: userParticipantId,
                 content: prompt,
                 createdAt: new Date().toISOString(),
             };
@@ -292,9 +352,12 @@ export function registerChatRoute(context: HttpApiContext): void {
                 messageStore: context.stores.chat,
                 userProfileStore: context.stores.userProfile,
                 characterStore: context.stores.character,
+                conversationParticipantStore: context.stores.conversationParticipant,
             });
 
             const rendered = promptRenderer.render(promptContext);
+            // selfParticipantId is resolved but unused in dry-run (no message stored)
+            void selfParticipantId;
             return { messages: rendered.messages };
         },
         handleError: (error) => {
@@ -308,20 +371,18 @@ export function registerChatRoute(context: HttpApiContext): void {
     registerApi(context.app, ApiGetMessages, {
         handleRequest: async (req) => {
             const conversationId = req.params.id;
-            const messages = await context.stores.chat.getRecentMessages({
-                userId: DEFAULT_USER_ID,
-                conversationId,
-                limit: 200,
-            });
+            const [messages, participants] = await Promise.all([
+                context.stores.chat.getRecentMessages({ conversationId, limit: 200 }),
+                context.stores.conversationParticipant.listConversationParticipants({ conversationId }),
+            ]);
+            const participantMap = new Map(participants.map(p => [p.id, p]));
             return {
-                messages: messages
-                    .filter(m => m.role === "user" || m.role === "assistant")
-                    .map(m => ({
-                        id: m.id,
-                        role: m.role as "user" | "assistant",
-                        content: m.content,
-                        createdAt: m.createdAt,
-                    })),
+                messages: messages.map(m => {
+                    const p = participantMap.get(m.senderParticipantId);
+                    // self participants are AI (assistant), everything else is user
+                    const role: "user" | "assistant" = p?.role === "self" ? "assistant" : "user";
+                    return { id: m.id, role, content: m.content, createdAt: m.createdAt };
+                }),
             };
         },
         handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),

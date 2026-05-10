@@ -97,7 +97,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 title: null,
                 createdAt: now,
                 updatedAt: now,
-            });
+            }, { selfDisplayName: character.displayName ?? character.name });
             await context.stores.chat.upsertCharacterState({
                 userId: DEFAULT_USER_ID,
                 characterId: character.id,
@@ -233,7 +233,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 title: null,
                 createdAt: now,
                 updatedAt: now,
-            });
+            }, { selfDisplayName: character.displayName ?? character.name });
             await context.stores.chat.upsertCharacterState({
                 userId: DEFAULT_USER_ID,
                 characterId,
@@ -305,7 +305,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                         title: null,
                         createdAt: now,
                         updatedAt: now,
-                    });
+                    }, { selfDisplayName: character.displayName ?? character.name });
                     activeConversationId = newConvId;
                     remaining = [{ id: newConvId, userId: DEFAULT_USER_ID, characterId, title: null, createdAt: now, updatedAt: now }];
                 }

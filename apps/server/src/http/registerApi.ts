@@ -26,6 +26,9 @@ export function registerApi<TRequest, TResponse>(
                 response.json(result);
             }
         } catch (error) {
+            // Store on locals so the HTTP logging middleware can emit the stack trace
+            response.locals.routeError = error;
+
             const fallback = {
                 status: 400,
                 body: {
