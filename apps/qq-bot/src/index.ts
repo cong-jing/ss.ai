@@ -1,20 +1,76 @@
 import { config } from "dotenv";
 import { fileURLToPath } from "url";
-import { dirname, resolve } from "path";
+import { dirname, isAbsolute, resolve } from "path";
 import WebSocket from "ws";
 import {
-    getActiveCharacterId,
+    findCharacterByName,
+    listConversations,
     createConversation,
-    selectConversation,
+    createLocalActor,
     chat,
 } from "./serverClient.js";
-import { getConversationId, setConversationId } from "./conversationStore.js";
+import {
+    configureConversationStore,
+    getConversationId,
+    setConversationId,
+} from "./conversationStore.js";
+import { configureLogger, log, logError, logInfo, logWarn } from "./logger.js";
+import { handlePrivateMessage } from "./handlers/privateMessageHandler.js";
+import { handleGroupMessage } from "./handlers/groupMessageHandler.js";
+import type { MessageHandlerContext } from "./handlers/messageHandlerContext.js";
+import { createWsMessageDispatcher } from "./wsMessageDispatcher.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: resolve(__dirname, "../.env") });
+const projectRoot = resolve(__dirname, "../../..");
 
-const ONEBOT_WS_URL = process.env.ONEBOT_WS_URL ?? "ws://127.0.0.1:3001";
-const ONEBOT_ACCESS_TOKEN = process.env.ONEBOT_ACCESS_TOKEN ?? "";
+function resolveConfigPath(argv: string[]): string {
+    const shortIndex = argv.indexOf("-c");
+    if (shortIndex >= 0 && argv[shortIndex + 1]) {
+        return resolve(process.cwd(), argv[shortIndex + 1]);
+    }
+
+    const longIndex = argv.indexOf("--config");
+    if (longIndex >= 0 && argv[longIndex + 1]) {
+        return resolve(process.cwd(), argv[longIndex + 1]);
+    }
+
+    return resolve(__dirname, "../.env");
+}
+
+function resolvePathFromProject(input: string | undefined, fallbackRelativePath: string): string {
+    const raw = input?.trim();
+    if (!raw) {
+        return resolve(projectRoot, fallbackRelativePath);
+    }
+    return isAbsolute(raw) ? raw : resolve(projectRoot, raw);
+}
+
+const configPath = resolveConfigPath(process.argv.slice(2));
+const dotenvResult = config({ path: configPath });
+
+const ONEBOT_WS_URL = process.env.NAPCAT_WS_URL
+    ?? process.env.ONEBOT_WS_URL
+    ?? "ws://127.0.0.1:3001";
+const ONEBOT_ACCESS_TOKEN = process.env.NAPCAT_ACCESS_TOKEN
+    ?? process.env.ONEBOT_ACCESS_TOKEN
+    ?? "";
+const CHARACTER_NAME = process.env.CHARACTER_NAME?.trim() ?? "";
+const OUTPUT_DIR = resolvePathFromProject(process.env.OUTPUT_DIR, "user-data-dev/qq-bot");
+const CONVERSATION_MAP_PATH = resolve(OUTPUT_DIR, "conversation-map.json");
+const LOG_FILE_PATH = resolvePathFromProject(process.env.LOG_FILE_PATH, "user-data-dev/qq-bot/qq-bot.log");
+const IS_DRY_RUN = ["1", "true", "yes", "on"].includes(
+    (process.env.QQ_BOT_DRY_RUN ?? "").trim().toLowerCase(),
+);
+
+configureLogger(LOG_FILE_PATH);
+
+if (dotenvResult.error) {
+    logWarn(`[bot] failed to load config file: ${configPath}`);
+} else {
+    logInfo(`[bot] loaded config file: ${configPath}`);
+}
+
+configureConversationStore(CONVERSATION_MAP_PATH);
 
 const wsUrl = ONEBOT_ACCESS_TOKEN
     ? `${ONEBOT_WS_URL}?access_token=${ONEBOT_ACCESS_TOKEN}`
@@ -25,6 +81,36 @@ const ws = new WebSocket(wsUrl, {
         ? { Authorization: `Bearer ${ONEBOT_ACCESS_TOKEN}` }
         : {},
 });
+
+let selectedCharacterId: string | null = null;
+let selectedCharacterName: string | null = null;
+let botSelfId: string | number | null = null;
+
+const messageHandlerContext: MessageHandlerContext = {
+    getCharacterId: () => selectedCharacterId,
+    getBotSelfId: () => botSelfId,
+    resolveConversationId: async (type, id) => {
+        const characterId = selectedCharacterId;
+        if (!characterId) {
+            logWarn("[bot] character not initialized, skipping message");
+            return null;
+        }
+        return resolveConversationId(characterId, type, id);
+    },
+    createLocalActor,
+    chat: async (conversationId, prompt, speakerActorId) => {
+        const characterId = selectedCharacterId;
+        if (!characterId) {
+            logWarn("[bot] character not initialized, skipping message");
+            return null;
+        }
+        logInfo(`[bot] chat: character=${characterId}, conversation=${conversationId}, speakerActorId=${speakerActorId ?? "(none)"}, prompt="${prompt}"`);
+        const reply = await chat(characterId, conversationId, prompt, speakerActorId);
+        logInfo(`[bot] reply: "${reply}"`);
+        return reply;
+    },
+    sendAction,
+};
 
 function sendAction(action: string, params: Record<string, unknown>): void {
     const payload = {
@@ -46,84 +132,95 @@ async function resolveConversationId(
 ): Promise<string> {
     let conversationId = getConversationId(type, id);
     if (!conversationId) {
-        console.log(`[bot] no conversation for ${type}:${id}, creating new one`);
+        logInfo(`[bot] no conversation for ${type}:${id}, creating new one`);
         conversationId = await createConversation(characterId);
         setConversationId(type, id, conversationId);
     }
     return conversationId;
 }
 
-async function handleMessage(event: any): Promise<void> {
-    // ignore self messages
-    if (event.self_id != null && event.user_id === event.self_id) {
+async function initializeCharacter(): Promise<void> {
+    if (!CHARACTER_NAME) {
+        logError("[bot] CHARACTER_NAME is required in config.");
         return;
     }
 
-    const text: string = (event.raw_message ?? "").trim();
-    if (!text) {
+    const { matches, activeCharacterId } = await findCharacterByName(CHARACTER_NAME);
+    if (matches.length === 0) {
+        logError(`[bot] character not found by name: ${CHARACTER_NAME}`);
+        return;
+    }
+    if (matches.length > 1) {
+        const duplicateIds = matches.map(item => item.id).join(", ");
+        logError(`[bot] duplicate character names found: ${CHARACTER_NAME}, ids=${duplicateIds}`);
         return;
     }
 
-    // Determine conversation scope
-    const type: "user" | "group" = event.message_type === "group" ? "group" : "user";
-    const scopeId: string | number = type === "group" ? event.group_id : event.user_id;
+    const character = matches[0];
+    selectedCharacterId = character.id;
+    selectedCharacterName = character.name;
 
-    // Get active character
-    const characterId = await getActiveCharacterId();
-    if (!characterId) {
-        console.warn("[bot] no active character, skipping message");
+    const conversationInfo = await listConversations(character.id);
+    logInfo("[bot] character initialized", {
+        id: character.id,
+        name: character.name,
+        displayName: character.displayName,
+        activeCharacterId,
+        activeConversationId: conversationInfo.activeConversationId,
+        conversationCount: conversationInfo.conversations.length,
+    });
+}
+
+async function handleIncomingMessage(event: any): Promise<void> {
+    logInfo("[bot] incoming message event", event);
+
+    if (event.self_id != null) {
+        botSelfId = event.self_id;
+    }
+
+    if (botSelfId != null && event.user_id === botSelfId) {
         return;
     }
 
-    // Ensure we have a conversation for this scope
-    const conversationId = await resolveConversationId(characterId, type, scopeId);
-
-    // Switch server to this conversation
-    await selectConversation(characterId, conversationId);
-
-    // Send message to server and get reply
-    console.log(`[bot] chat: character=${characterId}, conversation=${conversationId}, prompt="${text}"`);
-    const reply = await chat(characterId, conversationId, text);
-    console.log(`[bot] reply: "${reply}"`);
-
-    // Forward reply back to QQ
-    if (type === "user") {
-        sendAction("send_private_msg", {
-            user_id: event.user_id,
-            message: reply,
-        });
-    } else {
-        sendAction("send_group_msg", {
-            group_id: event.group_id,
-            message: reply,
-        });
+    if (event.message_type === "group") {
+        await handleGroupMessage(event, messageHandlerContext);
+        return;
     }
+
+    await handlePrivateMessage(event, messageHandlerContext);
 }
 
 ws.on("open", () => {
-    console.log("[bot] connected to NapCat OneBot");
+    logInfo("[bot] connected to NapCat OneBot");
+    logInfo(`[bot] bindings store path: ${CONVERSATION_MAP_PATH}`);
+    logInfo(`[bot] log file path: ${LOG_FILE_PATH}`);
+    if (IS_DRY_RUN) {
+        logWarn("[bot] dry-run mode enabled: server APIs will be logged but not called");
+    }
+    if (selectedCharacterName) {
+        logInfo(`[bot] character name: ${selectedCharacterName}`);
+    }
+    sendAction("get_login_info", {});
 });
 
-ws.on("message", (data) => {
-    let event: any;
-    try {
-        event = JSON.parse(data.toString());
-    } catch {
-        console.warn("[bot] failed to parse message:", data.toString());
-        return;
-    }
-
-    if (event.post_type === "message") {
-        handleMessage(event).catch((err) => {
-            console.error("[bot] error handling message:", err);
-        });
-    }
-});
+ws.on("message", createWsMessageDispatcher({
+    handleIncomingMessage,
+    setBotSelfId: (id) => {
+        botSelfId = id;
+    },
+    logInfo,
+    logWarn,
+    logError,
+}));
 
 ws.on("error", (err) => {
-    console.error("[bot] websocket error:", err);
+    logError("[bot] websocket error:", err);
 });
 
 ws.on("close", () => {
-    console.log("[bot] websocket closed");
+    logWarn("[bot] websocket closed");
+});
+
+initializeCharacter().catch((err) => {
+    logError("[bot] failed to initialize character:", err);
 });

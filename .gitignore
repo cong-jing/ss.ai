@@ -8,3 +8,4 @@ config.*.local.json
 logs/
 app.log
 .vscode
+qq-bot.env
