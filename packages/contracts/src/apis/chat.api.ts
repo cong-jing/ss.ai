@@ -16,6 +16,10 @@ export interface ChatResponse {
     output: string;
     model: string;
     requestId: string;
+    /** ID of the appended user message. */
+    userMessageId: string;
+    /** ID of the appended assistant message. */
+    assistantMessageId: string;
     /** Assembled prompt messages, only present when request included `includePrompt: true`. */
     promptMessages?: ChatDryRunMessage[];
 }

@@ -1,6 +1,7 @@
 ﻿import {
     ApiChat,
     ApiChatDryRun,
+    ApiDeleteMessage,
     ApiChatStream,
     ApiGetMessages,
     type ChatDryRunRequest,
@@ -66,6 +67,38 @@ function requirePrompt(prompt: unknown, endpoint: string): string {
         throw new HttpStatusError(400, `${endpoint}: prompt is required.`);
     }
     return prompt;
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripRepeatedPrefix(text: string, regex: RegExp): string {
+    let output = text;
+    while (regex.test(output)) {
+        output = output.replace(regex, "");
+    }
+    return output;
+}
+
+function normalizeAssistantOutput(output: string, names: Array<string | null | undefined>): string {
+    let normalized = output.trimStart();
+
+    // Remove generated actor alias prefixes like: p1[SS]:
+    normalized = stripRepeatedPrefix(normalized, /^p\d+\[[^\]]+\]\s*[:：]\s*/u);
+
+    const uniqueNames = Array.from(new Set(
+        names
+            .map(name => (typeof name === "string" ? name.trim() : ""))
+            .filter(Boolean),
+    ));
+
+    for (const name of uniqueNames) {
+        const escapedName = escapeRegExp(name);
+        normalized = stripRepeatedPrefix(normalized, new RegExp(`^${escapedName}\\s*[:：]\\s*`, "u"));
+    }
+
+    return normalized;
 }
 
 /**
@@ -221,17 +254,28 @@ async function handleChat(context: HttpApiContext, body: ChatRequest & { userId?
     const runtimeAgentService = await createChatAgentService(context, userId);
     const response = await runtimeAgentService.chat({ messages: rendered.messages });
 
+    const selfActor = promptContext.actorMap.get(selfActorId);
+    const normalizedAssistantOutput = normalizeAssistantOutput(response.output, [
+        selfActor?.displayName,
+        promptContext.character?.displayName,
+        promptContext.character?.name,
+    ]);
+
     // 5. Append assistant message
+    const assistantMessageId = crypto.randomUUID();
     await context.stores.chat.appendMessage({
-        id: crypto.randomUUID(),
+        id: assistantMessageId,
         conversationId,
         senderActorId: selfActorId,
-        content: response.output,
+        content: normalizedAssistantOutput,
         createdAt: new Date().toISOString(),
     });
 
     return {
         ...response,
+        output: normalizedAssistantOutput,
+        userMessageId: userMessage.id,
+        assistantMessageId,
         ...(body.includePrompt ? { promptMessages: rendered.messages } : {}),
     };
 }
@@ -353,7 +397,12 @@ export function registerChatRoute(context: HttpApiContext): void {
         let fullResponse: string;
         try {
             const chatResponse = await agentService.chat({ messages: rendered.messages });
-            fullResponse = chatResponse.output;
+            const selfActor = promptContext.actorMap.get(selfActorId);
+            fullResponse = normalizeAssistantOutput(chatResponse.output, [
+                selfActor?.displayName,
+                promptContext.character?.displayName,
+                promptContext.character?.name,
+            ]);
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : "Unknown error";
             context.logger.error("chat/stream: generation failed", { message });
@@ -465,9 +514,13 @@ export function registerChatRoute(context: HttpApiContext): void {
                 throw new HttpStatusError(404, `Conversation not found: ${conversationId}`);
             }
 
-            const [messages, actors] = await Promise.all([
+            const [messages, actors, character] = await Promise.all([
                 context.stores.chat.getRecentMessages({ userId: DEFAULT_USER_ID, conversationId, limit: 200 }),
                 context.stores.conversationActor.listConversationActors({ conversationId }),
+                context.stores.character.getCharacterById({
+                    userId: DEFAULT_USER_ID,
+                    characterId: conversation.characterId,
+                }),
             ]);
             const actorMap = new Map(actors.map(p => [p.id, p]));
             return {
@@ -475,7 +528,9 @@ export function registerChatRoute(context: HttpApiContext): void {
                     const p = actorMap.get(m.senderActorId);
                     // self actors are AI (assistant), everything else is user
                     const role: "user" | "assistant" = p?.role === "self" ? "assistant" : "user";
-                    const senderDisplayName = p?.displayName ?? "unknown";
+                    const senderDisplayName = p?.role === "self"
+                        ? (character?.displayName ?? character?.name ?? p?.displayName ?? "assistant")
+                        : (p?.displayName ?? "unknown");
                     const senderSourceType: ConversationActorSourceType = p?.sourceType ?? "local_actor";
                     return {
                         id: m.id,
@@ -490,5 +545,24 @@ export function registerChatRoute(context: HttpApiContext): void {
             };
         },
         handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
+    });
+
+    // DELETE /v1/conversations/:id/messages/:messageId
+    registerApi(context.app, ApiDeleteMessage, {
+        handleRequest: async (req) => {
+            const conversationId = req.params.id;
+            const messageId = req.params.messageId;
+            const conversation = await context.stores.conversation.getConversationById({
+                userId: DEFAULT_USER_ID,
+                conversationId,
+            });
+            if (!conversation) {
+                throw new HttpStatusError(404, `Conversation not found: ${conversationId}`);
+            }
+
+            await context.stores.chat.deleteMessage({ conversationId, messageId });
+            return { messageId };
+        },
+        handleError: (error) => ({ status: getStatusCode(error, 404), body: toErrorResponse(error) }),
     });
 }

@@ -33,6 +33,7 @@ const {
   create: createCharacter,
   save: saveCharacter,
   remove: removeCharacter,
+  syncDraft,
 } = useCharacterViewModel();
 const {
   load: loadConversations,
@@ -55,6 +56,7 @@ const toast = useToast();
 const characterOpen = useLocalStorage("ui.left.characterOpen", true);
 const conversationOpen = useLocalStorage("ui.left.conversationOpen", true);
 const actorOpen = useLocalStorage("ui.left.actorOpen", true);
+const isCharacterEditing = ref(false);
 
 function handleCharacterToggleOpen() {
   characterOpen.value = !characterOpen.value;
@@ -72,6 +74,7 @@ async function handleCharacterCreate() {
   const created = await createCharacter(newCharacterName.value, "", "", "", "");
   if (created) {
     newCharacterName.value = "";
+    isCharacterEditing.value = true;
     await loadConversations();
     await loadActors();
   }
@@ -81,17 +84,30 @@ async function handleCharacterPickerCreate() {
   const created = await createCharacter("New Character", "", "", "", "");
   showPicker.value = false;
   if (created) {
+    isCharacterEditing.value = true;
     await loadConversations();
     await loadActors();
   }
 }
 
+function handleCharacterStartEdit() {
+  isCharacterEditing.value = true;
+}
+
+function handleCharacterCancelEdit() {
+  syncDraft();
+  isCharacterEditing.value = false;
+}
+
 async function handleCharacterSave() {
   await saveCharacter();
+  isCharacterEditing.value = false;
 }
 
 async function handleCharacterRemove() {
+  if (!activeCharacter.value) return;
   await removeCharacter();
+  isCharacterEditing.value = false;
 }
 
 function handleConversationToggleOpen() {
@@ -109,6 +125,10 @@ async function handleConversationCreate() {
 }
 
 async function handleConversationDelete(id: string) {
+  const target = conversations.value.find(conversation => conversation.id === id);
+  const confirmed = window.confirm(`删除对话 "${target?.title ?? id}"？`);
+  if (!confirmed) return;
+
   await deleteConversation(id);
   await loadActors();
 }
@@ -132,6 +152,10 @@ function handleActorSelect(id: string) {
 }
 
 async function handleActorDelete(id: string) {
+  const target = actors.value.find(actor => actor.id === id);
+  const confirmed = window.confirm(`删除 Actor "${target?.displayName ?? id}"？`);
+  if (!confirmed) return;
+
   await deleteActor(id);
 }
 
@@ -144,6 +168,7 @@ onMounted(() => {
 });
 
 watch(activeCharacterId, (id) => {
+  isCharacterEditing.value = false;
   if (!id) {
     conversations.value = [];
     activeConversationId.value = null;
@@ -164,6 +189,7 @@ watch(activeConversationId, () => {
     <CharacterSection
       :is-open="characterOpen"
       :active-character="activeCharacter"
+      :is-editing="isCharacterEditing"
       :edit-draft="editDraft"
       :is-dirty="isDirty"
       :is-saving-character="isSavingCharacter"
@@ -172,6 +198,8 @@ watch(activeConversationId, () => {
       @character:open-picker="handleCharacterOpenPicker"
       @character:update-new-name="handleCharacterUpdateNewName"
       @character:create="handleCharacterCreate"
+      @character:start-edit="handleCharacterStartEdit"
+      @character:cancel-edit="handleCharacterCancelEdit"
       @character:save="handleCharacterSave"
       @character:remove="handleCharacterRemove"
     />

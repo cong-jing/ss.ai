@@ -30,6 +30,12 @@ export class InMemoryChatStore implements ChatStore {
         return all.slice(-input.limit);
     }
 
+    async deleteMessage(input: { conversationId: string; messageId: string }): Promise<void> {
+        const key = this.messageKey(input.conversationId);
+        const all = this.messagesByConv.get(key) ?? [];
+        this.messagesByConv.set(key, all.filter(message => message.id !== input.messageId));
+    }
+
     // ── Per-character conversation state ──────────────────────────────────────
 
     async getCharacterState(input: {

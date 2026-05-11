@@ -136,4 +136,65 @@ describe("Chat API target validation", () => {
             .expect(404);
         assert.match(String(res.body?.message ?? ""), /Conversation not found/i);
     });
+
+    it("GET /v1/conversations/:id/messages returns self display name from character displayName", async () => {
+        const characterDisplayName = "Display ChatA";
+        await app.agent
+            .patch(`/v1/characters/${char1.id}`)
+            .send({ displayName: characterDisplayName })
+            .expect(200);
+
+        const assistantContent = "assistant with display name";
+        await app.stores.chat.appendMessage({
+            id: crypto.randomUUID(),
+            conversationId: char1ConvId,
+            senderActorId: char1SelfActorId,
+            content: assistantContent,
+            createdAt: new Date().toISOString(),
+        });
+
+        const res = await app.agent
+            .get(`/v1/conversations/${char1ConvId}/messages`)
+            .expect(200);
+
+        const target = (res.body.messages as Array<{ content: string; senderDisplayName: string }>).find(
+            message => message.content === assistantContent,
+        );
+        assert.ok(target, "expected seeded assistant message in list");
+        assert.equal(target!.senderDisplayName, characterDisplayName);
+    });
+
+    it("DELETE /v1/conversations/:id/messages/:messageId deletes a single message", async () => {
+        const keepContent = "keep this";
+        const deleteContent = "delete this";
+        const keepId = crypto.randomUUID();
+        const deleteId = crypto.randomUUID();
+
+        await app.stores.chat.appendMessage({
+            id: keepId,
+            conversationId: char1ConvId,
+            senderActorId: char1UserActorId,
+            content: keepContent,
+            createdAt: new Date().toISOString(),
+        });
+        await app.stores.chat.appendMessage({
+            id: deleteId,
+            conversationId: char1ConvId,
+            senderActorId: char1UserActorId,
+            content: deleteContent,
+            createdAt: new Date().toISOString(),
+        });
+
+        await app.agent
+            .delete(`/v1/conversations/${char1ConvId}/messages/${deleteId}`)
+            .expect(200);
+
+        const res = await app.agent
+            .get(`/v1/conversations/${char1ConvId}/messages`)
+            .expect(200);
+        const messages = res.body.messages as Array<{ id: string; content: string }>;
+
+        assert.equal(messages.some(message => message.id === deleteId || message.content === deleteContent), false);
+        assert.equal(messages.some(message => message.id === keepId || message.content === keepContent), true);
+    });
 });

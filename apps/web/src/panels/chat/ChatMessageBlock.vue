@@ -7,6 +7,10 @@ defineProps<{
   showDebug?: boolean;
 }>();
 
+const emit = defineEmits<{
+  deleteMessage: [messageId: string];
+}>();
+
 const showPrompt = ref(false);
 
 function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
@@ -58,6 +62,13 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
         <span v-if="message.senderSourceType" class="source-badge">{{ sourceTypeLabel(message.senderSourceType) }}</span>
       </span>
       <div class="message-meta-right">
+        <button
+          class="delete-msg-btn"
+          :disabled="message.deleting"
+          @click="emit('deleteMessage', message.id)"
+        >
+          {{ message.deleting ? 'Deleting...' : 'Delete' }}
+        </button>
         <button
           v-if="message.role === 'assistant' && message.promptMessages"
           class="view-prompt-btn"
@@ -183,6 +194,28 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
   cursor: pointer;
   line-height: 1.5;
   transition: background 0.15s, border-color 0.15s;
+}
+
+.delete-msg-btn {
+  font-size: 10px;
+  color: #991b1b;
+  background: #fff;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  padding: 1px 6px;
+  cursor: pointer;
+  line-height: 1.5;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.delete-msg-btn:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.delete-msg-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .view-prompt-btn:hover {

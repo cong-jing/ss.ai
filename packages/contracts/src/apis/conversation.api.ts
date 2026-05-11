@@ -164,3 +164,13 @@ export const ApiGetMessages = new ApiDefine<void, GetMessagesResponse>(
     "/v1/conversations/:id/messages",
     "GET",
 );
+
+export interface DeleteMessageResponse {
+    messageId: string;
+}
+
+/** DELETE /v1/conversations/:id/messages/:messageId — delete a single message. */
+export const ApiDeleteMessage = new ApiDefine<void, DeleteMessageResponse>(
+    "/v1/conversations/:id/messages/:messageId",
+    "DELETE",
+);

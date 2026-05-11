@@ -1,9 +1,9 @@
 import { ref, watch } from "vue";
-import { apiDryRunChat, apiSendChatMessage, apiStreamChatMessage, apiGetMessages } from "./chatApi";
+import { apiDryRunChat, apiSendChatMessage, apiStreamChatMessage, apiGetMessages, apiDeleteMessage } from "./chatApi";
 import type { ChatMessage } from "./chatTypes";
 import { contextVersion } from "../../shared/state/appState";
 import { activeConversationId } from "../sidebar/viewmodels/useConversationViewModel";
-import { activeCharacterId } from "../character/useCharacterViewModel";
+import { activeCharacter, activeCharacterId } from "../character/useCharacterViewModel";
 import { actors, selectedActorId } from "../sidebar/viewmodels/useActorViewModel";
 import { useToast } from "../../shared/ui/useToast";
 import { useLocalStorage } from "../../shared/ui/useLocalStorage";
@@ -38,6 +38,7 @@ export function useChatViewModel() {
         }
 
         const selectedActor = actors.value.find(a => a.id === speakerActorId);
+        const assistantDisplayName = activeCharacter.value?.displayName ?? activeCharacter.value?.name;
 
         messages.value.push({
             id: createId("user"),
@@ -58,6 +59,8 @@ export function useChatViewModel() {
             messages.value.push({
                 id: msgId,
                 role: "assistant",
+                senderDisplayName: assistantDisplayName,
+                senderSourceType: "ai_character",
                 content: "",
                 createdAt: new Date().toISOString(),
                 status: "streaming"
@@ -75,7 +78,7 @@ export function useChatViewModel() {
                         if (msg) msg.content += chunk;
                     },
                     undefined,
-                    showDebug.value,
+                    true,
                     (msgs) => { capturedPromptMessages = msgs; }
                 );
 
@@ -106,11 +109,13 @@ export function useChatViewModel() {
                 conversationId,
                 prompt,
                 speakerActorId,
-                showDebug.value,
+                true,
             );
             messages.value.push({
-                id: response.requestId,
+                id: response.assistantMessageId || response.requestId,
                 role: "assistant",
+                senderDisplayName: assistantDisplayName,
+                senderSourceType: "ai_character",
                 content: response.output,
                 createdAt: new Date().toISOString(),
                 status: "normal",
@@ -134,6 +139,26 @@ export function useChatViewModel() {
 
     function clearMessages() {
         messages.value = [];
+    }
+
+    async function removeMessage(messageId: string) {
+        const conversationId = activeConversationId.value;
+        if (!conversationId) return;
+
+        const target = messages.value.find(message => message.id === messageId);
+        if (!target || target.deleting) return;
+
+        const confirmed = window.confirm("删除这条消息？");
+        if (!confirmed) return;
+
+        target.deleting = true;
+        try {
+            await apiDeleteMessage(conversationId, messageId);
+            messages.value = messages.value.filter(message => message.id !== messageId);
+        } catch (e) {
+            target.deleting = false;
+            toast.error(e instanceof Error ? e.message : String(e));
+        }
     }
 
     const showDebug = useLocalStorage("chat.showDebug", false);
@@ -216,5 +241,6 @@ export function useChatViewModel() {
         clearMessages,
         loadHistory,
         dryRunPrompt,
+        removeMessage,
     };
 }

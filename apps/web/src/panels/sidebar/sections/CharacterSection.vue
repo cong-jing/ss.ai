@@ -5,6 +5,7 @@ import { useLocalStorage } from "../../../shared/ui/useLocalStorage";
 const props = defineProps<{
   isOpen: boolean;
   activeCharacter: Character | null;
+  isEditing: boolean;
   editDraft: {
     name: string;
     displayName: string;
@@ -21,6 +22,8 @@ const emit = defineEmits<{
   "character:open-picker": [];
   "character:update-new-name": [value: string];
   "character:create": [];
+  "character:start-edit": [];
+  "character:cancel-edit": [];
   "character:save": [];
   "character:remove": [];
 }>();
@@ -46,28 +49,54 @@ const showDebug = useLocalStorage("chat.showDebug", false);
       </div>
 
       <template v-if="activeCharacter">
-        <label class="field-label">名称</label>
-        <input v-model="props.editDraft.name" class="input" :disabled="isSavingCharacter" />
+        <template v-if="isEditing">
+          <label class="field-label">名称</label>
+          <input v-model="props.editDraft.name" class="input" :disabled="isSavingCharacter" />
 
-        <label class="field-label">显示名</label>
-        <input v-model="props.editDraft.displayName" class="input" :disabled="isSavingCharacter" placeholder="(可选)" />
+          <label class="field-label">显示名</label>
+          <input v-model="props.editDraft.displayName" class="input" :disabled="isSavingCharacter" placeholder="(可选)" />
 
-        <label class="field-label">描述</label>
-        <textarea v-model="props.editDraft.description" class="textarea" rows="2" :disabled="isSavingCharacter" />
+          <label class="field-label">描述</label>
+          <textarea v-model="props.editDraft.description" class="textarea" rows="2" :disabled="isSavingCharacter" />
 
-        <label class="field-label">Persona</label>
-        <textarea v-model="props.editDraft.personaPrompt" class="textarea" rows="3" :disabled="isSavingCharacter" />
+          <label class="field-label">Persona</label>
+          <textarea v-model="props.editDraft.personaPrompt" class="textarea" rows="3" :disabled="isSavingCharacter" />
 
-        <div class="actions">
-          <button
-            class="mini-btn primary"
-            :disabled="isSavingCharacter || !isDirty || !props.editDraft.name.trim()"
-            @click="emit('character:save')"
-          >
-            保存
-          </button>
-          <button class="mini-btn danger" :disabled="isSavingCharacter" @click="emit('character:remove')">删除</button>
-        </div>
+          <div class="actions">
+            <button
+              class="mini-btn primary"
+              :disabled="isSavingCharacter || !isDirty || !props.editDraft.name.trim()"
+              @click="emit('character:save')"
+            >
+              保存
+            </button>
+            <button class="mini-btn" :disabled="isSavingCharacter" @click="emit('character:cancel-edit')">取消</button>
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="read-row">
+            <span class="field-label">名称</span>
+            <p class="read-value">{{ activeCharacter.name }}</p>
+          </div>
+          <div class="read-row">
+            <span class="field-label">显示名</span>
+            <p class="read-value">{{ activeCharacter.displayName || "(未设置)" }}</p>
+          </div>
+          <div class="read-row">
+            <span class="field-label">描述</span>
+            <p class="read-value multiline">{{ activeCharacter.description || "(空)" }}</p>
+          </div>
+          <div class="read-row">
+            <span class="field-label">Persona</span>
+            <p class="read-value multiline">{{ activeCharacter.personaPrompt || "(空)" }}</p>
+          </div>
+
+          <div class="actions">
+            <button class="mini-btn primary" :disabled="isSavingCharacter" @click="emit('character:start-edit')">编辑</button>
+            <button class="mini-btn danger" :disabled="isSavingCharacter" @click="emit('character:remove')">删除</button>
+          </div>
+        </template>
       </template>
 
       <template v-else>
@@ -178,6 +207,24 @@ const showDebug = useLocalStorage("chat.showDebug", false);
 .actions {
   display: flex;
   gap: 6px;
+}
+
+.read-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.read-value {
+  margin: 0;
+  font-size: 11px;
+  color: #111827;
+  line-height: 1.35;
+}
+
+.read-value.multiline {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .mini-btn {

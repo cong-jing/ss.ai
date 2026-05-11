@@ -29,6 +29,10 @@ export class SQLiteChatStore implements ChatStore {
         return this.msgs.getRecentMessages(input);
     }
 
+    deleteMessage(input: { conversationId: string; messageId: string }): Promise<void> {
+        return this.msgs.deleteMessage(input);
+    }
+
     // ── Per-character conversation state ──────────────────────────────────────
 
     getCharacterState(input: { userId: string; characterId: string }): Promise<UserCharacterState | null> {

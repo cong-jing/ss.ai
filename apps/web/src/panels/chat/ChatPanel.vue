@@ -8,7 +8,7 @@ import { useChatViewModel } from "./useChatViewModel";
 import { useActorViewModel } from "../sidebar/viewmodels/useActorViewModel";
 
 const vm = useChatViewModel();
-const { messages, isSending, isLoading, error, showDebug, chatDraftInput, sendMessage, clearMessages, loadHistory, dryRunPrompt } = vm;
+const { messages, isSending, isLoading, error, showDebug, chatDraftInput, sendMessage, clearMessages, loadHistory, removeMessage } = vm;
 const { actors, selectedActorId, select: selectActor } = useActorViewModel();
 
 onMounted(() => {
@@ -29,7 +29,12 @@ onMounted(() => {
     <div class="chat-layout">
       <div class="chat-messages">
         <div v-if="isLoading" class="loading-history">Loading messages...</div>
-        <ChatMessageList v-else :messages="messages" :show-debug="showDebug" />
+        <ChatMessageList
+          v-else
+          :messages="messages"
+          :show-debug="showDebug"
+          @delete-message="removeMessage"
+        />
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
@@ -40,7 +45,6 @@ onMounted(() => {
         :actors="actors.map(actor => ({ id: actor.id, displayName: actor.displayName }))"
         :selected-actor-id="selectedActorId"
         @send="(text, stream) => sendMessage(text, stream)"
-        @dry-run="(text) => dryRunPrompt(text)"
         @update:selected-actor-id="(id) => selectActor(id)"
       />
     </div>

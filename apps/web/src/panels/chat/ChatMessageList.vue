@@ -11,6 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   reachTop: [];
   reachBottom: [];
+  deleteMessage: [messageId: string];
 }>();
 
 const listEl = ref<HTMLElement | null>(null);
@@ -53,6 +54,7 @@ watch(
         v-if="message.role !== 'debug' || props.showDebug"
         :message="message"
         :show-debug="props.showDebug"
+        @delete-message="emit('deleteMessage', $event)"
       />
     </template>
   </section>

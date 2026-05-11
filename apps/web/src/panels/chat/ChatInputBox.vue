@@ -12,7 +12,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   send: [text: string, stream: boolean];
-  dryRun: [text: string];
   "update:modelValue": [value: string];
   "update:selectedActorId": [actorId: string];
 }>();
@@ -71,9 +70,6 @@ function onKeydown(event: KeyboardEvent) {
         </label>
       </div>
       <div class="toolbar-right">
-          <button class="dry-run-btn" :disabled="disabled" @click="emit('dryRun', text)">
-          Dry Run
-        </button>
         <Button :disabled="disabled" @click="submit">Send</Button>
       </div>
     </div>
@@ -152,23 +148,4 @@ function onKeydown(event: KeyboardEvent) {
   opacity: 0.6;
 }
 
-.dry-run-btn {
-  font-size: 12px;
-  color: #6b7280;
-  background: none;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  padding: 3px 10px;
-  cursor: pointer;
-  line-height: 1.5;
-}
-
-.dry-run-btn:hover:not(:disabled) {
-  background: #f3f4f6;
-}
-
-.dry-run-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
 </style>

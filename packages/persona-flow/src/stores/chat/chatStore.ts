@@ -17,6 +17,10 @@ export interface ChatStore {
         conversationId: string;
         limit: number;
     }): Promise<Message[]>;
+    deleteMessage(input: {
+        conversationId: string;
+        messageId: string;
+    }): Promise<void>;
 
     // ── Per-character conversation state ──────────────────────────────────────
     getCharacterState(input: { userId: string; characterId: string }): Promise<UserCharacterState | null>;

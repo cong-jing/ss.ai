@@ -24,6 +24,40 @@ function toLlmRole(actorRole: string): "system" | "user" | "assistant" {
     return "user";
 }
 
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripRepeatedPrefix(text: string, regex: RegExp): string {
+    let output = text;
+    while (regex.test(output)) {
+        output = output.replace(regex, "");
+    }
+    return output;
+}
+
+function stripAssistantPrefixes(content: string, aliasToken?: string, displayName?: string): string {
+    let output = content.trimStart();
+
+    // Remove one or more generated actor alias prefixes: p1[SS]:
+    output = stripRepeatedPrefix(output, /^p\d+\[[^\]]+\]\s*[:：]\s*/u);
+
+    // Remove one or more direct name prefixes for self actor: SS:
+    const name = displayName?.trim();
+    if (name) {
+        const escaped = escapeRegExp(name);
+        output = stripRepeatedPrefix(output, new RegExp(`^${escaped}\\s*[:：]\\s*`, "u"));
+    }
+
+    // Fallback: alias token from current actor map, if provided.
+    if (aliasToken) {
+        const escapedAlias = escapeRegExp(aliasToken);
+        output = stripRepeatedPrefix(output, new RegExp(`^${escapedAlias}\\s*[:：]\\s*`, "u"));
+    }
+
+    return output;
+}
+
 export const promptRenderer = {
     render(context: PromptContext): RenderedPrompt {
         const { aliasByActorId } = buildActorAliases(context.actors);
@@ -41,7 +75,10 @@ export const promptRenderer = {
             const role = actor ? toLlmRole(actor.role) : "user";
             const alias = aliasByActorId.get(m.senderActorId);
             const label = alias?.token ?? `p?[${actor?.displayName ?? m.senderActorId}]`;
-            return { role, content: `${label}: ${m.content}` };
+            const normalized = role === "assistant"
+                ? stripAssistantPrefixes(m.content, alias?.token, actor?.displayName)
+                : m.content;
+            return { role, content: `${label}: ${normalized}` };
         });
 
         const currentActor = context.actorMap.get(context.currentUserMessage.senderActorId);

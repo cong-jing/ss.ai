@@ -40,4 +40,13 @@ export class SQLiteMessageStore {
 
         return rows.map(rowToMessage).reverse();
     }
+
+    async deleteMessage(input: { conversationId: string; messageId: string }): Promise<void> {
+        await this.db
+            .delete(messages)
+            .where(and(
+                eq(messages.conversationId, input.conversationId),
+                eq(messages.id, input.messageId),
+            ));
+    }
 }

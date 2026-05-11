@@ -17,4 +17,5 @@ export interface ChatMessage {
     debugMessages?: DebugMessage[];
     /** Assembled prompt messages attached when sent with includePrompt=true */
     promptMessages?: DebugMessage[];
+    deleting?: boolean;
 }

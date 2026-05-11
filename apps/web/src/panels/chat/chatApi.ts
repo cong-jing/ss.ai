@@ -10,6 +10,16 @@ export async function apiGetMessages(conversationId: string): Promise<GetMessage
     return res.json() as Promise<GetMessagesResponse>;
 }
 
+export async function apiDeleteMessage(conversationId: string, messageId: string): Promise<void> {
+    const res = await fetch(`/v1/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`, {
+        method: "DELETE",
+    });
+    if (!res.ok) {
+        const err = await res.json() as { message?: string };
+        throw new Error(err.message ?? `Request failed: ${res.status}`);
+    }
+}
+
 export async function apiSendChatMessage(
     characterId: string,
     conversationId: string,

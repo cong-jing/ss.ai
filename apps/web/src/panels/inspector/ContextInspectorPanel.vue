@@ -191,12 +191,35 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="inspector">
-    <section class="group">
+    <section class="group group--prompt">
+      <button class="group-header" @click="promptPanelOpen = !promptPanelOpen">
+        <span>PromptPreviewSection</span>
+        <span>{{ promptPanelOpen ? "▾" : "▸" }}</span>
+      </button>
+      <div v-if="promptPanelOpen" class="group-body compact">
+        <label class="checkbox-row">
+          <input v-model="autoPreview" type="checkbox" />
+          <span>自动预览（输入变化后每 4 秒检查刷新）</span>
+        </label>
+
+        <div class="actions">
+          <button class="mini-btn" :disabled="isRefreshing" @click="refreshPromptPreview(true)">
+            {{ isRefreshing ? "刷新中..." : "立即刷新" }}
+          </button>
+          <span v-if="previewUpdatedAt" class="hint">更新时间：{{ previewUpdatedAt }}</span>
+        </div>
+
+        <p v-if="previewError" class="error">{{ previewError }}</p>
+        <pre v-else class="preview">{{ previewText || "(暂无预览)" }}</pre>
+      </div>
+    </section>
+
+    <section class="group group--actor">
       <button class="group-header" @click="actorPanelOpen = !actorPanelOpen">
         <span>ActorEditorSection</span>
         <span>{{ actorPanelOpen ? "▾" : "▸" }}</span>
       </button>
-      <div v-if="actorPanelOpen" class="group-body">
+      <div v-if="actorPanelOpen" class="group-body compact">
         <template v-if="showDebug">
           <label class="field-label">Character ID</label>
           <p class="id-text">{{ activeCharacter?.id ?? "(none)" }}</p>
@@ -236,29 +259,6 @@ onBeforeUnmount(() => {
         </template>
       </div>
     </section>
-
-    <section class="group">
-      <button class="group-header" @click="promptPanelOpen = !promptPanelOpen">
-        <span>PromptPreviewSection</span>
-        <span>{{ promptPanelOpen ? "▾" : "▸" }}</span>
-      </button>
-      <div v-if="promptPanelOpen" class="group-body">
-        <label class="checkbox-row">
-          <input v-model="autoPreview" type="checkbox" />
-          <span>自动预览（输入变化后每 4 秒检查刷新）</span>
-        </label>
-
-        <div class="actions">
-          <button class="mini-btn" :disabled="isRefreshing" @click="refreshPromptPreview(true)">
-            {{ isRefreshing ? "刷新中..." : "立即刷新" }}
-          </button>
-          <span v-if="previewUpdatedAt" class="hint">更新时间：{{ previewUpdatedAt }}</span>
-        </div>
-
-        <p v-if="previewError" class="error">{{ previewError }}</p>
-        <pre v-else class="preview">{{ previewText || "(暂无预览)" }}</pre>
-      </div>
-    </section>
   </div>
 </template>
 
@@ -268,36 +268,63 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   overflow: auto;
-  background: #fff;
+  background: #f8fafc;
+  padding: 8px;
+  gap: 8px;
 }
 
 .group {
-  border-bottom: 1px solid #e5e7eb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
 }
 
 .group-header {
   width: 100%;
   border: none;
-  background: #fff;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: #374151;
-  padding: 10px 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
 }
 
+.group--actor .group-header {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.group--prompt .group-header {
+  background: #ecfeff;
+  color: #155e75;
+}
+
 .group-body {
-  padding: 10px 12px;
+  padding: 8px 8px 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+}
+
+.group--actor .group-body {
+  border-left: 2px solid #c7d2fe;
+}
+
+.group--prompt .group-body {
+  border-left: 2px solid #99f6e4;
+}
+
+.group-body.compact {
+  gap: 5px;
 }
 
 .field-label {
-  font-size: 11px;
+  font-size: 10px;
   color: #6b7280;
 }
 
@@ -307,8 +334,8 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  font-size: 12px;
-  padding: 6px 8px;
+  font-size: 11px;
+  padding: 4px 6px;
   font-family: inherit;
 }
 
@@ -321,7 +348,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 11px;
   color: #4b5563;
 }
 
@@ -335,8 +362,8 @@ onBeforeUnmount(() => {
   border: 1px solid #d1d5db;
   background: #fff;
   border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 3px 8px;
+  font-size: 11px;
   color: #374151;
   cursor: pointer;
 }
@@ -373,7 +400,7 @@ onBeforeUnmount(() => {
 
 .readonly {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: #6b7280;
 }
 
@@ -394,7 +421,7 @@ onBeforeUnmount(() => {
 
 .error {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: #b91c1c;
 }
 </style>
