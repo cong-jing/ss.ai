@@ -7,6 +7,10 @@ export type ActorAlias = {
     token: string;
 };
 
+type BuildActorAliasesOptions = {
+    displayNameOverridesByActorId?: Map<string, string>;
+};
+
 function roleOrder(actor: ConversationActor): number {
     if (actor.role === "self") return 0;
     if (actor.role === "system") return 1;
@@ -30,7 +34,10 @@ function sortActorsForAlias(actors: ConversationActor[]): ConversationActor[] {
     });
 }
 
-export function buildActorAliases(actors: ConversationActor[] | null | undefined): {
+export function buildActorAliases(
+    actors: ConversationActor[] | null | undefined,
+    options?: BuildActorAliasesOptions,
+): {
     aliases: ActorAlias[];
     aliasByActorId: Map<string, ActorAlias>;
 } {
@@ -40,7 +47,8 @@ export function buildActorAliases(actors: ConversationActor[] | null | undefined
 
     const sorted = sortActorsForAlias(actors);
     const aliases = sorted.map((actor, index): ActorAlias => {
-        const displayName = normalizeDisplayName(actor.displayName);
+        const overriddenDisplayName = options?.displayNameOverridesByActorId?.get(actor.id)?.trim();
+        const displayName = normalizeDisplayName(overriddenDisplayName || actor.displayName);
         const aliasIndex = index + 1;
         return {
             actorId: actor.id,

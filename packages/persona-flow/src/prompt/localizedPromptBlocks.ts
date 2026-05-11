@@ -11,9 +11,17 @@ import { parse as parseYaml } from "yaml";
 import type { PromptLanguage } from "../stores/character/character.js";
 
 export interface SectionLabels {
+    /**
+     * Section label strings used to group prompt sections. Some labels may no
+     * longer be referenced by code but are preserved for template tuning.
+     * If you change these, ensure promptRenderer/systemPromptBuilder usage is
+     * updated accordingly.
+     */
     characterName: string;
     characterDescription: string;
     characterPersona: string;
+    /** Optional explicit section for self role-playing instructions. */
+    selfRoleIntro?: string;
     userProfile: string;
     conversationActors: string;
     relationshipState: string;
@@ -22,14 +30,32 @@ export interface SectionLabels {
 }
 
 export interface FieldLabels {
+    /**
+     * Field labels are used when rendering short user/profile fields into
+     * prompts. Some fields may be unused depending on the prompt layout.
+     */
     userName: string;
     preferredAddress: string;
     userBio: string;
 }
 
+export interface ActorTemplates {
+    /** Actor header line. Supported placeholders: {{alias}}, {{role}}, {{sourceType}}. */
+    actorLine: string;
+    /** Actor info line. Supported placeholder: {{info}}. */
+    actorInfoLine: string;
+    /** Self identity line. Supported placeholder: {{name}}. */
+    selfIdentityLine: string;
+    /** Self description line. Supported placeholder: {{description}}. */
+    selfDescriptionLine: string;
+    /** Self persona line. Supported placeholder: {{personaPrompt}}. */
+    selfPersonaLine: string;
+}
+
 export interface LocalizedPromptBlock {
     sectionLabels: SectionLabels;
     fieldLabels: FieldLabels;
+    actorTemplates?: ActorTemplates;
     baseRules: string;
     sectionDivider: string;
 }

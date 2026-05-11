@@ -10,6 +10,7 @@ import type { Character, PromptLanguage, UserProfile } from "../index.js";
 import type { ConversationActor } from "../stores/character/conversationActor.js";
 import { getPromptBlocks } from "./localizedPromptBlocks.js";
 import { buildActorAliases } from "./actorAlias.js";
+import type { ActorTemplates } from "./localizedPromptBlocks.js";
 
 /**
  * A single message in the rendered prompt, using a unified role vocabulary.
@@ -106,23 +107,99 @@ function extractActorInfo(
     return "";
 }
 
+const DEFAULT_ACTOR_TEMPLATES: ActorTemplates = {
+    actorLine: "{{alias}}（{{role}} / {{sourceType}}）",
+    actorInfoLine: "  人物信息：{{info}}",
+    selfIdentityLine: "  你所扮演的角色是{{name}}。",
+    selfDescriptionLine: "  角色描述：{{description}}",
+    selfPersonaLine: "  角色人设：{{personaPrompt}}",
+};
+
+function resolveActorTemplates(partial?: Partial<ActorTemplates>): ActorTemplates {
+    return {
+        actorLine: partial?.actorLine || DEFAULT_ACTOR_TEMPLATES.actorLine,
+        actorInfoLine: partial?.actorInfoLine || DEFAULT_ACTOR_TEMPLATES.actorInfoLine,
+        selfIdentityLine: partial?.selfIdentityLine || DEFAULT_ACTOR_TEMPLATES.selfIdentityLine,
+        selfDescriptionLine: partial?.selfDescriptionLine || DEFAULT_ACTOR_TEMPLATES.selfDescriptionLine,
+        selfPersonaLine: partial?.selfPersonaLine || DEFAULT_ACTOR_TEMPLATES.selfPersonaLine,
+    };
+}
+
+function renderTemplate(template: string, vars: Record<string, string>): string {
+    return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => vars[key] ?? "");
+}
+
+function renderSelfRoleIntro(
+    character: Character | null,
+    actors: ConversationActor[] | null | undefined,
+    templates: ActorTemplates,
+): string {
+    const selfActor = actors?.find(actor => actor.role === "self") ?? null;
+    const lines: string[] = [];
+
+    const selfName = character?.displayName || character?.name || selfActor?.displayName || "";
+    if (selfName) {
+        lines.push(renderTemplate(templates.selfIdentityLine, { name: selfName }));
+    }
+    if (character?.description) {
+        lines.push(renderTemplate(templates.selfDescriptionLine, { description: character.description }));
+    }
+    if (character?.personaPrompt) {
+        lines.push(renderTemplate(templates.selfPersonaLine, { personaPrompt: character.personaPrompt }));
+    }
+
+    return lines.join("\n");
+}
+
 /**
  * Render the active actor list into a text block.
  */
-function renderActors(actors: ConversationActor[] | null | undefined, userProfile: UserProfile | null): string {
+function renderActors(
+    actors: ConversationActor[] | null | undefined,
+    userProfile: UserProfile | null,
+    character: Character | null,
+    templates: ActorTemplates,
+): string {
     if (!actors || actors.length === 0) return "";
-    const { aliases } = buildActorAliases(actors);
+    const selfActor = actors.find(actor => actor.role === "self") ?? null;
+    const preferredSelfName = character?.displayName || character?.name;
+    const aliasOverrides = new Map<string, string>();
+    if (selfActor && preferredSelfName) {
+        aliasOverrides.set(selfActor.id, preferredSelfName);
+    }
+
+    const { aliases } = buildActorAliases(actors, {
+        displayNameOverridesByActorId: aliasOverrides,
+    });
     const actorById = new Map<string, ConversationActor>(actors.map(actor => [actor.id, actor]));
 
     return aliases.map(alias => {
         const p = actorById.get(alias.actorId);
-        if (!p) return `${alias.token}（other / local_actor）`;
+        if (!p) {
+            return renderTemplate(templates.actorLine, {
+                alias: alias.token,
+                role: "other",
+                sourceType: "local_actor",
+            });
+        }
 
-        const lines: string[] = [`${alias.token}（${p.role} / ${p.sourceType}）`];
+        const lines: string[] = [renderTemplate(templates.actorLine, {
+            alias: alias.token,
+            role: p.role,
+            sourceType: p.sourceType,
+        })];
+
+        if (p.role === "self") {
+            const selfRoleIntro = renderSelfRoleIntro(character, actors, templates);
+            if (selfRoleIntro) {
+                lines.push(selfRoleIntro);
+            }
+        }
+
         const snapshot = parseProfileSnapshot(p.profileSnapshotJson);
         const info = extractActorInfo(p, snapshot, userProfile);
         if (info) {
-            lines.push(`  人物信息：${info}`);
+            lines.push(renderTemplate(templates.actorInfoLine, { info }));
         }
 
         return lines.join("\n");
@@ -152,21 +229,11 @@ function buildSection(title: string, content: string): string {
  */
 function buildSystemPrompt(input: BuildSystemMessagesInput, language: PromptLanguage): string {
     const blocks = getPromptBlocks(language);
+    const actorTemplates = resolveActorTemplates(blocks.actorTemplates);
     const sections: string[] = [];
 
-    // Character persona prompt
-    if (input.character?.name) {
-        sections.push(buildSection(blocks.sectionLabels.characterName, input.character.name));
-    }
-    if (input.character?.description) {
-        sections.push(buildSection(blocks.sectionLabels.characterDescription, input.character.description));
-    }
-    if (input.character?.personaPrompt) {
-        sections.push(buildSection(blocks.sectionLabels.characterPersona, input.character.personaPrompt));
-    }
-
     // Active conversation actors
-    const actorsContent = renderActors(input.actors, input.userProfile);
+    const actorsContent = renderActors(input.actors, input.userProfile, input.character, actorTemplates);
     if (actorsContent) {
         sections.push(buildSection(blocks.sectionLabels.conversationActors, actorsContent));
     }

@@ -60,7 +60,16 @@ function stripAssistantPrefixes(content: string, aliasToken?: string, displayNam
 
 export const promptRenderer = {
     render(context: PromptContext): RenderedPrompt {
-        const { aliasByActorId } = buildActorAliases(context.actors);
+        const selfActor = context.actors.find(actor => actor.role === "self");
+        const preferredSelfName = context.character?.displayName || context.character?.name;
+        const aliasOverrides = new Map<string, string>();
+        if (selfActor && preferredSelfName) {
+            aliasOverrides.set(selfActor.id, preferredSelfName);
+        }
+
+        const { aliasByActorId } = buildActorAliases(context.actors, {
+            displayNameOverridesByActorId: aliasOverrides,
+        });
 
         const systemMessages = buildSystemMessages({
             character: context.character,
@@ -76,7 +85,7 @@ export const promptRenderer = {
             const alias = aliasByActorId.get(m.senderActorId);
             const label = alias?.token ?? `p?[${actor?.displayName ?? m.senderActorId}]`;
             const normalized = role === "assistant"
-                ? stripAssistantPrefixes(m.content, alias?.token, actor?.displayName)
+                ? stripAssistantPrefixes(m.content, alias?.token, alias?.displayName || actor?.displayName)
                 : m.content;
             return { role, content: `${label}: ${normalized}` };
         });

@@ -1,10 +1,15 @@
 # Localized prompt blocks for zh-CN
 # This file is loaded at runtime by localizedPromptBlocks.ts
 
+# NOTE: Some sectionLabels/fieldLabels may be unused in current code but
+# are kept here for backward compatibility and to allow prompt layout tweaks
+# without touching TypeScript code. If you remove or rename keys here, ensure
+# corresponding code updates in packages/persona-flow/src/prompt/*.ts
 sectionLabels:
   characterName: "【角色名称】"
   characterDescription: "【角色描述】"
   characterPersona: "【角色人设】"
+  selfRoleIntro: "【角色扮演说明】"
   userProfile: "【用户信息】"
   conversationActors: "【当前对话成员】"
   relationshipState: "【关系状态】"
@@ -15,6 +20,29 @@ fieldLabels:
   userName: "用户名"
   preferredAddress: "称呼方式"
   userBio: "简介"
+
+actorTemplates:
+  # 占位符模板说明：使用 {{变量名}} 进行替换。
+  # 适用范围说明：
+  # - actorLine / actorInfoLine 对所有会话成员生效（self/system/other），用于渲染“当前对话成员”列表的每一行。
+  # - selfIdentityLine / selfDescriptionLine / selfPersonaLine 仅在成员 role === "self" 时追加，用于向模型说明当前 AI 扮演的角色设定。
+  # actorLine 支持：
+  # - {{alias}}: 成员别名，例如 p1[SS]
+  # - {{role}}: 对话角色类型，取值如 self / system / other
+  # - {{sourceType}}: 成员来源类型，取值如 ai_character / system / logged_user / local_actor
+  # actorInfoLine 支持：
+  # - {{info}}: 成员简介文本（来自 profileSnapshot 或用户资料）
+  # selfIdentityLine 支持：
+  # - {{name}}: 当前 self 角色名称（优先 displayName，其次 name）
+  # selfDescriptionLine 支持：
+  # - {{description}}: 当前角色描述
+  # selfPersonaLine 支持：
+  # - {{personaPrompt}}: 当前角色人设文本
+  actorLine: "{{alias}}（{{role}} / {{sourceType}}）"
+  actorInfoLine: "  人物信息：{{info}}"
+  selfIdentityLine: "  你所扮演的角色是{{name}}。"
+  selfDescriptionLine: "  角色描述：{{description}}"
+  selfPersonaLine: "  角色人设：{{personaPrompt}}"
 
 # Multi-line string: each line is one rule
 baseRules: |
