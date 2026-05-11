@@ -7,6 +7,7 @@ import { registerUserPreferenceRoutes } from "./apis/userPreference.route.js";
 import { registerUserProfileRoutes } from "./apis/userProfile.route.js";
 import { registerCharacterRoutes } from "./apis/character.route.js";
 import { registerConversationRoutes } from "./apis/conversation.route.js";
+import { registerConversationActorRoutes } from "./apis/conversationActor.route.js";
 import {
     openDatabase,
     createSqliteStores,
@@ -75,6 +76,7 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
     registerUserProfileRoutes(apiContext);
     registerCharacterRoutes(apiContext);
     registerConversationRoutes(apiContext);
+    registerConversationActorRoutes(apiContext);
 
     return app;
 }

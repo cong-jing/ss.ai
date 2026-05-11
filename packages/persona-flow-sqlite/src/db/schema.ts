@@ -1,7 +1,7 @@
 import { sqliteTable, text, primaryKey } from "drizzle-orm/sqlite-core";
 
-// ── conversation_participants ─────────────────────────────────────────────────
-export const conversationParticipants = sqliteTable("conversation_participants", {
+// ── conversation_actors ───────────────────────────────────────────────────────
+export const conversationActors = sqliteTable("conversation_actors", {
     id: text("id").primaryKey(),
     conversationId: text("conversation_id").notNull(),
     role: text("role").notNull(), // "self" | "system" | "other"
@@ -15,14 +15,14 @@ export const conversationParticipants = sqliteTable("conversation_participants",
     updatedAt: text("updated_at").notNull(),
 });
 
-export type ConversationParticipantRow = typeof conversationParticipants.$inferSelect;
-export type NewConversationParticipantRow = typeof conversationParticipants.$inferInsert;
+export type ConversationActorRow = typeof conversationActors.$inferSelect;
+export type NewConversationActorRow = typeof conversationActors.$inferInsert;
 
 // ── messages ──────────────────────────────────────────────────────────────────
 export const messages = sqliteTable("messages", {
     id: text("id").primaryKey(),
     conversationId: text("conversation_id").notNull(),
-    senderParticipantId: text("sender_participant_id").notNull(),
+    senderActorId: text("sender_actor_id").notNull(),
     content: text("content").notNull(),
     createdAt: text("created_at").notNull(),
 });

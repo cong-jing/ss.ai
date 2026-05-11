@@ -7,7 +7,7 @@ function rowToMessage(row: MessageRow): Message {
     return {
         id: row.id,
         conversationId: row.conversationId,
-        senderParticipantId: row.senderParticipantId,
+        senderActorId: row.senderActorId,
         content: row.content,
         createdAt: row.createdAt,
     };
@@ -20,7 +20,7 @@ export class SQLiteMessageStore {
         await this.db.insert(messages).values({
             id: message.id,
             conversationId: message.conversationId,
-            senderParticipantId: message.senderParticipantId,
+            senderActorId: message.senderActorId,
             content: message.content,
             createdAt: message.createdAt,
         });

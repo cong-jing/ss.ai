@@ -6,7 +6,7 @@ sectionLabels:
   characterDescription: "【角色描述】"
   characterPersona: "【角色人设】"
   userProfile: "【用户信息】"
-  conversationParticipants: "【当前对话成员】"
+  conversationActors: "【当前对话成员】"
   relationshipState: "【关系状态】"
   memories: "【相关记忆】"
   rules: "【对话规则】"

@@ -23,11 +23,11 @@ function makeConversation(overrides?: Partial<Conversation>): Conversation {
     };
 }
 
-function makeMessage(conversationId: string, senderParticipantId: string, overrides?: Partial<Message>): Message {
+function makeMessage(conversationId: string, senderActorId: string, overrides?: Partial<Message>): Message {
     return {
         id: crypto.randomUUID(),
         conversationId,
-        senderParticipantId,
+        senderActorId,
         content: "hello",
         createdAt: new Date().toISOString(),
         ...overrides,
@@ -54,12 +54,12 @@ describe("SQLiteConversationStore", () => {
         assert.equal(result.title, "我的第一次对话");
     });
 
-    it("createConversation — returns selfParticipantId and systemParticipantId", async () => {
+    it("createConversation — returns selfActorId and systemActorId", async () => {
         const conv = makeConversation();
         const result = await store.createConversation(conv, { selfDisplayName: "AI" });
-        assert.ok(result.selfParticipantId, "should have selfParticipantId");
-        assert.ok(result.systemParticipantId, "should have systemParticipantId");
-        assert.notEqual(result.selfParticipantId, result.systemParticipantId);
+        assert.ok(result.selfActorId, "should have selfActorId");
+        assert.ok(result.systemActorId, "should have systemActorId");
+        assert.notEqual(result.selfActorId, result.systemActorId);
     });
 
     it("getConversationById — returns null for unknown id", async () => {
@@ -121,10 +121,10 @@ describe("SQLiteConversationStore — deleteConversation cascades to messages", 
 
     it("deleting a conversation also removes its messages", async () => {
         const conv = makeConversation({ characterId: "char_cascade" });
-        const { selfParticipantId } = await convStore.createConversation(conv, { selfDisplayName: "AI" });
+        const { selfActorId } = await convStore.createConversation(conv, { selfDisplayName: "AI" });
 
-        await chatStore.appendMessage(makeMessage(conv.id, selfParticipantId, { content: "msg 1" }));
-        await chatStore.appendMessage(makeMessage(conv.id, selfParticipantId, { content: "msg 2" }));
+        await chatStore.appendMessage(makeMessage(conv.id, selfActorId, { content: "msg 1" }));
+        await chatStore.appendMessage(makeMessage(conv.id, selfActorId, { content: "msg 2" }));
 
         const before = await chatStore.getRecentMessages({ conversationId: conv.id, limit: 10 });
         assert.equal(before.length, 2);
@@ -141,8 +141,8 @@ describe("SQLiteConversationStore — deleteConversation cascades to messages", 
     it("deleting one conversation does not affect messages in another", async () => {
         const conv1 = makeConversation({ characterId: "char_cascade2" });
         const conv2 = makeConversation({ characterId: "char_cascade2" });
-        const { selfParticipantId: p1 } = await convStore.createConversation(conv1, { selfDisplayName: "AI" });
-        const { selfParticipantId: p2 } = await convStore.createConversation(conv2, { selfDisplayName: "AI" });
+        const { selfActorId: p1 } = await convStore.createConversation(conv1, { selfDisplayName: "AI" });
+        const { selfActorId: p2 } = await convStore.createConversation(conv2, { selfDisplayName: "AI" });
 
         await chatStore.appendMessage(makeMessage(conv1.id, p1, { content: "from conv1" }));
         await chatStore.appendMessage(makeMessage(conv2.id, p2, { content: "from conv2" }));

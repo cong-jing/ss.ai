@@ -7,6 +7,21 @@ defineProps<{
 }>();
 
 const showPrompt = ref(false);
+
+function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
+  switch (sourceType) {
+    case "logged_user":
+      return "logged user";
+    case "local_actor":
+      return "local actor";
+    case "ai_character":
+      return "ai character";
+    case "system":
+      return "system";
+    default:
+      return "";
+  }
+}
 </script>
 
 <template>
@@ -35,7 +50,10 @@ const showPrompt = ref(false);
   <!-- Normal message -->
   <article v-else class="message-block" :class="[`role-${message.role}`, `status-${message.status ?? 'normal'}`]">
     <header class="message-meta">
-      <span>{{ message.role }}</span>
+      <span class="sender-meta">
+        <span class="sender-name">{{ message.senderDisplayName ?? message.role }}</span>
+        <span v-if="message.senderSourceType" class="source-badge">{{ sourceTypeLabel(message.senderSourceType) }}</span>
+      </span>
       <div class="message-meta-right">
         <button
           v-if="message.role === 'assistant' && message.promptMessages"
@@ -110,6 +128,25 @@ const showPrompt = ref(false);
   color: #6b7280;
   margin-bottom: 4px;
   align-items: center;
+}
+
+.sender-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sender-name {
+  color: #4b5563;
+}
+
+.source-badge {
+  font-size: 10px;
+  line-height: 1;
+  color: #1f2937;
+  background: #e5e7eb;
+  border-radius: 999px;
+  padding: 2px 6px;
 }
 
 .message-meta-right {

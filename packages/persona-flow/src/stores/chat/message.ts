@@ -2,8 +2,8 @@
 export type Message = {
     id: string;
     conversationId: string;
-    /** Points to conversation_participants.id — identifies the actual speaker. */
-    senderParticipantId: string;
+    /** Points to conversation_actors.id — identifies the actual speaker. */
+    senderActorId: string;
     content: string;
     createdAt: string; // ISO 8601 字符串
 };

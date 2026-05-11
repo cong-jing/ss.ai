@@ -8,6 +8,9 @@ export interface DebugMessage {
 export interface ChatMessage {
     id: string;
     role: ChatRole;
+    senderActorId?: string;
+    senderDisplayName?: string;
+    senderSourceType?: "ai_character" | "system" | "logged_user" | "local_actor";
     content: string;
     createdAt?: string;
     status?: "normal" | "streaming" | "failed";

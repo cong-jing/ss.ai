@@ -94,6 +94,14 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 createdAt: now,
                 updatedAt: now,
             }, { selfDisplayName: character.displayName ?? character.name });
+            const userProfile = await context.stores.userProfile.getUserProfile(DEFAULT_USER_ID);
+            await context.stores.conversationActor.addConversationActor({
+                conversationId,
+                role: "other",
+                sourceType: "logged_user",
+                displayName: userProfile?.name ?? DEFAULT_USER_ID,
+                userProfileId: DEFAULT_USER_ID,
+            });
             await context.stores.chat.upsertCharacterState({
                 userId: DEFAULT_USER_ID,
                 characterId: character.id,

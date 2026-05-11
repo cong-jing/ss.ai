@@ -18,11 +18,11 @@ function makeConversation(overrides?: Partial<Conversation>): Conversation {
     };
 }
 
-function makeMessage(conversationId: string, senderParticipantId: string, overrides?: Partial<Message>): Message {
+function makeMessage(conversationId: string, senderActorId: string, overrides?: Partial<Message>): Message {
     return {
         id: crypto.randomUUID(),
         conversationId,
-        senderParticipantId,
+        senderActorId,
         content: "你好",
         createdAt: new Date().toISOString(),
         ...overrides,
@@ -31,21 +31,21 @@ function makeMessage(conversationId: string, senderParticipantId: string, overri
 
 describe("SQLiteChatStore — message operations", () => {
     let store: SQLiteChatStore;
-    let senderParticipantId: string;
+    let senderActorId: string;
     const convId = "conv_test_" + crypto.randomUUID();
 
     before(async () => {
         const { db } = openDatabase(":memory:");
         store = new SQLiteChatStore(db);
-        // Create a conversation so we have a real participant ID
+        // Create a conversation so we have a real actor ID
         const convStore = new SQLiteConversationStore(db);
         const conv = makeConversation({ id: convId });
         const result = await convStore.createConversation(conv, { selfDisplayName: "AI" });
-        senderParticipantId = result.selfParticipantId;
+        senderActorId = result.selfActorId;
     });
 
     it("appendMessage and getRecentMessages — round-trips a single message", async () => {
-        const msg = makeMessage(convId, senderParticipantId, { content: "hello" });
+        const msg = makeMessage(convId, senderActorId, { content: "hello" });
         await store.appendMessage(msg);
 
         const result = await store.getRecentMessages({ conversationId: convId, limit: 10 });
@@ -58,7 +58,7 @@ describe("SQLiteChatStore — message operations", () => {
         const localStore = new SQLiteChatStore(db);
         const convStore = new SQLiteConversationStore(db);
         const conv = makeConversation({ id: cid });
-        const { selfParticipantId: pid } = await convStore.createConversation(conv, { selfDisplayName: "AI" });
+        const { selfActorId: pid } = await convStore.createConversation(conv, { selfDisplayName: "AI" });
 
         const m1 = makeMessage(cid, pid, { createdAt: "2025-01-01T00:00:00.000Z", content: "first" });
         const m2 = makeMessage(cid, pid, { createdAt: "2025-01-02T00:00:00.000Z", content: "second" });
@@ -76,7 +76,7 @@ describe("SQLiteChatStore — message operations", () => {
         const localStore = new SQLiteChatStore(db);
         const convStore = new SQLiteConversationStore(db);
         const conv = makeConversation({ id: cid });
-        const { selfParticipantId: pid } = await convStore.createConversation(conv, { selfDisplayName: "AI" });
+        const { selfActorId: pid } = await convStore.createConversation(conv, { selfDisplayName: "AI" });
 
         for (let i = 0; i < 5; i++) {
             await localStore.appendMessage(makeMessage(cid, pid, {
@@ -93,8 +93,8 @@ describe("SQLiteChatStore — message operations", () => {
         const convStore = new SQLiteConversationStore(db);
         const convA = makeConversation();
         const convB = makeConversation();
-        const { selfParticipantId: pA } = await convStore.createConversation(convA, { selfDisplayName: "AI" });
-        const { selfParticipantId: pB } = await convStore.createConversation(convB, { selfDisplayName: "AI" });
+        const { selfActorId: pA } = await convStore.createConversation(convA, { selfDisplayName: "AI" });
+        const { selfActorId: pB } = await convStore.createConversation(convB, { selfDisplayName: "AI" });
 
         await localStore.appendMessage(makeMessage(convA.id, pA, { content: "from A" }));
         await localStore.appendMessage(makeMessage(convB.id, pB, { content: "from B" }));

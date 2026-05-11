@@ -4,16 +4,16 @@ import type { Message } from "../stores/chat/message.js";
 import type { ChatStore } from "../stores/chat/chatStore.js";
 import type { UserProfile } from "../stores/user/userProfile.js";
 import type { UserProfileStore } from "../stores/user/userProfileStore.js";
-import type { ConversationParticipant } from "../stores/character/conversationParticipant.js";
-import type { ConversationParticipantStore } from "../stores/character/conversationParticipantStore.js";
+import type { ConversationActor } from "../stores/character/conversationActor.js";
+import type { ConversationActorStore } from "../stores/character/conversationActorStore.js";
 
 export type PromptContext = {
     userProfile: UserProfile | null;
     character: Character | null;
-    /** All active (leftAt=null) participants in this conversation. */
-    participants: ConversationParticipant[];
-    /** Quick lookup map: participant id -> participant. */
-    participantMap: Map<string, ConversationParticipant>;
+    /** All active (leftAt=null) actors in this conversation. */
+    actors: ConversationActor[];
+    /** Quick lookup map: actor id -> actor. */
+    actorMap: Map<string, ConversationActor>;
     recentMessages: Message[];
     currentUserMessage: Message;
 };
@@ -27,10 +27,10 @@ export const PromptContextBuilder = {
         messageStore: Pick<ChatStore, "getRecentMessages">;
         userProfileStore: UserProfileStore;
         characterStore: CharacterStore;
-        conversationParticipantStore: ConversationParticipantStore;
+        conversationActorStore: ConversationActorStore;
         historyLimit?: number;
     }): Promise<PromptContext> => {
-        const [userProfile, character, allRecentMessages, participants] = await Promise.all([
+        const [userProfile, character, allRecentMessages, actors] = await Promise.all([
             input.userProfileStore.getUserProfile(input.userId),
             input.characterId
                 ? input.characterStore.getCharacterById({ userId: input.userId, characterId: input.characterId })
@@ -40,7 +40,7 @@ export const PromptContextBuilder = {
                 conversationId: input.conversationId,
                 limit: input.historyLimit ?? 20,
             }),
-            input.conversationParticipantStore.listConversationParticipants({
+            input.conversationActorStore.listConversationActors({
                 conversationId: input.conversationId,
                 activeOnly: true,
             }),
@@ -49,10 +49,10 @@ export const PromptContextBuilder = {
         // Exclude the currentUserMessage (last appended entry) from history
         const recentMessages = allRecentMessages.slice(0, -1);
 
-        const participantMap = new Map<string, ConversationParticipant>(
-            participants.map(p => [p.id, p]),
+        const actorMap = new Map<string, ConversationActor>(
+            actors.map(actor => [actor.id, actor]),
         );
 
-        return { userProfile, character, participants, participantMap, recentMessages, currentUserMessage: input.currentUserMessage };
+        return { userProfile, character, actors, actorMap, recentMessages, currentUserMessage: input.currentUserMessage };
     },
 };

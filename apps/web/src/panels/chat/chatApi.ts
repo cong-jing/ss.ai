@@ -14,19 +14,26 @@ export async function apiSendChatMessage(
     characterId: string,
     conversationId: string,
     prompt: string,
+    speakerActorId?: string,
     includePrompt = false,
 ) {
-    return callApi(ApiChat, { characterId, conversationId, prompt, includePrompt });
+    return callApi(ApiChat, { characterId, conversationId, prompt, speakerActorId, includePrompt });
 }
 
-export async function apiDryRunChat(characterId: string, conversationId: string, prompt: string) {
-    return callApi(ApiChatDryRun, { characterId, conversationId, prompt });
+export async function apiDryRunChat(
+    characterId: string,
+    conversationId: string,
+    prompt: string,
+    speakerActorId?: string,
+) {
+    return callApi(ApiChatDryRun, { characterId, conversationId, prompt, speakerActorId });
 }
 
 export async function apiStreamChatMessage(
     characterId: string,
     conversationId: string,
     prompt: string,
+    speakerActorId: string | undefined,
     onChunk: (content: string) => void,
     signal?: AbortSignal,
     includePrompt = false,
@@ -35,7 +42,7 @@ export async function apiStreamChatMessage(
     const response = await fetch(ApiChatStream.apiUrl, {
         method: ApiChatStream.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ characterId, conversationId, prompt, includePrompt }),
+        body: JSON.stringify({ characterId, conversationId, prompt, speakerActorId, includePrompt }),
         signal
     });
 

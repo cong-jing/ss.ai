@@ -52,6 +52,14 @@ export function registerConversationRoutes(context: HttpApiContext): void {
                 createdAt: now,
                 updatedAt: now,
             }, { selfDisplayName: character.displayName ?? character.name });
+            const userProfile = await context.stores.userProfile.getUserProfile(DEFAULT_USER_ID);
+            await context.stores.conversationActor.addConversationActor({
+                conversationId,
+                role: "other",
+                sourceType: "logged_user",
+                displayName: userProfile?.name ?? DEFAULT_USER_ID,
+                userProfileId: DEFAULT_USER_ID,
+            });
             await context.stores.chat.upsertCharacterState({
                 userId: DEFAULT_USER_ID,
                 characterId,
@@ -131,6 +139,14 @@ export function registerConversationRoutes(context: HttpApiContext): void {
                         createdAt: now,
                         updatedAt: now,
                     }, { selfDisplayName: character.displayName ?? character.name });
+                    const userProfile = await context.stores.userProfile.getUserProfile(DEFAULT_USER_ID);
+                    await context.stores.conversationActor.addConversationActor({
+                        conversationId: newConvId,
+                        role: "other",
+                        sourceType: "logged_user",
+                        displayName: userProfile?.name ?? DEFAULT_USER_ID,
+                        userProfileId: DEFAULT_USER_ID,
+                    });
                     activeConversationId = newConvId;
                     remaining = [{ id: newConvId, userId: DEFAULT_USER_ID, characterId, title: null, createdAt: now, updatedAt: now }];
                 }

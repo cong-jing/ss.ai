@@ -20,18 +20,6 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
 
     // Create tables (idempotent via IF NOT EXISTS)
     sqlite.exec(`
-        CREATE TABLE IF NOT EXISTS messages (
-            id              TEXT PRIMARY KEY,
-            user_id         TEXT NOT NULL DEFAULT 'default',
-            conversation_id TEXT NOT NULL,
-            role            TEXT NOT NULL,
-            content         TEXT NOT NULL,
-            created_at      TEXT NOT NULL
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_messages_user_conversation_created
-            ON messages(user_id, conversation_id, created_at DESC);
-
         CREATE TABLE IF NOT EXISTS characters (
             id                     TEXT PRIMARY KEY,
             user_id                TEXT NOT NULL DEFAULT 'default',
@@ -102,7 +90,7 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             PRIMARY KEY (user_id, character_id)
         );
 
-        CREATE TABLE IF NOT EXISTS conversation_participants (
+        CREATE TABLE IF NOT EXISTS conversation_actors (
             id                    TEXT PRIMARY KEY,
             conversation_id       TEXT NOT NULL,
             role                  TEXT NOT NULL,
@@ -116,40 +104,78 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             updated_at            TEXT NOT NULL
         );
 
-        CREATE INDEX IF NOT EXISTS idx_conv_participants_conversation
-            ON conversation_participants(conversation_id);
+        CREATE INDEX IF NOT EXISTS idx_conv_actors_conversation
+            ON conversation_actors(conversation_id);
     `);
 
-    // Schema migrations: add user_id to pre-existing tables that lacked it.
+    sqlite.exec(`
+        CREATE INDEX IF NOT EXISTS idx_conv_actors_conversation
+            ON conversation_actors(conversation_id)
+    `);
+
+    // Create the latest messages table for fresh databases.
+    sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS messages (
+            id                    TEXT PRIMARY KEY,
+            conversation_id       TEXT NOT NULL,
+            sender_actor_id       TEXT NOT NULL DEFAULT '',
+            content               TEXT NOT NULL,
+            created_at            TEXT NOT NULL
+        );
+    `);
+
+    // Schema migrations.
     // ALTER TABLE ADD COLUMN throws if the column already exists — silently ignored.
-    try { sqlite.exec(`ALTER TABLE messages ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'`); } catch { /* already exists */ }
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'`); } catch { /* already exists */ }
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN language TEXT DEFAULT 'zh-CN'`); } catch { /* already exists */ }
-    // Migrate messages: add sender_participant_id if not present (pre-schema-change rows)
-    try { sqlite.exec(`ALTER TABLE messages ADD COLUMN sender_participant_id TEXT NOT NULL DEFAULT ''`); } catch { /* already exists */ }
 
-    // Recreate messages table to drop legacy user_id / role columns if they still exist.
-    // We do this by checking for the role column; if present, migrate via table swap.
-    const hasRoleColumn = (sqlite.prepare(
-        `SELECT COUNT(*) as cnt FROM pragma_table_info('messages') WHERE name = 'role'`
-    ).get() as { cnt: number }).cnt > 0;
+    // Recreate messages table when legacy columns exist or required columns are missing.
+    const messageColumns = sqlite.prepare(`PRAGMA table_info('messages')`).all() as Array<{ name: string }>;
+    const messageColumnNames = new Set(messageColumns.map((column) => column.name));
+    const hasRoleColumn = messageColumnNames.has("role");
+    const hasUserIdColumn = messageColumnNames.has("user_id");
+    const hasSenderActorIdColumn = messageColumnNames.has("sender_actor_id");
+    const hasLegacySenderColumn = messageColumnNames.has("sender_participant_id");
+    const hasConversationIdColumn = messageColumnNames.has("conversation_id");
+    const hasContentColumn = messageColumnNames.has("content");
+    const hasCreatedAtColumn = messageColumnNames.has("created_at");
 
-    if (hasRoleColumn) {
+    const needsMessagesRebuild =
+        hasRoleColumn ||
+        hasUserIdColumn ||
+        !hasSenderActorIdColumn ||
+        !hasConversationIdColumn ||
+        !hasContentColumn ||
+        !hasCreatedAtColumn;
+
+    if (needsMessagesRebuild) {
+        const senderExpr = hasSenderActorIdColumn
+            ? `COALESCE(sender_actor_id, '')`
+            : hasLegacySenderColumn
+                ? `COALESCE(sender_participant_id, '')`
+            : `''`;
         sqlite.exec(`
             CREATE TABLE IF NOT EXISTS messages_new (
                 id                   TEXT PRIMARY KEY,
                 conversation_id      TEXT NOT NULL,
-                sender_participant_id TEXT NOT NULL DEFAULT '',
+                sender_actor_id      TEXT NOT NULL DEFAULT '',
                 content              TEXT NOT NULL,
                 created_at           TEXT NOT NULL
             );
-            INSERT INTO messages_new (id, conversation_id, sender_participant_id, content, created_at)
-                SELECT id, conversation_id, COALESCE(sender_participant_id, ''), content, created_at
+            INSERT INTO messages_new (id, conversation_id, sender_actor_id, content, created_at)
+                SELECT id, conversation_id, ${senderExpr}, content, created_at
                 FROM messages;
             DROP TABLE messages;
             ALTER TABLE messages_new RENAME TO messages;
         `);
     }
+
+    // Ensure we only keep the latest index strategy for messages.
+    sqlite.exec(`DROP INDEX IF EXISTS idx_messages_user_conversation_created`);
+    sqlite.exec(`
+        CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
+            ON messages(conversation_id, created_at DESC)
+    `);
 
     const db = drizzle(sqlite, { schema });
 

@@ -5,6 +5,8 @@ export interface ChatRequest {
     characterId: string;
     /** Conversation to continue. Must belong to characterId. */
     conversationId: string;
+    /** Optional sender actor for this user message. */
+    speakerActorId?: string;
     prompt: string;
     /** When true, the response will include the assembled prompt messages for debugging. */
     includePrompt?: boolean;
@@ -23,6 +25,8 @@ export interface ChatStreamRequest {
     characterId: string;
     /** Conversation to continue. Must belong to characterId. */
     conversationId: string;
+    /** Optional sender actor for this user message. */
+    speakerActorId?: string;
     prompt: string;
     /** When true, a `prompt` SSE event is sent first with the assembled prompt messages. */
     includePrompt?: boolean;
@@ -47,6 +51,8 @@ export interface ChatDryRunRequest {
     characterId: string;
     /** Conversation used to build prompt context. Must belong to characterId. */
     conversationId: string;
+    /** Optional sender actor for this user message. */
+    speakerActorId?: string;
     prompt: string;
 }
 

@@ -11,6 +11,7 @@ import { InMemoryUserPreferencesStore } from "./inMemoryUserPreferencesStore.js"
 import { InMemoryUserProviderCredentialStore } from "./inMemoryUserProviderCredentialStore.js";
 import { InMemoryConversationStore } from "./inMemoryConversationStore.js";
 import { InMemoryChatStore } from "./inMemoryChatStore.js";
+import { InMemoryConversationActorStore } from "./inMemoryConversationActorStore.js";
 import type { AppStores } from "@ss-ai/persona-flow";
 
 export interface TestApp {
@@ -53,7 +54,9 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}): T
         promptLog: { enabled: false, filePath: "" },
     };
 
+    const conversationActor = new InMemoryConversationActorStore();
     const stores: AppStores = {
+        conversationActor,
         character: new InMemoryCharacterStore(),
         userProfile: new InMemoryUserProfileStore(),
         userPreferences: new InMemoryUserPreferencesStore(),

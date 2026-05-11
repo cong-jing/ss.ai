@@ -5,11 +5,14 @@ import { useLocalStorage } from "../../shared/ui/useLocalStorage";
 
 const props = defineProps<{
   disabled?: boolean;
+  actors?: Array<{ id: string; displayName: string }>;
+  selectedActorId?: string | null;
 }>();
 
 const emit = defineEmits<{
   send: [text: string, stream: boolean];
   dryRun: [text: string];
+  "update:selectedActorId": [actorId: string];
 }>();
 
 const text = ref("");
@@ -43,10 +46,25 @@ function onKeydown(event: KeyboardEvent) {
       @keydown="onKeydown"
     />
     <div class="toolbar">
-      <label class="stream-toggle">
-        <input type="checkbox" v-model="streamMode" :disabled="disabled" />
-        Stream
-      </label>
+      <div class="toolbar-left">
+        <label class="stream-toggle">
+          <input type="checkbox" v-model="streamMode" :disabled="disabled" />
+          Stream
+        </label>
+        <label class="actor-selector">
+          <span>Send as</span>
+          <select
+            :disabled="disabled || !props.actors?.length"
+            :value="props.selectedActorId ?? ''"
+            @change="emit('update:selectedActorId', ($event.target as HTMLSelectElement).value)"
+          >
+            <option v-if="!props.selectedActorId" value="" disabled>Select actor</option>
+            <option v-for="actor in props.actors" :key="actor.id" :value="actor.id">
+              {{ actor.displayName }}
+            </option>
+          </select>
+        </label>
+      </div>
       <div class="toolbar-right">
         <button class="dry-run-btn" :disabled="disabled" @click="emit('dryRun', text)">
           Dry Run
@@ -86,6 +104,12 @@ function onKeydown(event: KeyboardEvent) {
   gap: 8px;
 }
 
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .stream-toggle {
   display: flex;
   align-items: center;
@@ -100,6 +124,27 @@ function onKeydown(event: KeyboardEvent) {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.actor-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.actor-selector select {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 2px 8px;
+  background: #fff;
+  color: #374151;
+  font-size: 12px;
+}
+
+.actor-selector select:disabled {
+  opacity: 0.6;
 }
 
 .dry-run-btn {

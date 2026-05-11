@@ -1,13 +1,13 @@
 import type { Conversation } from "./conversation.js";
 
 /**
- * Returned by createConversation — the IDs of the two auto-created participants.
+ * Returned by createConversation — the IDs of the two auto-created actors.
  */
 export type CreateConversationResult = {
-    /** participant.id of the self (AI) participant. */
-    selfParticipantId: string;
-    /** participant.id of the system participant. */
-    systemParticipantId: string;
+    /** actor.id of the self (AI) actor. */
+    selfActorId: string;
+    /** actor.id of the system actor. */
+    systemActorId: string;
 };
 
 /**
@@ -28,11 +28,11 @@ export interface ConversationStore {
     getConversationById(input: { userId: string; conversationId: string }): Promise<Conversation | null>;
 
     /**
-     * Insert a new conversation and auto-create two participants:
+     * Insert a new conversation and auto-create two actors:
      * - self  (ai_character, role=self, displayName=selfDisplayName)
      * - system (role=system, displayName='系统')
      *
-     * Returns the IDs of the two auto-created participants.
+     * Returns the IDs of the two auto-created actors.
      */
     createConversation(
         conversation: Conversation,
@@ -40,7 +40,7 @@ export interface ConversationStore {
     ): Promise<CreateConversationResult>;
 
     /**
-     * Delete a conversation record and all its associated messages and participants.
+     * Delete a conversation record and all its associated messages and actors.
      */
     deleteConversation(input: { userId: string; conversationId: string }): Promise<void>;
 }

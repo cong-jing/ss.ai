@@ -1,6 +1,6 @@
 import type { ConversationStore, CreateConversationResult, Conversation } from "@ss-ai/persona-flow";
 import { and, eq, desc } from "drizzle-orm";
-import { conversations, messages, conversationParticipants } from "./schema.js";
+import { conversations, messages, conversationActors } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
 
 export class SQLiteConversationStore implements ConversationStore {
@@ -63,10 +63,10 @@ export class SQLiteConversationStore implements ConversationStore {
             updatedAt: conversation.updatedAt,
         });
 
-        // Auto-create: self (AI character) participant
-        const selfParticipantId = crypto.randomUUID();
-        await this.db.insert(conversationParticipants).values({
-            id: selfParticipantId,
+        // Auto-create: self (AI character) actor
+        const selfActorId = crypto.randomUUID();
+        await this.db.insert(conversationActors).values({
+            id: selfActorId,
             conversationId: conversation.id,
             role: "self",
             sourceType: "ai_character",
@@ -79,10 +79,10 @@ export class SQLiteConversationStore implements ConversationStore {
             updatedAt: now,
         });
 
-        // Auto-create: system participant
-        const systemParticipantId = crypto.randomUUID();
-        await this.db.insert(conversationParticipants).values({
-            id: systemParticipantId,
+        // Auto-create: system actor
+        const systemActorId = crypto.randomUUID();
+        await this.db.insert(conversationActors).values({
+            id: systemActorId,
             conversationId: conversation.id,
             role: "system",
             sourceType: "system",
@@ -95,16 +95,16 @@ export class SQLiteConversationStore implements ConversationStore {
             updatedAt: now,
         });
 
-        return { selfParticipantId, systemParticipantId };
+        return { selfActorId, systemActorId };
     }
 
     async deleteConversation(input: { userId: string; conversationId: string }): Promise<void> {
-        // Delete messages, then participants, then the conversation record
+        // Delete messages, then actors, then the conversation record
         await this.db.delete(messages).where(
             eq(messages.conversationId, input.conversationId),
         );
-        await this.db.delete(conversationParticipants).where(
-            eq(conversationParticipants.conversationId, input.conversationId),
+        await this.db.delete(conversationActors).where(
+            eq(conversationActors.conversationId, input.conversationId),
         );
         await this.db.delete(conversations).where(and(
             eq(conversations.userId, input.userId),

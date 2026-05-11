@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue'
 import Button from '../../shared/ui/Button.vue'
 import TextInput from '../../shared/ui/TextInput.vue'
 import ModelSelector from '../../shared/ui/ModelSelector.vue'
-import CharacterPickerPopup from './CharacterPickerPopup.vue'
 import { useCharacterViewModel, characters, isDirty } from './useCharacterViewModel'
 import { useUserPreferenceViewModel } from '../userPreference/useUserPreferenceViewModel'
 import { AI_FUNCTIONS, AI_FUNCTION_LABELS } from '@ss-ai/contracts'
@@ -14,8 +13,6 @@ const {
 } = useCharacterViewModel()
 
 const { providers, loadSettings } = useUserPreferenceViewModel()
-
-const showPicker = ref(false)
 
 // Create-new form
 const newName = ref('')
@@ -52,7 +49,6 @@ onMounted(() => {
       <div class="panel-header">
         <div class="char-avatar">{{ initials(activeCharacter.name) }}</div>
         <div class="char-title">{{ activeCharacter.name }}</div>
-        <button class="switch-btn" @click="showPicker = true">Switch</button>
       </div>
 
       <!-- Fields -->
@@ -138,12 +134,10 @@ onMounted(() => {
           :disabled="isSavingCharacter || !newName.trim()"
           @click="onCreateSave"
         >{{ isSavingCharacter ? 'Creating…' : '+ Create' }}</Button>
-        <button v-if="characters?.length" class="switch-btn" @click="showPicker = true">Switch</button>
+        <span v-if="characters?.length" class="hint">Use left panel to switch character.</span>
       </div>
     </template>
   </div>
-
-  <CharacterPickerPopup v-model="showPicker" @new-character="showPicker = false" />
 </template>
 
 <style scoped>

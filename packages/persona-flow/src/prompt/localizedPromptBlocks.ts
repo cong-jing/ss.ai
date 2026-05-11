@@ -15,7 +15,7 @@ export interface SectionLabels {
     characterDescription: string;
     characterPersona: string;
     userProfile: string;
-    conversationParticipants: string;
+    conversationActors: string;
     relationshipState: string;
     memories: string;
     rules: string;

@@ -12,14 +12,14 @@ export type RenderedPrompt = {
 };
 
 /**
- * Map a participant role to an LLM message role.
+ * Map an actor role to an LLM message role.
  * - self (AI)  → assistant
  * - system     → system
  * - other      → user
  */
-function toLlmRole(participantRole: string): "system" | "user" | "assistant" {
-    if (participantRole === "self") return "assistant";
-    if (participantRole === "system") return "system";
+function toLlmRole(actorRole: string): "system" | "user" | "assistant" {
+    if (actorRole === "self") return "assistant";
+    if (actorRole === "system") return "system";
     return "user";
 }
 
@@ -28,20 +28,20 @@ export const promptRenderer = {
         const systemMessages = buildSystemMessages({
             character: context.character,
             userProfile: context.userProfile,
-            participants: context.participants,
+            actors: context.actors,
             language: context.character?.language ?? undefined,
         });
 
         // Each history message becomes "DisplayName: content" with the correct LLM role.
         const historyMessages: RenderedMessage[] = context.recentMessages.map(m => {
-            const participant = context.participantMap.get(m.senderParticipantId);
-            const role = participant ? toLlmRole(participant.role) : "user";
-            const label = participant?.displayName ?? m.senderParticipantId;
+            const actor = context.actorMap.get(m.senderActorId);
+            const role = actor ? toLlmRole(actor.role) : "user";
+            const label = actor?.displayName ?? m.senderActorId;
             return { role, content: `${label}: ${m.content}` };
         });
 
-        const currentParticipant = context.participantMap.get(context.currentUserMessage.senderParticipantId);
-        const currentLabel = currentParticipant?.displayName ?? context.currentUserMessage.senderParticipantId;
+        const currentActor = context.actorMap.get(context.currentUserMessage.senderActorId);
+        const currentLabel = currentActor?.displayName ?? context.currentUserMessage.senderActorId;
         const userMessage: RenderedMessage = {
             role: "user",
             content: `${currentLabel}: ${context.currentUserMessage.content}`,

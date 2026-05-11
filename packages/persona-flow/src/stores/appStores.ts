@@ -4,7 +4,7 @@ import type { UserPreferencesStore } from "./user/userPreferencesStore.js";
 import type { UserProviderCredentialStore } from "./user/userProviderCredentialStore.js";
 import type { ChatStore } from "./chat/chatStore.js";
 import type { ConversationStore } from "./character/conversationStore.js";
-import type { ConversationParticipantStore } from "./character/conversationParticipantStore.js";
+import type { ConversationActorStore } from "./character/conversationActorStore.js";
 
 /**
  * Grouped collection of all application stores.
@@ -19,7 +19,7 @@ export interface AppStores {
     userProfile: UserProfileStore;
     userPreferences: UserPreferencesStore;
     conversation: ConversationStore;
-    conversationParticipant: ConversationParticipantStore;
+    conversationActor: ConversationActorStore;
     chat: ChatStore;
     providerCredential: UserProviderCredentialStore;
 }
