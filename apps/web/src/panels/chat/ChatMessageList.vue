@@ -49,7 +49,11 @@ watch(
 <template>
   <section ref="listEl" class="message-list" @scroll="onScroll">
     <template v-for="message in messages" :key="message.id">
-      <ChatMessageBlock v-if="message.role !== 'debug' || props.showDebug" :message="message" />
+      <ChatMessageBlock
+        v-if="message.role !== 'debug' || props.showDebug"
+        :message="message"
+        :show-debug="props.showDebug"
+      />
     </template>
   </section>
 </template>

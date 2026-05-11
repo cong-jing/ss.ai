@@ -56,7 +56,19 @@ const characterOpen = useLocalStorage("ui.left.characterOpen", true);
 const conversationOpen = useLocalStorage("ui.left.conversationOpen", true);
 const actorOpen = useLocalStorage("ui.left.actorOpen", true);
 
-async function onCreateCharacter() {
+function handleCharacterToggleOpen() {
+  characterOpen.value = !characterOpen.value;
+}
+
+function handleCharacterOpenPicker() {
+  showPicker.value = true;
+}
+
+function handleCharacterUpdateNewName(value: string) {
+  newCharacterName.value = value;
+}
+
+async function handleCharacterCreate() {
   const created = await createCharacter(newCharacterName.value, "", "", "", "");
   if (created) {
     newCharacterName.value = "";
@@ -65,7 +77,7 @@ async function onCreateCharacter() {
   }
 }
 
-async function onPopupCreateCharacter() {
+async function handleCharacterPickerCreate() {
   const created = await createCharacter("New Character", "", "", "", "");
   showPicker.value = false;
   if (created) {
@@ -74,29 +86,53 @@ async function onPopupCreateCharacter() {
   }
 }
 
-async function onSelectConversation(id: string) {
+async function handleCharacterSave() {
+  await saveCharacter();
+}
+
+async function handleCharacterRemove() {
+  await removeCharacter();
+}
+
+function handleConversationToggleOpen() {
+  conversationOpen.value = !conversationOpen.value;
+}
+
+async function handleConversationSelect(id: string) {
   await selectConversation(id);
   await loadActors();
 }
 
-async function onCreateConversation() {
+async function handleConversationCreate() {
   await createConversation();
   await loadActors();
 }
 
-async function onDeleteConversation(id: string) {
+async function handleConversationDelete(id: string) {
   await deleteConversation(id);
   await loadActors();
 }
 
-async function onCreateActor() {
-  await createActor("new actor");
-}
-
-async function onRenameConversation(conversationId: string, title: string | null) {
+async function handleConversationRename(conversationId: string, title: string | null) {
   if (!activeCharacterId.value) return;
   await updateTitle(conversationId, title);
   toast.success("Conversation title saved");
+}
+
+function handleActorToggleOpen() {
+  actorOpen.value = !actorOpen.value;
+}
+
+async function handleActorCreate() {
+  await createActor("new actor");
+}
+
+function handleActorSelect(id: string) {
+  selectActor(id);
+}
+
+async function handleActorDelete(id: string) {
+  await deleteActor(id);
 }
 
 onMounted(() => {
@@ -132,12 +168,12 @@ watch(activeConversationId, () => {
       :is-dirty="isDirty"
       :is-saving-character="isSavingCharacter"
       :new-character-name="newCharacterName"
-      @character:toggle-open="characterOpen = !characterOpen"
-      @character:open-picker="showPicker = true"
-      @character:update-new-name="newCharacterName = $event"
-      @character:create="onCreateCharacter"
-      @character:save="saveCharacter"
-      @character:remove="removeCharacter"
+      @character:toggle-open="handleCharacterToggleOpen"
+      @character:open-picker="handleCharacterOpenPicker"
+      @character:update-new-name="handleCharacterUpdateNewName"
+      @character:create="handleCharacterCreate"
+      @character:save="handleCharacterSave"
+      @character:remove="handleCharacterRemove"
     />
 
     <ConversationSection
@@ -146,11 +182,11 @@ watch(activeConversationId, () => {
       :is-loading-conversations="isLoadingConversations"
       :conversations="conversations"
       :active-conversation-id="activeConversationId"
-      @conversation:toggle-open="conversationOpen = !conversationOpen"
-      @conversation:create="onCreateConversation"
-      @conversation:select="onSelectConversation"
-      @conversation:rename="onRenameConversation"
-      @conversation:delete="onDeleteConversation"
+      @conversation:toggle-open="handleConversationToggleOpen"
+      @conversation:create="handleConversationCreate"
+      @conversation:select="handleConversationSelect"
+      @conversation:rename="handleConversationRename"
+      @conversation:delete="handleConversationDelete"
     />
 
     <ActorSection
@@ -160,14 +196,14 @@ watch(activeConversationId, () => {
       :is-saving-actor="isSavingActor"
       :actors="actors"
       :selected-actor-id="selectedActorId"
-      @actor:toggle-open="actorOpen = !actorOpen"
-      @actor:create="onCreateActor"
-      @actor:select="selectActor"
-      @actor:delete="deleteActor"
+      @actor:toggle-open="handleActorToggleOpen"
+      @actor:create="handleActorCreate"
+      @actor:select="handleActorSelect"
+      @actor:delete="handleActorDelete"
     />
   </div>
 
-  <CharacterPickerPopup v-model="showPicker" @new-character="onPopupCreateCharacter" />
+  <CharacterPickerPopup v-model="showPicker" @new-character="handleCharacterPickerCreate" />
 </template>
 
 <style scoped>

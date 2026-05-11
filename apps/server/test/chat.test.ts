@@ -9,6 +9,8 @@ describe("Chat API target validation", () => {
     let char2: Character;
     let char1ConvId: string;
     let char2ConvId: string;
+    let char1SelfActorId: string;
+    let char1UserActorId: string;
 
     before(async () => {
         app = createTestApp();
@@ -24,6 +26,25 @@ describe("Chat API target validation", () => {
 
         const list2 = await app.agent.get(`/v1/characters/${char2.id}/conversations`).expect(200);
         char2ConvId = (list2.body as ListConversationsResponse).conversations[0].id;
+
+        await app.stores.conversationActor.addConversationActor({
+            conversationId: char1ConvId,
+            role: "self",
+            sourceType: "ai_character",
+            displayName: char1.displayName ?? char1.name,
+            characterId: char1.id,
+        });
+
+        const char1Actors = await app.stores.conversationActor.listConversationActors({
+            conversationId: char1ConvId,
+            activeOnly: true,
+        });
+        const selfActor = char1Actors.find(actor => actor.role === "self");
+        const userActor = char1Actors.find(actor => actor.sourceType === "logged_user");
+        assert.ok(selfActor, "expected self actor in test setup");
+        assert.ok(userActor, "expected logged_user actor in test setup");
+        char1SelfActorId = selfActor.id;
+        char1UserActorId = userActor.id;
     });
 
     after(() => {
@@ -76,6 +97,37 @@ describe("Chat API target validation", () => {
             .send({ characterId: char1.id, conversationId: char2ConvId, prompt: "hello" })
             .expect(404);
         assert.match(String(res.body?.message ?? ""), /Conversation not found for character/i);
+    });
+
+    it("POST /v1/chat/dry-run keeps latest assistant history message", async () => {
+        const userMessageContent = "seed user history";
+        const assistantMessageContent = "seed assistant history";
+        await app.stores.chat.appendMessage({
+            id: crypto.randomUUID(),
+            conversationId: char1ConvId,
+            senderActorId: char1UserActorId,
+            content: userMessageContent,
+            createdAt: new Date().toISOString(),
+        });
+        await app.stores.chat.appendMessage({
+            id: crypto.randomUUID(),
+            conversationId: char1ConvId,
+            senderActorId: char1SelfActorId,
+            content: assistantMessageContent,
+            createdAt: new Date().toISOString(),
+        });
+
+        const dryRunRes = await app.agent
+            .post("/v1/chat/dry-run")
+            .send({ characterId: char1.id, conversationId: char1ConvId, prompt: "new prompt" })
+            .expect(200);
+
+        const renderedMessages = dryRunRes.body.messages as Array<{ content: string }>;
+        assert.equal(
+            renderedMessages.some(message => message.content.includes(assistantMessageContent)),
+            true,
+            "dry-run prompt should include latest persisted assistant message",
+        );
     });
 
     it("GET /v1/conversations/:id/messages returns 404 for unknown conversation", async () => {

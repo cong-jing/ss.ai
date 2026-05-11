@@ -4,8 +4,8 @@ export class InMemoryChatStore implements ChatStore {
     private readonly messagesByConv = new Map<string, Message[]>();
     private readonly characterStates = new Map<string, UserCharacterState>();
 
-    private messageKey(userId: string, conversationId: string): string {
-        return `${userId}::${conversationId}`;
+    private messageKey(conversationId: string): string {
+        return conversationId;
     }
 
     private stateKey(userId: string, characterId: string): string {
@@ -15,7 +15,7 @@ export class InMemoryChatStore implements ChatStore {
     // ── Messages ──────────────────────────────────────────────────────────────
 
     async appendMessage(message: Message): Promise<void> {
-        const key = this.messageKey(message.userId, message.conversationId);
+        const key = this.messageKey(message.conversationId);
         const existing = this.messagesByConv.get(key) ?? [];
         this.messagesByConv.set(key, [...existing, message]);
     }
@@ -25,7 +25,7 @@ export class InMemoryChatStore implements ChatStore {
         conversationId: string;
         limit: number;
     }): Promise<Message[]> {
-        const key = this.messageKey(input.userId, input.conversationId);
+        const key = this.messageKey(input.conversationId);
         const all = this.messagesByConv.get(key) ?? [];
         return all.slice(-input.limit);
     }

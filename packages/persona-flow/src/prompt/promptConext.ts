@@ -46,8 +46,11 @@ export const PromptContextBuilder = {
             }),
         ]);
 
-        // Exclude the currentUserMessage (last appended entry) from history
-        const recentMessages = allRecentMessages.slice(0, -1);
+        // Exclude currentUserMessage only when it is actually present in fetched history.
+        // In dry-run flows currentUserMessage is transient (not persisted), so history must stay intact.
+        const recentMessages = allRecentMessages.filter(
+            message => message.id !== input.currentUserMessage.id,
+        );
 
         const actorMap = new Map<string, ConversationActor>(
             actors.map(actor => [actor.id, actor]),

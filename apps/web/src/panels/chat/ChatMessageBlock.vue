@@ -4,6 +4,7 @@ import type { ChatMessage } from "./chatTypes";
 
 defineProps<{
   message: ChatMessage;
+  showDebug?: boolean;
 }>();
 
 const showPrompt = ref(false);
@@ -27,6 +28,7 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
 <template>
   <!-- Debug message: expandable prompt preview -->
   <article v-if="message.role === 'debug'" class="message-block role-debug">
+    <div v-if="showDebug && message.id" class="message-id-row">id: {{ message.id }}</div>
     <details>
       <summary class="debug-summary">
         <span>Prompt Preview</span>
@@ -49,6 +51,7 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
 
   <!-- Normal message -->
   <article v-else class="message-block" :class="[`role-${message.role}`, `status-${message.status ?? 'normal'}`]">
+    <div v-if="showDebug && message.id" class="message-id-row">id: {{ message.id }}</div>
     <header class="message-meta">
       <span class="sender-meta">
         <span class="sender-name">{{ message.senderDisplayName ?? message.role }}</span>
@@ -118,6 +121,21 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
 .status-failed {
   border-color: #ef4444;
   background: #fee2e2;
+}
+
+.message-id-row {
+  margin-bottom: 6px;
+  font-size: 10px;
+  color: #6b7280;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  user-select: text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.role-debug .message-id-row {
+  margin: 6px 10px 0;
 }
 
 .message-meta {

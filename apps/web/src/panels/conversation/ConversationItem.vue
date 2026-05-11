@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 import type { ConversationInfo } from './conversationApi'
+import { useLocalStorage } from '../../shared/ui/useLocalStorage'
 
 const props = defineProps<{
   conversation: ConversationInfo
@@ -16,6 +17,7 @@ const emit = defineEmits<{
 const isEditing = ref(false)
 const titleDraft = ref(props.conversation.title ?? '')
 const titleInputRef = ref<HTMLInputElement | null>(null)
+const showDebug = useLocalStorage('chat.showDebug', false)
 
 watch(
   () => [props.conversation.id, props.conversation.title],
@@ -84,7 +86,7 @@ function saveEdit() {
 
       <div class="conv-meta-row">
         <span class="conv-date">{{ formatDate(conversation.updatedAt) }}</span>
-        <span class="conv-id">{{ conversation.id }}</span>
+        <span v-if="showDebug" class="conv-id">{{ conversation.id }}</span>
       </div>
     </div>
 

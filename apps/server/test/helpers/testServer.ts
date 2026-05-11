@@ -17,6 +17,8 @@ import type { AppStores } from "@ss-ai/persona-flow";
 export interface TestApp {
     /** supertest agent — call `.get()`, `.post()`, `.patch()`, `.delete()` on this. */
     agent: ReturnType<typeof supertest>;
+    /** Direct access to in-memory stores for test data setup. */
+    stores: AppStores;
     /** Delete the temp data directory. No server to stop — there is none. */
     cleanup: () => void;
 }
@@ -69,6 +71,7 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}): T
 
     return {
         agent: supertest(app),
+        stores,
         cleanup: () => fs.rmSync(tmpDir, { recursive: true, force: true }),
     };
 }

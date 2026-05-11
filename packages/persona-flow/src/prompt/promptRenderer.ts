@@ -1,5 +1,6 @@
 import type { PromptContext } from "./promptConext.js";
 import { buildSystemMessages, type RenderedMessage, type BuildSystemMessagesInput } from "./systemPromptBuilder.js";
+import { buildActorAliases } from "./actorAlias.js";
 
 export type { RenderedMessage, BuildSystemMessagesInput };
 
@@ -25,6 +26,8 @@ function toLlmRole(actorRole: string): "system" | "user" | "assistant" {
 
 export const promptRenderer = {
     render(context: PromptContext): RenderedPrompt {
+        const { aliasByActorId } = buildActorAliases(context.actors);
+
         const systemMessages = buildSystemMessages({
             character: context.character,
             userProfile: context.userProfile,
@@ -36,12 +39,14 @@ export const promptRenderer = {
         const historyMessages: RenderedMessage[] = context.recentMessages.map(m => {
             const actor = context.actorMap.get(m.senderActorId);
             const role = actor ? toLlmRole(actor.role) : "user";
-            const label = actor?.displayName ?? m.senderActorId;
+            const alias = aliasByActorId.get(m.senderActorId);
+            const label = alias?.token ?? `p?[${actor?.displayName ?? m.senderActorId}]`;
             return { role, content: `${label}: ${m.content}` };
         });
 
         const currentActor = context.actorMap.get(context.currentUserMessage.senderActorId);
-        const currentLabel = currentActor?.displayName ?? context.currentUserMessage.senderActorId;
+        const currentAlias = aliasByActorId.get(context.currentUserMessage.senderActorId);
+        const currentLabel = currentAlias?.token ?? `p?[${currentActor?.displayName ?? context.currentUserMessage.senderActorId}]`;
         const userMessage: RenderedMessage = {
             role: "user",
             content: `${currentLabel}: ${context.currentUserMessage.content}`,

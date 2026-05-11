@@ -12,6 +12,7 @@ const { updateActor } = useActorViewModel();
 const actorPanelOpen = useLocalStorage("ui.right.actorPanelOpen", true);
 const promptPanelOpen = useLocalStorage("ui.right.promptPanelOpen", true);
 const autoPreview = useLocalStorage("ui.right.autoPromptPreview", false);
+const showDebug = useLocalStorage("chat.showDebug", false);
 
 const editingName = ref("");
 const editingDescription = ref("");
@@ -196,17 +197,21 @@ onBeforeUnmount(() => {
         <span>{{ actorPanelOpen ? "▾" : "▸" }}</span>
       </button>
       <div v-if="actorPanelOpen" class="group-body">
-        <label class="field-label">Character ID</label>
-        <p class="id-text">{{ activeCharacter?.id ?? "(none)" }}</p>
+        <template v-if="showDebug">
+          <label class="field-label">Character ID</label>
+          <p class="id-text">{{ activeCharacter?.id ?? "(none)" }}</p>
 
-        <label class="field-label">Conversation ID</label>
-        <p class="id-text">{{ activeConversationId ?? "(none)" }}</p>
+          <label class="field-label">Conversation ID</label>
+          <p class="id-text">{{ activeConversationId ?? "(none)" }}</p>
+        </template>
 
         <p v-if="!selectedActor" class="hint">左侧选择一个 actor 后可查看详情。</p>
 
         <template v-else>
-          <label class="field-label">Actor ID</label>
-          <p class="id-text">{{ selectedActor.id }}</p>
+          <template v-if="showDebug">
+            <label class="field-label">Actor ID</label>
+            <p class="id-text">{{ selectedActor.id }}</p>
+          </template>
           <p class="hint">sourceType: {{ selectedActor.sourceType }}</p>
 
           <template v-if="canEditActor">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ConversationActor } from "../../conversation/conversationApi";
+import { useLocalStorage } from "../../../shared/ui/useLocalStorage";
 
 defineProps<{
   isOpen: boolean;
@@ -16,6 +17,8 @@ const emit = defineEmits<{
   "actor:select": [id: string];
   "actor:delete": [id: string];
 }>();
+
+const showDebug = useLocalStorage("chat.showDebug", false);
 </script>
 
 <template>
@@ -43,7 +46,7 @@ const emit = defineEmits<{
             <span class="actor-name">{{ actor.displayName }}</span>
             <span class="actor-meta-row">
               <span class="actor-type" :class="`actor-type--${actor.sourceType}`">{{ actor.sourceType }}</span>
-              <span class="actor-id">{{ actor.id }}</span>
+              <span v-if="showDebug" class="actor-id">{{ actor.id }}</span>
             </span>
           </button>
           <button

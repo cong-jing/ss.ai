@@ -8,7 +8,8 @@
 
 import type { Character, PromptLanguage, UserProfile } from "../index.js";
 import type { ConversationActor } from "../stores/character/conversationActor.js";
-import { getPromptBlocks, type LocalizedPromptBlock } from "./localizedPromptBlocks.js";
+import { getPromptBlocks } from "./localizedPromptBlocks.js";
+import { buildActorAliases } from "./actorAlias.js";
 
 /**
  * A single message in the rendered prompt, using a unified role vocabulary.
@@ -44,74 +45,86 @@ function resolvePromptLanguage(input: BuildSystemMessagesInput): PromptLanguage 
     return "zh-CN";
 }
 
-/**
- * Render user profile into a text block using localized field labels.
- */
-function renderUserProfile(userProfile: UserProfile | null, fieldLabels: LocalizedPromptBlock["fieldLabels"]): string {
-    if (!userProfile) return "";
+function parseProfileSnapshot(profileSnapshotJson: string | null): Record<string, unknown> | null {
+    if (!profileSnapshotJson) return null;
+    try {
+        const parsed = JSON.parse(profileSnapshotJson);
+        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+            return parsed as Record<string, unknown>;
+        }
+    } catch {
+        // Ignore malformed snapshot JSON and fall back to other sources.
+    }
+    return null;
+}
 
-    const parts: string[] = [];
+function stringifySnapshotValue(value: unknown): string {
+    if (value === undefined || value === null || value === "") return "";
+    if (Array.isArray(value)) return value.map(item => String(item)).join("，");
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value);
+}
 
-    if (userProfile.name) {
-        parts.push(`${fieldLabels.userName}：${userProfile.name}`);
+function extractLoggedUserInfo(
+    actor: ConversationActor,
+    snapshot: Record<string, unknown> | null,
+    userProfile: UserProfile | null,
+): string {
+    const keys = ["bio", "description", "background"];
+    for (const key of keys) {
+        const text = stringifySnapshotValue(snapshot?.[key]);
+        if (text) return text;
     }
 
-    if (userProfile.preferredAddress) {
-        parts.push(`${fieldLabels.preferredAddress}：${userProfile.preferredAddress}`);
+    if (
+        actor.userProfileId
+        && userProfile
+        && userProfile.userId === actor.userProfileId
+        && userProfile.bio.trim()
+    ) {
+        return userProfile.bio.trim();
     }
 
-    if (userProfile.bio) {
-        parts.push(`${fieldLabels.userBio}：${userProfile.bio}`);
+    return "";
+}
+
+function extractActorInfo(
+    actor: ConversationActor,
+    snapshot: Record<string, unknown> | null,
+    userProfile: UserProfile | null,
+): string {
+    if (actor.sourceType === "logged_user") {
+        return extractLoggedUserInfo(actor, snapshot, userProfile);
     }
 
-    return parts.join("\n");
+    const keys = ["description", "background", "bio"];
+    for (const key of keys) {
+        const text = stringifySnapshotValue(snapshot?.[key]);
+        if (text) return text;
+    }
+
+    return "";
 }
 
 /**
  * Render the active actor list into a text block.
  */
-function renderActors(actors: ConversationActor[] | null | undefined): string {
+function renderActors(actors: ConversationActor[] | null | undefined, userProfile: UserProfile | null): string {
     if (!actors || actors.length === 0) return "";
-    return actors.map(p => {
-        const lines: string[] = [`${p.displayName}（${p.role} / ${p.sourceType}）`];
-        if (p.profileSnapshotJson) {
-            try {
-                const snapshot = JSON.parse(p.profileSnapshotJson);
-                if (typeof snapshot === "object" && snapshot !== null) {
-                    const record = snapshot as Record<string, unknown>;
-                    const preferredKeys = [
-                        "description",
-                        "background",
-                    ];
+    const { aliases } = buildActorAliases(actors);
+    const actorById = new Map<string, ConversationActor>(actors.map(actor => [actor.id, actor]));
 
-                    for (const key of preferredKeys) {
-                        const value = record[key];
-                        if (value === undefined || value === null || value === "") continue;
-                        if (Array.isArray(value)) {
-                            lines.push(`  ${key}：${value.join("，")}`);
-                        } else if (typeof value === "object") {
-                            lines.push(`  ${key}：${JSON.stringify(value)}`);
-                        } else {
-                            lines.push(`  ${key}：${String(value)}`);
-                        }
-                    }
+    return aliases.map(alias => {
+        const p = actorById.get(alias.actorId);
+        if (!p) return `${alias.token}（other / local_actor）`;
 
-                    for (const [k, v] of Object.entries(record)) {
-                        if (preferredKeys.includes(k)) continue;
-                        if (v === undefined || v === null || v === "") continue;
-                        if (Array.isArray(v)) {
-                            lines.push(`  ${k}：${v.join("，")}`);
-                        } else if (typeof v === "object") {
-                            lines.push(`  ${k}：${JSON.stringify(v)}`);
-                        } else {
-                            lines.push(`  ${k}：${String(v)}`);
-                        }
-                    }
-                }
-            } catch {
-                lines.push(`  ${p.profileSnapshotJson}`);
-            }
+        const lines: string[] = [`${alias.token}（${p.role} / ${p.sourceType}）`];
+        const snapshot = parseProfileSnapshot(p.profileSnapshotJson);
+        const info = extractActorInfo(p, snapshot, userProfile);
+        if (info) {
+            lines.push(`  人物信息：${info}`);
         }
+
         return lines.join("\n");
     }).join("\n\n");
 }
@@ -152,14 +165,8 @@ function buildSystemPrompt(input: BuildSystemMessagesInput, language: PromptLang
         sections.push(buildSection(blocks.sectionLabels.characterPersona, input.character.personaPrompt));
     }
 
-    // User profile
-    const userProfileContent = renderUserProfile(input.userProfile, blocks.fieldLabels);
-    if (userProfileContent) {
-        sections.push(buildSection(blocks.sectionLabels.userProfile, userProfileContent));
-    }
-
     // Active conversation actors
-    const actorsContent = renderActors(input.actors);
+    const actorsContent = renderActors(input.actors, input.userProfile);
     if (actorsContent) {
         sections.push(buildSection(blocks.sectionLabels.conversationActors, actorsContent));
     }

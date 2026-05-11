@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Character } from "@ss-ai/contracts";
+import { useLocalStorage } from "../../../shared/ui/useLocalStorage";
 
 const props = defineProps<{
   isOpen: boolean;
@@ -23,6 +24,8 @@ const emit = defineEmits<{
   "character:save": [];
   "character:remove": [];
 }>();
+
+const showDebug = useLocalStorage("chat.showDebug", false);
 </script>
 
 <template>
@@ -37,7 +40,7 @@ const emit = defineEmits<{
         <button class="mini-btn" @click="emit('character:open-picker')">切换</button>
         <template v-if="activeCharacter">
           <span class="current-name" :title="activeCharacter.name">{{ activeCharacter.name }}</span>
-          <span class="current-id" :title="activeCharacter.id">{{ activeCharacter.id }}</span>
+          <span v-if="showDebug" class="current-id" :title="activeCharacter.id">{{ activeCharacter.id }}</span>
         </template>
         <span v-else class="hint">未选择角色</span>
       </div>
