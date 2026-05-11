@@ -3,7 +3,18 @@ import { dirname } from "path";
 import pino, { type LevelWithSilent, type Logger } from "pino";
 
 let logFilePath = "./user-data-dev/qq-bot/qq-bot.log";
-let logger = createLogger(logFilePath);
+let logger = createConsoleLogger();
+
+function createConsoleLogger(): Logger {
+    return pino(
+        {
+            base: undefined,
+            timestamp: pino.stdTimeFunctions.isoTime,
+            level: process.env.LOG_LEVEL?.trim().toLowerCase() || "info",
+        },
+        pino.destination({ dest: 1, sync: true }),
+    );
+}
 
 function createLogger(path: string): Logger {
     mkdirSync(dirname(path), { recursive: true });

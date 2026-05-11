@@ -12,10 +12,11 @@
         "build": "npm run build:server && npm run build:web",
         "build:server": "tsc -p apps/server/tsconfig.json",
         "build:web": "npm run build --workspace=apps/web",
-        "dev": "npm run dev:web",
-        "dev:web": "npm run dev --workspace=apps/web",
+        "dev": "npm run dev:all",
+        "dev:all": "concurrently --names \"server,web\" \"npm run dev:server\" \"npm run dev:web\"",
         "dev:server": "tsx apps/server/src/index.ts",
-        "dev:qq-bot": "tsx apps/qq-bot/src/index.ts --config ./qq-bot.env",
+        "dev:web": "npm run dev --workspace=apps/web",
+        "dev:qq-bot": "chcp 65001 > nul && tsx apps/qq-bot/src/index.ts --config ./qq-bot.env",
         "start": "npm run start:server",
         "start:server": "node apps/server/dist/index.js",
         "test": "npm run test --workspaces --if-present"
@@ -28,9 +29,10 @@
         "zod": "^4.3.6"
     },
     "devDependencies": {
-        "@vitejs/plugin-vue": "^5.2.1",
         "@types/express": "^4.17.21",
         "@types/node": "^22.7.4",
+        "@vitejs/plugin-vue": "^5.2.1",
+        "concurrently": "^9.2.1",
         "esbuild": "^0.24.2",
         "tsx": "^4.19.1",
         "typescript": "^5.6.3",
