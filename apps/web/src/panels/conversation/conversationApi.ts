@@ -2,7 +2,7 @@ import type { ConversationInfo, ConversationActor } from '@ss-ai/contracts'
 import {
     apiListConversations, apiCreateConversation,
     apiSelectConversation, apiDeleteConversation,
-} from '../scenario/scenarioApi'
+} from '../userProfile/userProfileApi'
 
 export type { ConversationInfo }
 export { apiListConversations, apiCreateConversation, apiSelectConversation, apiDeleteConversation }

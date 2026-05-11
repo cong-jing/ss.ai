@@ -2,9 +2,9 @@ import { ref, watch } from "vue";
 import { apiDryRunChat, apiSendChatMessage, apiStreamChatMessage, apiGetMessages } from "./chatApi";
 import type { ChatMessage } from "./chatTypes";
 import { contextVersion } from "../../shared/state/appState";
-import { activeConversationId } from "../conversation/useConversationViewModel";
+import { activeConversationId } from "../sidebar/viewmodels/useConversationViewModel";
 import { activeCharacterId } from "../character/useCharacterViewModel";
-import { actors, selectedActorId } from "../conversation/useActorViewModel";
+import { actors, selectedActorId } from "../sidebar/viewmodels/useActorViewModel";
 import { useToast } from "../../shared/ui/useToast";
 import { useLocalStorage } from "../../shared/ui/useLocalStorage";
 

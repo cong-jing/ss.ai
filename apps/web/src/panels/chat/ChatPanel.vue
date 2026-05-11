@@ -5,7 +5,7 @@ import Panel from "../../shared/ui/Panel.vue";
 import ChatInputBox from "./ChatInputBox.vue";
 import ChatMessageList from "./ChatMessageList.vue";
 import { useChatViewModel } from "./useChatViewModel";
-import { useActorViewModel } from "../conversation/useActorViewModel";
+import { useActorViewModel } from "../sidebar/viewmodels/useActorViewModel";
 
 const vm = useChatViewModel();
 const { messages, isSending, isLoading, error, showDebug, chatDraftInput, sendMessage, clearMessages, loadHistory, dryRunPrompt } = vm;

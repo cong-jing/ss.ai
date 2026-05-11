@@ -2,8 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useLocalStorage } from "../../shared/ui/useLocalStorage";
 import { activeCharacter, activeCharacterId } from "../character/useCharacterViewModel";
-import { activeConversationId } from "../conversation/useConversationViewModel";
-import { actors, selectedActorId, useActorViewModel } from "../conversation/useActorViewModel";
+import { activeConversationId } from "../sidebar/viewmodels/useConversationViewModel";
+import { actors, selectedActorId, useActorViewModel } from "../sidebar/viewmodels/useActorViewModel";
 import { apiDryRunChat } from "../chat/chatApi";
 import { chatDraftInput } from "../chat/useChatViewModel";
 
@@ -192,7 +192,7 @@ onBeforeUnmount(() => {
   <div class="inspector">
     <section class="group">
       <button class="group-header" @click="actorPanelOpen = !actorPanelOpen">
-        <span>Actor</span>
+        <span>ActorEditorSection</span>
         <span>{{ actorPanelOpen ? "▾" : "▸" }}</span>
       </button>
       <div v-if="actorPanelOpen" class="group-body">
@@ -234,7 +234,7 @@ onBeforeUnmount(() => {
 
     <section class="group">
       <button class="group-header" @click="promptPanelOpen = !promptPanelOpen">
-        <span>Prompt Preview</span>
+        <span>PromptPreviewSection</span>
         <span>{{ promptPanelOpen ? "▾" : "▸" }}</span>
       </button>
       <div v-if="promptPanelOpen" class="group-body">

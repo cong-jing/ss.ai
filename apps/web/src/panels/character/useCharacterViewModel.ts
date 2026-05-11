@@ -4,7 +4,7 @@ import { AI_FUNCTIONS, type AiFunction } from '@ss-ai/contracts'
 import {
     apiListCharacters, apiCreateCharacter, apiUpdateCharacter,
     apiDeleteCharacter, apiSetActiveCharacter,
-} from '../scenario/scenarioApi'
+} from '../userProfile/userProfileApi'
 import { useToast } from '../../shared/ui/useToast'
 import { bumpContextVersion } from '../../shared/state/appState'
 

@@ -5,7 +5,7 @@ import Panel from "../../shared/ui/Panel.vue";
 import TextInput from "../../shared/ui/TextInput.vue";
 import CollapsibleSection from "../../shared/ui/CollapsibleSection.vue";
 import { useUserPreferenceViewModel } from "./useUserPreferenceViewModel";
-import { useScenarioViewModel } from "../scenario/useScenarioViewModel";
+import { useUserProfileViewModel } from "../userProfile/useUserProfileViewModel";
 import { AI_FUNCTION_LABELS, type AiFunction } from "@ss-ai/contracts";
 
 const vm = useUserPreferenceViewModel();
@@ -53,7 +53,7 @@ onMounted(() => {
   void loadSettings();
 });
 
-const userVm = useScenarioViewModel();
+const userVm = useUserProfileViewModel();
 const { userInfo, isLoadingUser, isSavingUser, loadUserInfo, saveUserInfo } = userVm;
 onMounted(() => {
   void loadUserInfo();
