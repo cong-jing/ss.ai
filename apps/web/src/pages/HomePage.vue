@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from "vue";
 import ChatPanel from "../panels/chat/ChatPanel.vue";
-import CharacterPanel from "../panels/character/CharacterPanel.vue";
 import ConversationList from "../panels/conversation/ConversationList.vue";
+import InspectorPanel from "../panels/inspector/InspectorPanel.vue";
 import UserPreferencePopup from "../panels/userPreference/UserPreferencePopup.vue";
 import { useCharacterViewModel } from "../panels/character/useCharacterViewModel";
 import { useLocalStorage } from "../shared/ui/useLocalStorage";
@@ -76,10 +76,10 @@ onBeforeUnmount(() => {
     <!-- RIGHT resize handle -->
     <div class="resize-handle" @mousedown="onMouseDown($event, 'right')" />
 
-    <!-- RIGHT: Character editor + Settings trigger -->
+    <!-- RIGHT: Actor inspector + Prompt preview + Settings trigger -->
     <aside class="info-area" :style="{ width: rightWidth + 'px', minWidth: rightWidth + 'px' }">
       <div class="info-scrollable">
-        <CharacterPanel />
+        <InspectorPanel />
       </div>
       <UserPreferencePopup />
     </aside>

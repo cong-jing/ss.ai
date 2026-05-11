@@ -48,7 +48,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
                 id: conversationId,
                 userId: DEFAULT_USER_ID,
                 characterId,
-                title: null,
+                title: "new chat",
                 createdAt: now,
                 updatedAt: now,
             }, { selfDisplayName: character.displayName ?? character.name });
@@ -135,7 +135,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
                         id: newConvId,
                         userId: DEFAULT_USER_ID,
                         characterId,
-                        title: null,
+                        title: "new chat",
                         createdAt: now,
                         updatedAt: now,
                     }, { selfDisplayName: character.displayName ?? character.name });
@@ -148,7 +148,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
                         userProfileId: DEFAULT_USER_ID,
                     });
                     activeConversationId = newConvId;
-                    remaining = [{ id: newConvId, userId: DEFAULT_USER_ID, characterId, title: null, createdAt: now, updatedAt: now }];
+                    remaining = [{ id: newConvId, userId: DEFAULT_USER_ID, characterId, title: "new chat", createdAt: now, updatedAt: now }];
                 }
                 await context.stores.chat.upsertCharacterState({
                     userId: DEFAULT_USER_ID,
@@ -165,5 +165,42 @@ export function registerConversationRoutes(context: HttpApiContext): void {
             };
         },
         handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
+    });
+
+    context.app.patch("/v1/characters/:id/conversations/:convId", async (req, res) => {
+        try {
+            const characterId = req.params.id;
+            const convId = req.params.convId;
+            const character = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId });
+            if (!character || character.status === "archived") {
+                throw new Error(`Character not found: ${characterId}`);
+            }
+
+            const existingConversation = await context.stores.conversation.getConversationById({
+                userId: DEFAULT_USER_ID,
+                conversationId: convId,
+            });
+            if (!existingConversation || existingConversation.characterId !== characterId) {
+                throw new Error(`Conversation not found: ${convId}`);
+            }
+
+            const title = typeof req.body?.title === "string" ? req.body.title.trim() || null : null;
+            const updatedAt = new Date().toISOString();
+            await context.stores.conversation.updateConversationTitle({
+                userId: DEFAULT_USER_ID,
+                conversationId: convId,
+                title,
+                updatedAt,
+            });
+
+            const convList = await context.stores.conversation.listConversations({ userId: DEFAULT_USER_ID, characterId });
+            const updated = convList.find((c) => c.id === convId);
+            res.json({
+                conversation: updated ? toContractConversation(updated) : null,
+                conversations: convList.map(toContractConversation),
+            });
+        } catch (error) {
+            res.status(404).json(toErrorResponse(error));
+        }
     });
 }

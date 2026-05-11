@@ -15,11 +15,30 @@ export class InMemoryConversationStore implements ConversationStore {
         return c;
     }
 
-    async createConversation(conversation: Conversation): Promise<void> {
+    async createConversation(
+        conversation: Conversation,
+        _options: { selfDisplayName: string },
+    ): Promise<{ selfActorId: string; systemActorId: string }> {
         this.conversationsById.set(conversation.id, conversation);
+        return { selfActorId: crypto.randomUUID(), systemActorId: crypto.randomUUID() };
     }
 
     async deleteConversation(input: { userId: string; conversationId: string }): Promise<void> {
         this.conversationsById.delete(input.conversationId);
+    }
+
+    async updateConversationTitle(input: {
+        userId: string;
+        conversationId: string;
+        title: string | null;
+        updatedAt: string;
+    }): Promise<void> {
+        const existing = this.conversationsById.get(input.conversationId);
+        if (!existing || existing.userId !== input.userId) return;
+        this.conversationsById.set(input.conversationId, {
+            ...existing,
+            title: input.title,
+            updatedAt: input.updatedAt,
+        });
     }
 }

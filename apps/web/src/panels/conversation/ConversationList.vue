@@ -1,396 +1,421 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
-import ConversationItem from './ConversationItem.vue'
-import { useConversationViewModel } from './useConversationViewModel'
-import CharacterPickerPopup from '../character/CharacterPickerPopup.vue'
+import { onMounted, ref, watch } from "vue";
+import { useLocalStorage } from "../../shared/ui/useLocalStorage";
+import { useToast } from "../../shared/ui/useToast";
+import ConversationItem from "./ConversationItem.vue";
+import CharacterPickerPopup from "../character/CharacterPickerPopup.vue";
 import {
-  activeCharacterId,
   activeCharacter,
+  activeCharacterId,
+  editDraft,
+  isDirty,
+  isSavingCharacter,
   useCharacterViewModel,
-} from '../character/useCharacterViewModel'
+} from "../character/useCharacterViewModel";
+import {
+  activeConversationId,
+  conversations,
+  isLoadingConversations,
+  useConversationViewModel,
+} from "./useConversationViewModel";
 import {
   actors,
   selectedActorId,
-  expandedActorIds,
   isLoadingActors,
   isSavingActor,
   useActorViewModel,
-} from './useActorViewModel'
+} from "./useActorViewModel";
 
 const {
-    conversations, activeConversationId, isLoadingConversations,
-    load, createConversation, selectConversation, deleteConversation,
-} = useConversationViewModel()
-const { create: createCharacter, select: selectCharacter } = useCharacterViewModel()
+  load: loadCharacters,
+  create: createCharacter,
+  save: saveCharacter,
+  remove: removeCharacter,
+} = useCharacterViewModel();
+const {
+  load: loadConversations,
+  createConversation,
+  selectConversation,
+  deleteConversation,
+  updateTitle,
+} = useConversationViewModel();
 const {
   load: loadActors,
   select: selectActor,
-  toggleExpand,
   createActor,
-  updateActor,
   deleteActor,
-} = useActorViewModel()
+} = useActorViewModel();
 
-const showPicker = ref(false)
-const newActorName = ref('')
-const editingActorId = ref<string | null>(null)
-const editingName = ref('')
-const editingProfileSnapshot = ref('')
+const showPicker = ref(false);
+const newCharacterName = ref("");
+const toast = useToast();
 
-onMounted(() => {
-    if (activeCharacterId.value) {
-      void load()
-      void loadActors()
-    }
-})
+const characterOpen = useLocalStorage("ui.left.characterOpen", true);
+const conversationOpen = useLocalStorage("ui.left.conversationOpen", true);
+const actorOpen = useLocalStorage("ui.left.actorOpen", true);
 
-// Reload when character changes
-watch(activeCharacterId, (id) => {
-    if (!id) {
-      conversations.value = []
-      activeConversationId.value = null
-      void loadActors()
-      return
-    }
-    void load().then(() => loadActors())
-})
-
-watch(activeConversationId, () => {
-  void loadActors()
-})
-
-async function onSelectConversation(id: string) {
-  await selectConversation(id)
-  await loadActors()
-}
-
-async function onCreateConversation() {
-  await createConversation()
-  await loadActors()
-}
-
-async function onDeleteConversation(id: string) {
-  await deleteConversation(id)
-  await loadActors()
-}
-
-async function onNewCharacter() {
-  const created = await createCharacter('New Character', '', '', '')
-  showPicker.value = false
+async function onCreateCharacter() {
+  const created = await createCharacter(newCharacterName.value, "", "", "", "");
   if (created) {
-    await selectCharacter(created.id)
-    await load()
-    await loadActors()
+    newCharacterName.value = "";
+    await loadConversations();
+    await loadActors();
   }
 }
 
+async function onPopupCreateCharacter() {
+  const created = await createCharacter("New Character", "", "", "", "");
+  showPicker.value = false;
+  if (created) {
+    await loadConversations();
+    await loadActors();
+  }
+}
+
+async function onSelectConversation(id: string) {
+  await selectConversation(id);
+  await loadActors();
+}
+
+async function onCreateConversation() {
+  await createConversation();
+  await loadActors();
+}
+
+async function onDeleteConversation(id: string) {
+  await deleteConversation(id);
+  await loadActors();
+}
+
 async function onCreateActor() {
-  await createActor(newActorName.value)
-  newActorName.value = ''
+  await createActor("new actor");
 }
 
-function startEdit(actorId: string, name: string, profileSnapshotJson: string | null) {
-  editingActorId.value = actorId
-  editingName.value = name
-  editingProfileSnapshot.value = profileSnapshotJson ?? ''
+async function onRenameConversation(conversationId: string, title: string | null) {
+  if (!activeCharacterId.value) return;
+  await updateTitle(conversationId, title);
+  toast.success("Conversation title saved");
 }
 
-function cancelEdit() {
-  editingActorId.value = null
-  editingName.value = ''
-  editingProfileSnapshot.value = ''
-}
+onMounted(() => {
+  void loadCharacters();
+  if (activeCharacterId.value) {
+    void loadConversations();
+    void loadActors();
+  }
+});
 
-async function submitEdit(actorId: string) {
-  const name = editingName.value.trim()
-  if (!name) return
-  await updateActor({
-    actorId,
-    displayName: name,
-    profileSnapshotJson: editingProfileSnapshot.value.trim() || null,
-  })
-  cancelEdit()
-}
+watch(activeCharacterId, (id) => {
+  if (!id) {
+    conversations.value = [];
+    activeConversationId.value = null;
+    actors.value = [];
+    selectedActorId.value = null;
+    return;
+  }
+  void loadConversations().then(() => loadActors());
+});
+
+watch(activeConversationId, () => {
+  void loadActors();
+});
 </script>
 
 <template>
-  <div class="conv-list">
-    <div class="section-header">
-      <span class="section-title">Character</span>
-      <button class="switch-btn" @click="showPicker = true">Switch</button>
-    </div>
-    <div class="section-body section-body--tight">
-      <p v-if="activeCharacter" class="selected-character">{{ activeCharacter.name }}</p>
-      <p v-else class="hint">No character selected.</p>
-    </div>
-
-    <div class="conv-list-header">
-      <span class="conv-list-title">Conversations</span>
-      <button
-        class="new-btn"
-        :disabled="isLoadingConversations || !activeCharacterId"
-        @click="onCreateConversation"
-      >＋</button>
-    </div>
-
-    <div class="conv-list-body">
-      <p v-if="isLoadingConversations" class="hint">Loading…</p>
-      <p v-else-if="!activeCharacterId" class="hint">Select a character first.</p>
-      <p v-else-if="conversations.length === 0" class="hint">No conversations yet.</p>
-
-      <ConversationItem
-        v-for="conv in conversations"
-        :key="conv.id"
-        :conversation="conv"
-        :is-active="conv.id === activeConversationId"
-        @select="onSelectConversation(conv.id)"
-        @delete="onDeleteConversation(conv.id)"
-      />
-    </div>
-
-    <div class="section-header">
-      <span class="section-title">Actors</span>
-    </div>
-    <div class="section-body">
-      <p v-if="!activeConversationId" class="hint">Select a conversation first.</p>
-      <p v-else-if="isLoadingActors" class="hint">Loading actors…</p>
-      <template v-else>
-        <div class="actor-create">
-          <input
-            v-model="newActorName"
-            class="actor-input"
-            placeholder="New actor name"
-            :disabled="isSavingActor"
-            @keydown.enter.prevent="onCreateActor"
-          />
-          <button class="actor-add-btn" :disabled="isSavingActor || !newActorName.trim()" @click="onCreateActor">Add</button>
+  <div class="sidebar">
+    <section class="group group--character">
+      <button class="group-header" @click="characterOpen = !characterOpen">
+        <span>角色</span>
+        <span>{{ characterOpen ? "▾" : "▸" }}</span>
+      </button>
+      <div v-if="characterOpen" class="group-body compact">
+        <div class="row-inline row-inline--between">
+          <button class="mini-btn" @click="showPicker = true">切换</button>
+          <template v-if="activeCharacter">
+            <span class="current-name" :title="activeCharacter.name">{{ activeCharacter.name }}</span>
+            <span class="current-id" :title="activeCharacter.id">{{ activeCharacter.id }}</span>
+          </template>
+          <span v-else class="hint">未选择角色</span>
         </div>
 
-        <p v-if="actors.length === 0" class="hint">No actors yet.</p>
+        <template v-if="activeCharacter">
+          <label class="field-label">名称</label>
+          <input v-model="editDraft.name" class="input" :disabled="isSavingCharacter" />
 
-        <div v-for="actor in actors" :key="actor.id" class="actor-item" :class="{ 'actor-item--selected': actor.id === selectedActorId }">
-          <div class="actor-row">
-            <button class="actor-select" @click="selectActor(actor.id)">
-              <span class="actor-name">{{ actor.displayName }}</span>
-              <span class="actor-type" :class="`actor-type--${actor.sourceType}`">{{ actor.sourceType }}</span>
+          <label class="field-label">显示名</label>
+          <input v-model="editDraft.displayName" class="input" :disabled="isSavingCharacter" placeholder="(可选)" />
+
+          <label class="field-label">描述</label>
+          <textarea v-model="editDraft.description" class="textarea" rows="2" :disabled="isSavingCharacter" />
+
+          <label class="field-label">Persona</label>
+          <textarea v-model="editDraft.personaPrompt" class="textarea" rows="3" :disabled="isSavingCharacter" />
+
+          <div class="actions">
+            <button class="mini-btn primary" :disabled="isSavingCharacter || !isDirty || !editDraft.name.trim()" @click="saveCharacter">
+              保存
             </button>
-            <div class="actor-actions">
-              <button class="actor-mini-btn" @click="toggleExpand(actor.id)">
-                {{ expandedActorIds.includes(actor.id) ? '▾' : '▸' }}
-              </button>
-              <button
-                v-if="actor.sourceType === 'local_actor'"
-                class="actor-mini-btn"
-                @click="startEdit(actor.id, actor.displayName, actor.profileSnapshotJson)"
-              >Edit</button>
-              <button
-                v-if="actor.sourceType === 'local_actor'"
-                class="actor-mini-btn danger"
-                @click="deleteActor(actor.id)"
-              >Del</button>
-              <span v-else class="actor-lock">Read-only</span>
-            </div>
+            <button class="mini-btn danger" :disabled="isSavingCharacter" @click="removeCharacter">删除</button>
           </div>
-          <div v-if="expandedActorIds.includes(actor.id)" class="actor-expand">
-            <template v-if="editingActorId === actor.id">
-              <input
-                v-model="editingName"
-                class="actor-input"
-                :disabled="isSavingActor"
-                @keydown.enter.prevent="submitEdit(actor.id)"
-              />
-              <textarea
-                v-model="editingProfileSnapshot"
-                class="actor-textarea"
-                rows="3"
-                :disabled="isSavingActor"
-                placeholder="Profile snapshot JSON (optional)"
-              />
-              <div class="actor-edit-actions">
-                <button class="actor-mini-btn" :disabled="isSavingActor || !editingName.trim()" @click="submitEdit(actor.id)">Save</button>
-                <button class="actor-mini-btn" :disabled="isSavingActor" @click="cancelEdit">Cancel</button>
-              </div>
-            </template>
-            <template v-else>
-              <p class="actor-meta">id: {{ actor.id }}</p>
-              <p class="actor-meta">source: {{ actor.sourceType }}</p>
-              <p v-if="actor.profileSnapshotJson" class="actor-meta">snapshot: {{ actor.profileSnapshotJson }}</p>
-            </template>
-          </div>
+        </template>
+
+        <template v-else>
+          <label class="field-label">新角色名称</label>
+          <input v-model="newCharacterName" class="input" :disabled="isSavingCharacter" @keydown.enter.prevent="onCreateCharacter" />
+          <button class="mini-btn primary" :disabled="isSavingCharacter || !newCharacterName.trim()" @click="onCreateCharacter">创建</button>
+        </template>
+      </div>
+    </section>
+
+    <section class="group group--conversation">
+      <button class="group-header" @click="conversationOpen = !conversationOpen">
+        <span>对话</span>
+        <span>{{ conversationOpen ? "▾" : "▸" }}</span>
+      </button>
+      <div v-if="conversationOpen" class="group-body">
+        <div class="row-inline">
+          <button class="mini-btn" :disabled="isLoadingConversations || !activeCharacterId" @click="onCreateConversation">+ 新建</button>
+          <span v-if="isLoadingConversations" class="hint">加载中...</span>
         </div>
-      </template>
-    </div>
+
+        <p v-if="!activeCharacterId" class="hint">请先选择角色。</p>
+        <p v-else-if="conversations.length === 0" class="hint">暂无对话。</p>
+
+        <ConversationItem
+          v-for="conv in conversations"
+          :key="conv.id"
+          :conversation="conv"
+          :is-active="conv.id === activeConversationId"
+          @select="onSelectConversation(conv.id)"
+          @rename="onRenameConversation(conv.id, $event)"
+          @delete="onDeleteConversation(conv.id)"
+        />
+      </div>
+    </section>
+
+    <section class="group group--actor">
+      <button class="group-header" @click="actorOpen = !actorOpen">
+        <span>Actor</span>
+        <span>{{ actorOpen ? "▾" : "▸" }}</span>
+      </button>
+      <div v-if="actorOpen" class="group-body">
+        <p v-if="!activeConversationId" class="hint">请先选择对话。</p>
+        <template v-else>
+          <button class="mini-btn" :disabled="isSavingActor" @click="onCreateActor">+ 添加 Actor</button>
+
+          <p v-if="isLoadingActors" class="hint">加载中...</p>
+          <p v-else-if="actors.length === 0" class="hint">暂无 actor。</p>
+
+          <div
+            v-for="actor in actors"
+            :key="actor.id"
+            class="actor-row"
+            :class="{ active: actor.id === selectedActorId }"
+          >
+            <button class="actor-main" @click="selectActor(actor.id)">
+              <span class="actor-name">{{ actor.displayName }}</span>
+              <span class="actor-meta-row">
+                <span class="actor-type" :class="`actor-type--${actor.sourceType}`">{{ actor.sourceType }}</span>
+                <span class="actor-id">{{ actor.id }}</span>
+              </span>
+            </button>
+            <button
+              v-if="actor.sourceType === 'local_actor'"
+              class="actor-delete"
+              :disabled="isSavingActor"
+              @click="deleteActor(actor.id)"
+            >
+              ✕
+            </button>
+          </div>
+        </template>
+      </div>
+    </section>
   </div>
 
-  <CharacterPickerPopup v-model="showPicker" @new-character="onNewCharacter" />
+  <CharacterPickerPopup v-model="showPicker" @new-character="onPopupCreateCharacter" />
 </template>
 
 <style scoped>
-.conv-list {
+.sidebar {
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: auto;
+  background: #f8fafc;
+  padding: 8px;
+  gap: 8px;
+}
+
+.group {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
   overflow: hidden;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 12px 6px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.section-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.section-body {
-  border-bottom: 1px solid #e5e7eb;
-  padding: 8px 8px;
-  overflow-y: auto;
-  max-height: 34%;
-}
-
-.section-body--tight {
-  max-height: none;
-  overflow: hidden;
-}
-
-.selected-character {
-  margin: 0;
-  font-size: 13px;
-  color: #111827;
-}
-
-.switch-btn {
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
   background: #fff;
-  color: #374151;
+}
+
+.group-header {
+  width: 100%;
+  border: none;
+  background: #f3f4f6;
   font-size: 11px;
-  padding: 3px 8px;
-  cursor: pointer;
-}
-
-.switch-btn:hover {
-  background: #f3f4f6;
-}
-
-.conv-list-header {
+  font-weight: 600;
+  color: #4b5563;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 12px 8px;
-  flex-shrink: 0;
-  border-bottom: 1px solid #e5e7eb;
+  cursor: pointer;
 }
 
-.conv-list-title {
-  font-size: 12px;
-  font-weight: 600;
+.group--character .group-header {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.group--conversation .group-header {
+  background: #ecfeff;
+  color: #0f766e;
+}
+
+.group--actor .group-header {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.group-body {
+  padding: 8px 8px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-left: 2px solid #e5e7eb;
+}
+
+.group--character .group-body {
+  border-left-color: #c7d2fe;
+}
+
+.group--conversation .group-body {
+  border-left-color: #99f6e4;
+}
+
+.group--actor .group-body {
+  border-left-color: #fcd34d;
+}
+
+.group-body.compact {
+  gap: 5px;
+}
+
+.field-label {
+  font-size: 10px;
   color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
-.new-btn {
-  width: 24px;
-  height: 24px;
+.input,
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  color: #374151;
+  font-size: 11px;
+  padding: 4px 6px;
+  font-family: inherit;
+}
+
+.textarea {
+  resize: vertical;
+  line-height: 1.35;
+}
+
+.row-inline {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 0;
+  gap: 6px;
 }
 
-.new-btn:hover:not(:disabled) {
-  background: #f3f4f6;
+.row-inline--between {
+  justify-content: space-between;
 }
 
-.new-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.conv-list-body {
+.current-name {
   flex: 1;
-  overflow-y: auto;
-  padding: 6px 6px;
+  font-size: 11px;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.current-id {
+  font-size: 10px;
+  color: #6b7280;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  user-select: text;
+  white-space: nowrap;
 }
 
 .hint {
-  margin: 8px 4px;
-  font-size: 12px;
+  margin: 0;
+  font-size: 11px;
   color: #9ca3af;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+}
+
+.mini-btn {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #374151;
+  cursor: pointer;
+}
+
+.mini-btn.primary {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.mini-btn.danger {
+  color: #b91c1c;
+}
+
+.mini-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .actor-create {
   display: flex;
   gap: 6px;
-  margin-bottom: 6px;
-}
-
-.actor-input {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  padding: 4px 6px;
-  font-size: 12px;
-}
-
-.actor-textarea {
-  margin-top: 6px;
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  padding: 6px;
-  font-size: 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-.actor-add-btn {
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: #fff;
-  font-size: 12px;
-  padding: 4px 8px;
-  cursor: pointer;
-}
-
-.actor-item {
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  margin-bottom: 6px;
-  background: #fff;
-}
-
-.actor-item--selected {
-  border-color: #93c5fd;
-  background: #eff6ff;
 }
 
 .actor-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
   padding: 4px;
+  background: #fff;
 }
 
-.actor-select {
+.actor-row.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.actor-main {
   flex: 1;
+  min-width: 0;
   border: none;
   background: none;
   text-align: left;
@@ -399,79 +424,85 @@ async function submitEdit(actorId: string) {
 
 .actor-name {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   color: #111827;
 }
 
 .actor-type {
-  display: block;
   font-size: 10px;
-  color: #111827;
-  width: fit-content;
-  margin-top: 2px;
+  color: #334155;
+  border: 1px solid #cbd5e1;
   border-radius: 999px;
+  background: #f8fafc;
   padding: 1px 6px;
-  background: #e5e7eb;
+  line-height: 1.4;
 }
 
 .actor-type--local_actor {
-  background: #dbeafe;
+  background: #eff6ff;
+  border-color: #bfdbfe;
   color: #1d4ed8;
 }
 
-.actor-type--logged_user {
-  background: #dcfce7;
+.actor-type--ai_character {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
   color: #166534;
 }
 
-.actor-type--ai_character {
-  background: #ede9fe;
-  color: #5b21b6;
+.actor-type--logged_user {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
 }
 
 .actor-type--system {
-  background: #fee2e2;
-  color: #991b1b;
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #4b5563;
 }
 
-.actor-actions {
+.actor-meta-row {
+  margin-top: 2px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.actor-mini-btn {
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  background: #fff;
+.actor-id {
   font-size: 10px;
-  padding: 2px 5px;
-  cursor: pointer;
+  color: #6b7280;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  user-select: text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.actor-mini-btn.danger {
+.actor-delete {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 11px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.actor-delete:hover:not(:disabled) {
+  background: #fee2e2;
   color: #b91c1c;
 }
 
-.actor-lock {
-  font-size: 10px;
-  color: #6b7280;
-}
-
-.actor-expand {
-  border-top: 1px solid #e5e7eb;
-  padding: 6px;
-}
-
-.actor-meta {
-  margin: 0;
-  font-size: 10px;
-  color: #6b7280;
-}
-
-.actor-edit-actions {
-  margin-top: 6px;
-  display: flex;
-  gap: 4px;
+.actor-delete:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 </style>

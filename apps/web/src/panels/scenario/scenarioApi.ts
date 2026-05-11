@@ -37,16 +37,17 @@ export async function apiListCharacters(): Promise<ListCharactersResponse> {
 
 export async function apiCreateCharacter(
     name: string,
+    displayName = "",
     description = "",
     personaPrompt = "",
     greetingMessage?: string,
 ): Promise<Character> {
-    return callApi(ApiCreateCharacter, { name, description, personaPrompt, greetingMessage });
+    return callApi(ApiCreateCharacter, { name, displayName, description, personaPrompt, greetingMessage });
 }
 
 export async function apiUpdateCharacter(
     id: string,
-    patch: { name?: string; description?: string; personaPrompt?: string; greetingMessage?: string; modelConfig?: CharacterModelConfig }
+    patch: { name?: string; displayName?: string; description?: string; personaPrompt?: string; greetingMessage?: string; modelConfig?: CharacterModelConfig }
 ): Promise<Character> {
     const res = await fetch(`/v1/characters/${encodeURIComponent(id)}`, {
         method: "PATCH",

@@ -19,6 +19,7 @@ export type CharacterModelConfig = Partial<Record<AiFunction, CharacterFunctionM
 export interface Character {
     id: string;
     name: string;
+    displayName: string | null;
     description: string;
     personaPrompt: string;
     greetingMessage: string | null;
@@ -32,6 +33,7 @@ export interface Character {
 
 export interface CreateCharacterRequest {
     name: string;
+    displayName?: string;
     description?: string;
     personaPrompt?: string;
     greetingMessage?: string;
@@ -39,6 +41,7 @@ export interface CreateCharacterRequest {
 
 export interface UpdateCharacterRequest {
     name?: string;
+    displayName?: string;
     description?: string;
     personaPrompt?: string;
     greetingMessage?: string;

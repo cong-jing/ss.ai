@@ -70,14 +70,17 @@ export function useActorViewModel() {
         }
     }
 
-    async function createActor(displayName: string): Promise<void> {
+    async function createActor(displayName = "new actor", profileSnapshotJson?: string | null): Promise<void> {
         const convId = activeConversationId.value
         const name = displayName.trim()
         if (!convId || !name) return
 
         isSavingActor.value = true
         try {
-            const { actor } = await apiCreateConversationActor(convId, { displayName: name })
+            const { actor } = await apiCreateConversationActor(convId, {
+                displayName: name,
+                profileSnapshotJson,
+            })
             actors.value = [...actors.value, actor]
             selectedActorId.value = actor.id
             expandedActorIds.value = [...expandedActorIds.value, actor.id]

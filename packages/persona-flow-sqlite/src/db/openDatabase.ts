@@ -153,7 +153,7 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             ? `COALESCE(sender_actor_id, '')`
             : hasLegacySenderColumn
                 ? `COALESCE(sender_participant_id, '')`
-            : `''`;
+                : `''`;
         sqlite.exec(`
             CREATE TABLE IF NOT EXISTS messages_new (
                 id                   TEXT PRIMARY KEY,

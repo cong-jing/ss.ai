@@ -43,4 +43,14 @@ export interface ConversationStore {
      * Delete a conversation record and all its associated messages and actors.
      */
     deleteConversation(input: { userId: string; conversationId: string }): Promise<void>;
+
+    /**
+     * Update a conversation title.
+     */
+    updateConversationTitle(input: {
+        userId: string;
+        conversationId: string;
+        title: string | null;
+        updatedAt: string;
+    }): Promise<void>;
 }

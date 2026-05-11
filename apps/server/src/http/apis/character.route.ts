@@ -32,6 +32,7 @@ function toContractCharacter(c: PFCharacter): ContractCharacter {
     return {
         id: c.id,
         name: c.name,
+        displayName: c.displayName ?? null,
         description: c.description ?? "",
         personaPrompt: c.personaPrompt,
         greetingMessage: c.greetingMessage ?? null,
@@ -70,10 +71,10 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 id: crypto.randomUUID(),
                 userId: DEFAULT_USER_ID,
                 name,
+                displayName: typeof body.displayName === "string" ? body.displayName.trim() || null : null,
                 description: typeof body.description === "string" ? body.description.trim() || null : null,
                 personaPrompt: typeof body.personaPrompt === "string" ? body.personaPrompt.trim() : "",
                 greetingMessage: typeof body.greetingMessage === "string" ? body.greetingMessage.trim() || null : null,
-                displayName: null,
                 avatarUrl: null,
                 modelConfig: {},
                 generationConfig: {},
@@ -90,7 +91,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 id: conversationId,
                 userId: DEFAULT_USER_ID,
                 characterId: character.id,
-                title: null,
+                title: "new chat",
                 createdAt: now,
                 updatedAt: now,
             }, { selfDisplayName: character.displayName ?? character.name });
@@ -136,6 +137,9 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 updatedAt: new Date().toISOString(),
             };
             if (typeof body?.name === "string") patch.name = body.name.trim();
+            if (Object.prototype.hasOwnProperty.call(body, "displayName")) {
+                patch.displayName = typeof body.displayName === "string" ? body.displayName.trim() || null : null;
+            }
             if (typeof body?.description === "string") patch.description = body.description.trim() || null;
             if (typeof body?.personaPrompt === "string") patch.personaPrompt = body.personaPrompt.trim();
             if (Object.prototype.hasOwnProperty.call(body, "greetingMessage")) {

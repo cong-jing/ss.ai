@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed } from "vue";
 import Button from "../../shared/ui/Button.vue";
 import { useLocalStorage } from "../../shared/ui/useLocalStorage";
 
 const props = defineProps<{
   disabled?: boolean;
+  modelValue?: string;
   actors?: Array<{ id: string; displayName: string }>;
   selectedActorId?: string | null;
 }>();
@@ -12,10 +13,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   send: [text: string, stream: boolean];
   dryRun: [text: string];
+  "update:modelValue": [value: string];
   "update:selectedActorId": [actorId: string];
 }>();
 
-const text = ref("");
+const text = computed({
+  get: () => props.modelValue ?? "",
+  set: (value: string) => emit("update:modelValue", value),
+});
 const streamMode = useLocalStorage("chat.streamMode", false);
 
 function submit() {
@@ -66,7 +71,7 @@ function onKeydown(event: KeyboardEvent) {
         </label>
       </div>
       <div class="toolbar-right">
-        <button class="dry-run-btn" :disabled="disabled" @click="emit('dryRun', text)">
+          <button class="dry-run-btn" :disabled="disabled" @click="emit('dryRun', text)">
           Dry Run
         </button>
         <Button :disabled="disabled" @click="submit">Send</Button>

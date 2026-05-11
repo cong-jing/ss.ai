@@ -11,11 +11,22 @@ export type { ConversationActor }
 
 /** Stub – PATCH endpoint not yet implemented on the server. */
 export async function apiUpdateConversationTitle(
-    _characterId: string,
-    _conversationId: string,
-    _title: string | null,
+    characterId: string,
+    conversationId: string,
+    title: string | null,
 ): Promise<void> {
-    throw new Error('Update conversation title: not implemented yet')
+    const res = await fetch(
+        `/v1/characters/${encodeURIComponent(characterId)}/conversations/${encodeURIComponent(conversationId)}`,
+        {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title }),
+        },
+    )
+    if (!res.ok) {
+        const err = await res.json() as { message?: string }
+        throw new Error(err.message ?? `Request failed: ${res.status}`)
+    }
 }
 
 export async function apiListConversationActors(conversationId: string): Promise<{ actors: ConversationActor[] }> {

@@ -8,7 +8,7 @@ import { useChatViewModel } from "./useChatViewModel";
 import { useActorViewModel } from "../conversation/useActorViewModel";
 
 const vm = useChatViewModel();
-const { messages, isSending, isLoading, error, showDebug, sendMessage, clearMessages, loadHistory, dryRunPrompt } = vm;
+const { messages, isSending, isLoading, error, showDebug, chatDraftInput, sendMessage, clearMessages, loadHistory, dryRunPrompt } = vm;
 const { actors, selectedActorId, select: selectActor } = useActorViewModel();
 
 onMounted(() => {
@@ -36,6 +36,7 @@ onMounted(() => {
 
       <ChatInputBox
         :disabled="isSending"
+        v-model="chatDraftInput"
         :actors="actors.map(actor => ({ id: actor.id, displayName: actor.displayName }))"
         :selected-actor-id="selectedActorId"
         @send="(text, stream) => sendMessage(text, stream)"

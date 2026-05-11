@@ -8,6 +8,8 @@ import { actors, selectedActorId } from "../conversation/useActorViewModel";
 import { useToast } from "../../shared/ui/useToast";
 import { useLocalStorage } from "../../shared/ui/useLocalStorage";
 
+export const chatDraftInput = ref("");
+
 function createId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -209,6 +211,7 @@ export function useChatViewModel() {
         isLoading,
         error,
         showDebug,
+        chatDraftInput,
         sendMessage,
         clearMessages,
         loadHistory,

@@ -111,4 +111,18 @@ export class SQLiteConversationStore implements ConversationStore {
             eq(conversations.id, input.conversationId),
         ));
     }
+
+    async updateConversationTitle(input: {
+        userId: string;
+        conversationId: string;
+        title: string | null;
+        updatedAt: string;
+    }): Promise<void> {
+        await this.db.update(conversations)
+            .set({ title: input.title, updatedAt: input.updatedAt })
+            .where(and(
+                eq(conversations.userId, input.userId),
+                eq(conversations.id, input.conversationId),
+            ));
+    }
 }

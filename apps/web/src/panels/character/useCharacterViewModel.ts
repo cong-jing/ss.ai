@@ -28,9 +28,9 @@ function emptyOverrides(): Record<AiFunction, FnOverride> {
 }
 
 export const editDraft = ref<{
-    name: string; description: string; personaPrompt: string; greetingMessage: string
+    name: string; displayName: string; description: string; personaPrompt: string; greetingMessage: string
     modelOverrides: Record<AiFunction, FnOverride>
-}>({ name: '', description: '', personaPrompt: '', greetingMessage: '', modelOverrides: emptyOverrides() })
+}>({ name: '', displayName: '', description: '', personaPrompt: '', greetingMessage: '', modelOverrides: emptyOverrides() })
 
 const savedDraftJson = ref('')
 export const isDirty = computed(() => JSON.stringify(editDraft.value) !== savedDraftJson.value)
@@ -48,6 +48,7 @@ function syncDraft(): void {
     }
     editDraft.value = {
         name: c?.name ?? '',
+        displayName: c?.displayName ?? '',
         description: c?.description ?? '',
         personaPrompt: c?.personaPrompt ?? '',
         greetingMessage: c?.greetingMessage ?? '',
@@ -88,13 +89,13 @@ export function useCharacterViewModel() {
     }
 
     async function create(
-        name: string, description: string, personaPrompt: string, greetingMessage: string,
+        name: string, displayName: string, description: string, personaPrompt: string, greetingMessage: string,
     ): Promise<Character | null> {
         if (!name.trim()) return null
         isSavingCharacter.value = true
         try {
             const created = await apiCreateCharacter(
-                name.trim(), description.trim(), personaPrompt.trim(),
+                name.trim(), displayName.trim(), description.trim(), personaPrompt.trim(),
                 greetingMessage.trim() || undefined,
             )
             characters.value.push(created)
@@ -124,6 +125,7 @@ export function useCharacterViewModel() {
             }
             const updated = await apiUpdateCharacter(activeCharacterId.value, {
                 name: editDraft.value.name,
+                displayName: editDraft.value.displayName,
                 description: editDraft.value.description,
                 personaPrompt: editDraft.value.personaPrompt,
                 greetingMessage: editDraft.value.greetingMessage,

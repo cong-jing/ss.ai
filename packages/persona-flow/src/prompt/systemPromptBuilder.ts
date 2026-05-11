@@ -78,8 +78,34 @@ function renderActors(actors: ConversationActor[] | null | undefined): string {
             try {
                 const snapshot = JSON.parse(p.profileSnapshotJson);
                 if (typeof snapshot === "object" && snapshot !== null) {
-                    for (const [k, v] of Object.entries(snapshot)) {
-                        lines.push(`  ${k}：${v}`);
+                    const record = snapshot as Record<string, unknown>;
+                    const preferredKeys = [
+                        "description",
+                        "background",
+                    ];
+
+                    for (const key of preferredKeys) {
+                        const value = record[key];
+                        if (value === undefined || value === null || value === "") continue;
+                        if (Array.isArray(value)) {
+                            lines.push(`  ${key}：${value.join("，")}`);
+                        } else if (typeof value === "object") {
+                            lines.push(`  ${key}：${JSON.stringify(value)}`);
+                        } else {
+                            lines.push(`  ${key}：${String(value)}`);
+                        }
+                    }
+
+                    for (const [k, v] of Object.entries(record)) {
+                        if (preferredKeys.includes(k)) continue;
+                        if (v === undefined || v === null || v === "") continue;
+                        if (Array.isArray(v)) {
+                            lines.push(`  ${k}：${v.join("，")}`);
+                        } else if (typeof v === "object") {
+                            lines.push(`  ${k}：${JSON.stringify(v)}`);
+                        } else {
+                            lines.push(`  ${k}：${String(v)}`);
+                        }
                     }
                 }
             } catch {
