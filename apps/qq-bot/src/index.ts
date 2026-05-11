@@ -83,7 +83,7 @@ async function handleMessage(event: any): Promise<void> {
 
     // Send message to server and get reply
     console.log(`[bot] chat: character=${characterId}, conversation=${conversationId}, prompt="${text}"`);
-    const reply = await chat(characterId, text);
+    const reply = await chat(characterId, conversationId, text);
     console.log(`[bot] reply: "${reply}"`);
 
     // Forward reply back to QQ

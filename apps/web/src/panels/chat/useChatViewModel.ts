@@ -3,6 +3,7 @@ import { apiDryRunChat, apiSendChatMessage, apiStreamChatMessage, apiGetMessages
 import type { ChatMessage } from "./chatTypes";
 import { contextVersion } from "../../shared/state/appState";
 import { activeConversationId } from "../conversation/useConversationViewModel";
+import { activeCharacterId } from "../character/useCharacterViewModel";
 import { useToast } from "../../shared/ui/useToast";
 import { useLocalStorage } from "../../shared/ui/useLocalStorage";
 
@@ -11,6 +12,7 @@ function createId(prefix: string): string {
 }
 
 export function useChatViewModel() {
+    const toast = useToast();
     const messages = ref<ChatMessage[]>([]);
     const isSending = ref(false);
     const isLoading = ref(false);
@@ -19,6 +21,15 @@ export function useChatViewModel() {
     async function sendMessage(text: string, stream = false) {
         const prompt = text.trim();
         if (!prompt) {
+            return;
+        }
+
+        const characterId = activeCharacterId.value;
+        const conversationId = activeConversationId.value;
+        if (!characterId || !conversationId) {
+            const message = "Please select a character and conversation before sending a message.";
+            error.value = message;
+            toast.error(message);
             return;
         }
 
@@ -46,6 +57,8 @@ export function useChatViewModel() {
             try {
                 let capturedPromptMessages: import("./chatTypes").DebugMessage[] | undefined;
                 const result = await apiStreamChatMessage(
+                    characterId,
+                    conversationId,
                     prompt,
                     (chunk) => {
                         const msg = messages.value.find(m => m.id === msgId);
@@ -78,7 +91,7 @@ export function useChatViewModel() {
         }
 
         try {
-            const response = await apiSendChatMessage(prompt, showDebug.value);
+            const response = await apiSendChatMessage(characterId, conversationId, prompt, showDebug.value);
             messages.value.push({
                 id: response.requestId,
                 role: "assistant",
@@ -113,8 +126,15 @@ export function useChatViewModel() {
         const prompt = text.trim();
         if (!prompt) return;
 
+        const characterId = activeCharacterId.value;
+        const conversationId = activeConversationId.value;
+        if (!characterId || !conversationId) {
+            toast.error("Please select a character and conversation before dry-run.");
+            return;
+        }
+
         try {
-            const result = await apiDryRunChat(prompt);
+            const result = await apiDryRunChat(characterId, conversationId, prompt);
             console.group("[dry-run] Assembled prompt messages");
             for (const msg of result.messages) {
                 console.log(`--- [${msg.role}] ---`);
@@ -158,7 +178,6 @@ export function useChatViewModel() {
                 status: "normal" as const,
             }));
         } catch (e) {
-            const toast = useToast();
             toast.error(e instanceof Error ? e.message : String(e));
             messages.value = [];
         } finally {

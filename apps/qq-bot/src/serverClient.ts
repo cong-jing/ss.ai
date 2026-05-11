@@ -61,7 +61,7 @@ export async function selectConversation(
 }
 
 /** Send a chat message and return the text reply. */
-export async function chat(characterId: string, prompt: string): Promise<string> {
-    const res = await apiFetch<ChatResponse>("/v1/chat", "POST", { characterId, prompt });
+export async function chat(characterId: string, conversationId: string, prompt: string): Promise<string> {
+    const res = await apiFetch<ChatResponse>("/v1/chat", "POST", { characterId, conversationId, prompt });
     return res.output;
 }

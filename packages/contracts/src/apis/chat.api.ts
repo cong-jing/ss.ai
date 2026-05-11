@@ -1,8 +1,10 @@
 import { ApiDefine } from "../apiBase.js";
 
 export interface ChatRequest {
-    /** Which character to chat with. Defaults to the single configured character on the backend. */
-    characterId?: string;
+    /** Character to chat with. */
+    characterId: string;
+    /** Conversation to continue. Must belong to characterId. */
+    conversationId: string;
     prompt: string;
     /** When true, the response will include the assembled prompt messages for debugging. */
     includePrompt?: boolean;
@@ -17,8 +19,10 @@ export interface ChatResponse {
 }
 
 export interface ChatStreamRequest {
-    /** Which character to chat with. Defaults to the single configured character on the backend. */
-    characterId?: string;
+    /** Character to chat with. */
+    characterId: string;
+    /** Conversation to continue. Must belong to characterId. */
+    conversationId: string;
     prompt: string;
     /** When true, a `prompt` SSE event is sent first with the assembled prompt messages. */
     includePrompt?: boolean;
@@ -39,6 +43,10 @@ export const ApiChat = new ApiDefine<ChatRequest, ChatResponse>("/v1/chat", "POS
 export const ApiChatStream = new ApiDefine<ChatStreamRequest, never>("/v1/chat/stream", "POST");
 
 export interface ChatDryRunRequest {
+    /** Character used to build prompt context. */
+    characterId: string;
+    /** Conversation used to build prompt context. Must belong to characterId. */
+    conversationId: string;
     prompt: string;
 }
 

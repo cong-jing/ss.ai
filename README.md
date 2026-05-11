@@ -40,7 +40,7 @@ Chat endpoint:
 ```bash
 curl -X POST http://127.0.0.1:3000/v1/chat \
   -H "Content-Type: application/json" \
-  -d "{\"prompt\":\"hello\"}"
+  -d "{\"characterId\":\"<character-id>\",\"conversationId\":\"<conversation-id>\",\"prompt\":\"hello\"}"
 ```
 
 Simple web UI (provider + apiKey + model list mock):
