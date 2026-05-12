@@ -23,6 +23,10 @@ export interface ChatResponse {
     requestId: string;
     mode: GenerationMode;
     structuredOutput?: CommonRoleplayTurnOutput;
+    toolCalls?: ModelToolCall[];
+    usage?: ModelUsage;
+    streamCompleted?: boolean;
+    streamFinishReason?: string;
 }
 
 export interface ModelGenerationInput {
@@ -30,8 +34,49 @@ export interface ModelGenerationInput {
     timeoutMs: number;
 }
 
+export interface ModelToolCall {
+    id?: string;
+    type?: string;
+    index?: number;
+    functionName?: string;
+    arguments?: unknown;
+}
+
+export interface ModelUsage {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+    raw?: unknown;
+}
+
+export interface ModelGenerationResult {
+    output: string;
+    toolCalls: ModelToolCall[];
+    usage?: ModelUsage;
+}
+
+export interface ModelStructuredResult {
+    structuredOutput: CommonRoleplayTurnOutput;
+    toolCalls: ModelToolCall[];
+    usage?: ModelUsage;
+}
+
+export interface ModelStreamCallbacks {
+    onTextDelta?: (delta: string) => void;
+    onToolCall?: (toolCall: ModelToolCall) => void;
+}
+
+export interface ModelStreamResult {
+    output: string;
+    toolCalls: ModelToolCall[];
+    usage?: ModelUsage;
+    completed: boolean;
+    finishReason?: string;
+}
+
 export interface ModelClient {
-    generateNonStructured(input: ModelGenerationInput): Promise<string>;
-    generateStructured(input: ModelGenerationInput): Promise<CommonRoleplayTurnOutput>;
+    generateNonStructured(input: ModelGenerationInput): Promise<ModelGenerationResult>;
+    generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult>;
+    generateStructured(input: ModelGenerationInput): Promise<ModelStructuredResult>;
     listModels(): Promise<string[]>;
 }

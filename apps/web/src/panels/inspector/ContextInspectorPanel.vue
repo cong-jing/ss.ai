@@ -13,6 +13,7 @@ const actorPanelOpen = useLocalStorage("ui.right.actorPanelOpen", true);
 const promptPanelOpen = useLocalStorage("ui.right.promptPanelOpen", true);
 const autoPreview = useLocalStorage("ui.right.autoPromptPreview", false);
 const showDebug = useLocalStorage("chat.showDebug", false);
+const streamMode = useLocalStorage("chat.streamMode", false);
 
 const editingName = ref("");
 const editingDescription = ref("");
@@ -108,6 +109,7 @@ function currentPreviewKey(): string {
     activeCharacterId.value ?? "",
     activeConversationId.value ?? "",
     selectedActorId.value ?? "",
+    streamMode.value ? "non-structured" : "structured",
     chatDraftInput.value.trim(),
   ].join("::");
 }
@@ -144,7 +146,8 @@ async function refreshPromptPreview(force = false) {
   isRefreshing.value = true;
   previewError.value = null;
   try {
-    const result = await apiDryRunChat(characterId, conversationId, prompt, speakerActorId);
+    const mode = streamMode.value ? "non-structured" : "structured";
+    const result = await apiDryRunChat(characterId, conversationId, prompt, speakerActorId, mode);
     previewText.value = buildPreviewText(result.messages);
     previewUpdatedAt.value = new Date().toLocaleTimeString();
     lastPreviewKey.value = key;
@@ -161,6 +164,13 @@ watch(selectedActorId, () => {
 });
 
 watch(chatDraftInput, () => {
+  if (autoPreview.value) {
+    void refreshPromptPreview(false);
+  }
+});
+
+watch(streamMode, () => {
+  lastPreviewKey.value = "";
   if (autoPreview.value) {
     void refreshPromptPreview(false);
   }

@@ -1,7 +1,8 @@
-import type { CommonRoleplayTurnOutput } from "@ss-ai/persona-flow";
-import { z } from "zod";
-import type { ModelClient, ModelGenerationInput } from "../types.js";
+import type { ModelClient, ModelGenerationInput, ModelGenerationResult, ModelStreamCallbacks, ModelStreamResult, ModelToolCall, ModelUsage } from "../types.js";
 import type { Mistral as MistralSDKClient } from "@mistralai/mistralai";
+import { extractStructuredResult, extractText, extractTextDelta, extractToolCallsFromMessage, extractUsage, normalizeToolCall, toSdkMessages } from "./mistral/messageTransforms.js";
+import { mistralStructuredOutputSchema } from "./mistral/structuredOutputSchema.js";
+import { withTimeout } from "./mistral/timeout.js";
 
 type MistralSDKModule = typeof import("@mistralai/mistralai");
 
@@ -10,28 +11,6 @@ interface MistralModelClientOptions {
     apiUrl: string;
     model: string;
 }
-
-const mistralStructuredOutputSchema = z.object({
-    action: z.enum(["reply", "skip"]),
-    replyText: z.string(),
-    control: z.object({
-        summarizeSuggested: z.boolean(),
-        summarizeReason: z.string(),
-        summarizeUrgency: z.enum(["none", "low", "normal", "high"]),
-    }),
-    skip: z.object({
-        reasonCode: z.enum([
-            "none",
-            "not_addressed",
-            "low_value",
-            "rate_control",
-            "character_busy",
-            "waiting_for_others",
-            "other",
-        ]),
-        reason: z.string(),
-    }),
-}).strict();
 
 export class MistralModelClient implements ModelClient {
     private clientPromise: Promise<MistralSDKClient> | null = null;
@@ -55,127 +34,120 @@ export class MistralModelClient implements ModelClient {
         return this.clientPromise;
     }
 
-    private extractText(response: unknown): string {
-        const responseWithChoices = response as {
-            choices?: Array<{
-                message?: {
-                    content?: unknown;
-                };
-            }>;
-        };
 
-        const content = responseWithChoices.choices?.[0]?.message?.content;
-
-        if (typeof content === "string" && content.trim()) {
-            return content;
-        }
-
-        if (Array.isArray(content)) {
-            const text = content
-                .map((item) => {
-                    if (typeof item === "string") {
-                        return item;
-                    }
-
-                    if (item && typeof item === "object" && "text" in item && typeof item.text === "string") {
-                        return item.text;
-                    }
-
-                    return "";
-                })
-                .join("")
-                .trim();
-
-            if (text) {
-                return text;
-            }
-        }
-
-        throw new Error("Mistral response did not contain text content.");
-    }
-
-    private toSdkMessages(input: ModelGenerationInput) {
-        return input.messages.map(m => ({
-            role: m.role as "user" | "assistant" | "system",
-            content: m.content,
-        }));
-    }
-
-    private async withTimeout<T>(work: Promise<T>, timeoutMs: number, timeoutLabel: string): Promise<T> {
-        let timeoutHandle: NodeJS.Timeout | undefined;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutHandle = setTimeout(() => {
-                reject(new Error(`${timeoutLabel} timed out after ${timeoutMs}ms`));
-            }, timeoutMs);
-        });
-
-        try {
-            return await Promise.race([work, timeoutPromise]);
-        } finally {
-            if (timeoutHandle) {
-                clearTimeout(timeoutHandle);
-            }
-        }
-    }
-
-    private extractStructuredOutput(response: unknown): CommonRoleplayTurnOutput {
-        const responseWithChoices = response as {
-            choices?: Array<{
-                message?: {
-                    parsed?: unknown;
-                    content?: unknown;
-                };
-            }>;
-        };
-
-        const message = responseWithChoices.choices?.[0]?.message;
-        const parsedCandidate = message?.parsed;
-        if (parsedCandidate) {
-            const parsed = mistralStructuredOutputSchema.safeParse(parsedCandidate);
-            if (parsed.success) {
-                return parsed.data;
-            }
-        }
-
-        const content = message?.content;
-        if (typeof content === "string" && content.trim()) {
-            const parsedJson = JSON.parse(content);
-            return mistralStructuredOutputSchema.parse(parsedJson);
-        }
-
-        throw new Error("Mistral structured response did not contain parsable JSON content.");
-    }
-
-    async generateNonStructured(input: ModelGenerationInput): Promise<string> {
+    async generateNonStructured(input: ModelGenerationInput): Promise<ModelGenerationResult> {
         const client = await this.getClient();
 
-        const response = await this.withTimeout(
+        const response = await withTimeout(
             client.chat.complete({
                 model: this.options.model,
-                messages: this.toSdkMessages(input),
+                messages: toSdkMessages(input),
                 responseFormat: { type: "text" },
             }),
             input.timeoutMs,
             "Mistral non-structured request",
         );
 
-        return this.extractText(response);
+        const firstMessage = (response as {
+            choices?: Array<{
+                message?: unknown;
+            }>;
+        }).choices?.[0]?.message;
+
+        return {
+            output: extractText(response),
+            toolCalls: extractToolCallsFromMessage(firstMessage),
+            usage: extractUsage(response),
+        };
     }
 
-    async generateStructured(input: ModelGenerationInput): Promise<CommonRoleplayTurnOutput> {
+    async generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
         const client = await this.getClient();
 
-        const response = await this.withTimeout(
+        const stream = await withTimeout(
+            client.chat.stream({
+                model: this.options.model,
+                messages: toSdkMessages(input),
+                responseFormat: { type: "text" },
+            }),
+            input.timeoutMs,
+            "Mistral non-structured stream request",
+        );
+
+        let output = "";
+        const toolCalls: ModelToolCall[] = [];
+        let usage: ModelUsage | undefined;
+        let completed = false;
+        let finishReason: string | undefined;
+
+        for await (const event of stream as AsyncIterable<{ data?: { choices?: Array<{ delta?: { content?: unknown; toolCalls?: unknown[] | null }; finishReason?: unknown; finish_reason?: unknown }>; usage?: unknown } }>) {
+            const data = event?.data;
+            const choices = data?.choices;
+            if (!Array.isArray(choices)) {
+                continue;
+            }
+
+            const eventUsage = extractUsage({ usage: data?.usage });
+            if (eventUsage) {
+                usage = eventUsage;
+            }
+
+            for (const choice of choices) {
+                const delta = choice?.delta;
+                if (!delta) {
+                    const rawFinishReason = choice?.finishReason ?? choice?.finish_reason;
+                    if (typeof rawFinishReason === "string" && rawFinishReason.length > 0) {
+                        completed = true;
+                        finishReason = rawFinishReason;
+                    }
+                    continue;
+                }
+
+                const textDelta = extractTextDelta(delta.content);
+                if (textDelta) {
+                    output += textDelta;
+                    callbacks?.onTextDelta?.(textDelta);
+                }
+
+                if (Array.isArray(delta.toolCalls) && delta.toolCalls.length > 0) {
+                    for (const rawToolCall of delta.toolCalls) {
+                        const normalized = normalizeToolCall(rawToolCall);
+                        toolCalls.push(normalized);
+                        callbacks?.onToolCall?.(normalized);
+                    }
+                }
+
+                const rawFinishReason = choice?.finishReason ?? choice?.finish_reason;
+                if (typeof rawFinishReason === "string" && rawFinishReason.length > 0) {
+                    completed = true;
+                    finishReason = rawFinishReason;
+                }
+            }
+        }
+
+        return {
+            output,
+            toolCalls,
+            usage,
+            completed,
+            finishReason,
+        };
+    }
+
+    async generateStructured(input: ModelGenerationInput) {
+        const client = await this.getClient();
+
+        const response = await withTimeout(
             client.chat.parse({
                 model: this.options.model,
-                messages: this.toSdkMessages(input),
+                messages: toSdkMessages(input),
                 responseFormat: mistralStructuredOutputSchema,
             }),
             input.timeoutMs,
             "Mistral structured request",
         );
 
-        return this.extractStructuredOutput(response);
+        return extractStructuredResult(response);
     }
 
     async listModels(): Promise<string[]> {

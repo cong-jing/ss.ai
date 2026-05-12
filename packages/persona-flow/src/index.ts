@@ -18,4 +18,4 @@ export * from "./prompt/promptConext.js";
 export * from "./prompt/systemPromptBuilder.js";
 export * from "./prompt/promptRenderer.js";
 export * from "./prompt/localizedPromptBlocks.js";
-export * from "./prompt/CommonRoleplayTurnOutput.js";
+export * from "./prompt/commonRoleplayTurnOutput.js";
