@@ -1,5 +1,7 @@
-import type { RenderedMessage } from "@ss-ai/persona-flow";
+import type { CommonRoleplayTurnOutput, RenderedMessage } from "@ss-ai/persona-flow";
 export type { RenderedMessage };
+
+export type GenerationMode = "non-structured" | "structured";
 
 export interface AgentConfig {
     provider: string;
@@ -12,18 +14,24 @@ export interface AgentConfig {
 
 export interface ChatRequest {
     messages: RenderedMessage[];
+    mode?: GenerationMode;
 }
 
 export interface ChatResponse {
     output: string;
     model: string;
     requestId: string;
+    mode: GenerationMode;
+    structuredOutput?: CommonRoleplayTurnOutput;
+}
+
+export interface ModelGenerationInput {
+    messages: RenderedMessage[];
+    timeoutMs: number;
 }
 
 export interface ModelClient {
-    generate(input: {
-        messages: RenderedMessage[];
-        timeoutMs: number;
-    }): Promise<string>;
+    generateNonStructured(input: ModelGenerationInput): Promise<string>;
+    generateStructured(input: ModelGenerationInput): Promise<CommonRoleplayTurnOutput>;
     listModels(): Promise<string[]>;
 }

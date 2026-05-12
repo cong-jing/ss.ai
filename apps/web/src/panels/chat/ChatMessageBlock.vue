@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import type { ChatMessage } from "./chatTypes";
 
-defineProps<{
+const props = defineProps<{
   message: ChatMessage;
   showDebug?: boolean;
 }>();
@@ -12,6 +12,11 @@ const emit = defineEmits<{
 }>();
 
 const showPrompt = ref(false);
+
+function handleDeleteMessage() {
+  if (!props.message.id) return;
+  emit("deleteMessage", props.message.id);
+}
 
 function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
   switch (sourceType) {
@@ -35,7 +40,7 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
     <div v-if="showDebug && message.id" class="message-id-row">id: {{ message.id }}</div>
     <details>
       <summary class="debug-summary">
-        <span>Prompt Preview</span>
+        <span>{{ message.structuredDecision ? 'Structured Decision' : 'Prompt Preview' }}</span>
         <span class="debug-count">{{ message.debugMessages?.length ?? 0 }} messages</span>
         <time v-if="message.createdAt" class="debug-time">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
       </summary>
@@ -64,8 +69,8 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
       <div class="message-meta-right">
         <button
           class="delete-msg-btn"
-          :disabled="message.deleting"
-          @click="emit('deleteMessage', message.id)"
+          :disabled="message.deleting || !message.id"
+          @click="handleDeleteMessage"
         >
           {{ message.deleting ? 'Deleting...' : 'Delete' }}
         </button>

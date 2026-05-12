@@ -1,4 +1,4 @@
-import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMessagesResponse } from "@ss-ai/contracts";
+import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatMode, type ChatStreamEvent, type GetMessagesResponse } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
 
 export async function apiGetMessages(conversationId: string): Promise<GetMessagesResponse> {
@@ -25,9 +25,10 @@ export async function apiSendChatMessage(
     conversationId: string,
     prompt: string,
     speakerActorId?: string,
+    mode: ChatMode = "structured",
     includePrompt = false,
 ) {
-    return callApi(ApiChat, { characterId, conversationId, prompt, speakerActorId, includePrompt });
+    return callApi(ApiChat, { characterId, conversationId, prompt, speakerActorId, mode, includePrompt });
 }
 
 export async function apiDryRunChat(
@@ -35,8 +36,9 @@ export async function apiDryRunChat(
     conversationId: string,
     prompt: string,
     speakerActorId?: string,
+    mode: ChatMode = "structured",
 ) {
-    return callApi(ApiChatDryRun, { characterId, conversationId, prompt, speakerActorId });
+    return callApi(ApiChatDryRun, { characterId, conversationId, prompt, speakerActorId, mode });
 }
 
 export async function apiStreamChatMessage(
@@ -44,6 +46,7 @@ export async function apiStreamChatMessage(
     conversationId: string,
     prompt: string,
     speakerActorId: string | undefined,
+    mode: ChatMode = "non-structured",
     onChunk: (content: string) => void,
     signal?: AbortSignal,
     includePrompt = false,
@@ -52,7 +55,7 @@ export async function apiStreamChatMessage(
     const response = await fetch(ApiChatStream.apiUrl, {
         method: ApiChatStream.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ characterId, conversationId, prompt, speakerActorId, includePrompt }),
+        body: JSON.stringify({ characterId, conversationId, prompt, speakerActorId, mode, includePrompt }),
         signal
     });
 

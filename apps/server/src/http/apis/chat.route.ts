@@ -5,6 +5,7 @@
     ApiChatStream,
     ApiGetMessages,
     type ChatDryRunRequest,
+    type ChatMode,
     type ChatRequest,
     type ChatStreamRequest,
     type ChatStreamEvent,
@@ -67,6 +68,16 @@ function requirePrompt(prompt: unknown, endpoint: string): string {
         throw new HttpStatusError(400, `${endpoint}: prompt is required.`);
     }
     return prompt;
+}
+
+function resolveChatMode(value: unknown, endpoint: string, defaultMode: ChatMode): ChatMode {
+    if (value === undefined || value === null || value === "") {
+        return defaultMode;
+    }
+    if (value === "structured" || value === "non-structured") {
+        return value;
+    }
+    throw new HttpStatusError(400, `${endpoint}: mode must be 'structured' or 'non-structured'.`);
 }
 
 function escapeRegExp(value: string): string {
@@ -210,6 +221,7 @@ async function handleChat(context: HttpApiContext, body: ChatRequest & { userId?
     const userId = typeof body?.userId === "string" ? body.userId : DEFAULT_USER_ID;
     const characterId = requireNonEmptyString(body?.characterId, "characterId", "chat");
     const conversationId = requireNonEmptyString(body?.conversationId, "conversationId", "chat");
+    const mode = resolveChatMode(body?.mode, "chat", "structured");
 
     context.logger.debug("chat: request received", { promptLength: prompt.length, userId, characterId, conversationId });
 
@@ -248,18 +260,46 @@ async function handleChat(context: HttpApiContext, body: ChatRequest & { userId?
     });
 
     // 3. Render prompt
-    const rendered = promptRenderer.render(promptContext);
+    const rendered = promptRenderer.render(promptContext, { mode });
 
     // 4. Call LLM
     const runtimeAgentService = await createChatAgentService(context, userId);
-    const response = await runtimeAgentService.chat({ messages: rendered.messages });
+    const response = await runtimeAgentService.chat({
+        messages: rendered.messages,
+        mode,
+    });
+    const { output: rawOutput, requestId, model, structuredOutput } = response;
+
+    if (structuredOutput?.control.summarizeSuggested) {
+        context.logger.debug("chat: summarize suggested (TODO)", {
+            requestId,
+            urgency: structuredOutput.control.summarizeUrgency,
+            reason: structuredOutput.control.summarizeReason,
+        });
+    }
 
     const selfActor = promptContext.actorMap.get(selfActorId);
-    const normalizedAssistantOutput = normalizeAssistantOutput(response.output, [
+    const normalizedAssistantOutput = normalizeAssistantOutput(rawOutput, [
         selfActor?.displayName,
         promptContext.character?.displayName,
         promptContext.character?.name,
     ]);
+
+    const shouldSkip = mode === "structured" && (
+        structuredOutput?.action === "skip"
+        || normalizedAssistantOutput.trim().length === 0
+    );
+
+    if (shouldSkip) {
+        return {
+            requestId,
+            model,
+            output: "",
+            userMessageId: userMessage.id,
+            ...(structuredOutput ? { structuredOutput } : {}),
+            ...(body.includePrompt ? { promptMessages: rendered.messages } : {}),
+        };
+    }
 
     // 5. Append assistant message
     const assistantMessageId = crypto.randomUUID();
@@ -272,10 +312,12 @@ async function handleChat(context: HttpApiContext, body: ChatRequest & { userId?
     });
 
     return {
-        ...response,
+        requestId,
+        model,
         output: normalizedAssistantOutput,
         userMessageId: userMessage.id,
         assistantMessageId,
+        ...(structuredOutput ? { structuredOutput } : {}),
         ...(body.includePrompt ? { promptMessages: rendered.messages } : {}),
     };
 }
@@ -298,13 +340,18 @@ export function registerChatRoute(context: HttpApiContext): void {
         let characterId: string;
         let conversationId: string;
         let speakerActorId: string | undefined;
+        let mode: ChatMode;
         try {
             prompt = requirePrompt(req.body?.prompt, "chat/stream");
             characterId = requireNonEmptyString(req.body?.characterId, "characterId", "chat/stream");
             conversationId = requireNonEmptyString(req.body?.conversationId, "conversationId", "chat/stream");
+            mode = resolveChatMode(req.body?.mode, "chat/stream", "non-structured");
             speakerActorId = typeof req.body?.speakerActorId === "string"
                 ? req.body.speakerActorId
                 : undefined;
+            if (mode !== "non-structured") {
+                throw new HttpStatusError(400, "chat/stream only supports mode=non-structured.");
+            }
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : "Unknown error";
             context.logger.error("chat/stream: invalid request", { message });
@@ -385,7 +432,7 @@ export function registerChatRoute(context: HttpApiContext): void {
             characterStore: context.stores.character,
             conversationActorStore: context.stores.conversationActor,
         });
-        const rendered = promptRenderer.render(promptContext);
+        const rendered = promptRenderer.render(promptContext, { mode: "non-structured" });
 
         // 2b. Emit assembled prompt as SSE event when requested
         if (req.body?.includePrompt) {
@@ -396,7 +443,10 @@ export function registerChatRoute(context: HttpApiContext): void {
         // 3. Call LLM
         let fullResponse: string;
         try {
-            const chatResponse = await agentService.chat({ messages: rendered.messages });
+            const chatResponse = await agentService.chat({
+                messages: rendered.messages,
+                mode,
+            });
             const selfActor = promptContext.actorMap.get(selfActorId);
             fullResponse = normalizeAssistantOutput(chatResponse.output, [
                 selfActor?.displayName,
@@ -450,6 +500,7 @@ export function registerChatRoute(context: HttpApiContext): void {
             const prompt = requirePrompt(typedBody?.prompt, "chat/dry-run");
             const characterId = requireNonEmptyString(typedBody?.characterId, "characterId", "chat/dry-run");
             const conversationId = requireNonEmptyString(typedBody?.conversationId, "conversationId", "chat/dry-run");
+            const mode = resolveChatMode(typedBody?.mode, "chat/dry-run", "structured");
             const userId: string = typeof typedBody?.userId === "string"
                 ? typedBody.userId
                 : DEFAULT_USER_ID;
@@ -490,7 +541,7 @@ export function registerChatRoute(context: HttpApiContext): void {
                 conversationActorStore: context.stores.conversationActor,
             });
 
-            const rendered = promptRenderer.render(promptContext);
+            const rendered = promptRenderer.render(promptContext, { mode });
             // selfActorId is resolved but unused in dry-run (no message stored)
             void selfActorId;
             return { messages: rendered.messages };

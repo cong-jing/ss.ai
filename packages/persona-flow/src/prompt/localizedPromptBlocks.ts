@@ -56,6 +56,8 @@ export interface LocalizedPromptBlock {
     sectionLabels: SectionLabels;
     fieldLabels: FieldLabels;
     actorTemplates?: ActorTemplates;
+    /** Optional extra instruction appended in structured mode. */
+    structuredResponseInstruction?: string;
     baseRules: string;
     sectionDivider: string;
 }

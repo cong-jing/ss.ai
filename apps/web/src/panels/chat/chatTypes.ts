@@ -5,8 +5,29 @@ export interface DebugMessage {
     content: string;
 }
 
+export interface StructuredDecisionPayload {
+    action: "reply" | "skip";
+    replyText: string;
+    control: {
+        summarizeSuggested: boolean;
+        summarizeReason: string;
+        summarizeUrgency: "none" | "low" | "normal" | "high";
+    };
+    skip: {
+        reasonCode:
+        | "none"
+        | "not_addressed"
+        | "low_value"
+        | "rate_control"
+        | "character_busy"
+        | "waiting_for_others"
+        | "other";
+        reason: string;
+    };
+}
+
 export interface ChatMessage {
-    id: string;
+    id?: string;
     role: ChatRole;
     senderActorId?: string;
     senderDisplayName?: string;
@@ -17,5 +38,6 @@ export interface ChatMessage {
     debugMessages?: DebugMessage[];
     /** Assembled prompt messages attached when sent with includePrompt=true */
     promptMessages?: DebugMessage[];
+    structuredDecision?: StructuredDecisionPayload;
     deleting?: boolean;
 }

@@ -14,12 +14,49 @@ function createId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function toStructuredDecisionDebugMessages(structuredOutput: {
+    action: "reply" | "skip";
+    replyText: string;
+    control: {
+        summarizeSuggested: boolean;
+        summarizeReason: string;
+        summarizeUrgency: "none" | "low" | "normal" | "high";
+    };
+    skip: {
+        reasonCode: "none" | "not_addressed" | "low_value" | "rate_control" | "character_busy" | "waiting_for_others" | "other";
+        reason: string;
+    };
+}): import("./chatTypes").DebugMessage[] {
+    return [
+        {
+            role: "decision",
+            content: JSON.stringify(
+                {
+                    action: structuredOutput.action,
+                    replyText: structuredOutput.replyText,
+                },
+                null,
+                2,
+            ),
+        },
+        {
+            role: "control",
+            content: JSON.stringify(structuredOutput.control, null, 2),
+        },
+        {
+            role: "skip",
+            content: JSON.stringify(structuredOutput.skip, null, 2),
+        },
+    ];
+}
+
 export function useChatViewModel() {
     const toast = useToast();
     const messages = ref<ChatMessage[]>([]);
     const isSending = ref(false);
     const isLoading = ref(false);
     const error = ref<string | null>(null);
+    const streamMode = useLocalStorage("chat.streamMode", false);
 
     async function sendMessage(text: string, stream = false) {
         const prompt = text.trim();
@@ -73,6 +110,7 @@ export function useChatViewModel() {
                     conversationId,
                     prompt,
                     speakerActorId,
+                    "non-structured",
                     (chunk) => {
                         const msg = messages.value.find(m => m.id === msgId);
                         if (msg) msg.content += chunk;
@@ -109,18 +147,34 @@ export function useChatViewModel() {
                 conversationId,
                 prompt,
                 speakerActorId,
+                "structured",
                 true,
             );
-            messages.value.push({
-                id: response.assistantMessageId || response.requestId,
-                role: "assistant",
-                senderDisplayName: assistantDisplayName,
-                senderSourceType: "ai_character",
-                content: response.output,
-                createdAt: new Date().toISOString(),
-                status: "normal",
-                ...(response.promptMessages ? { promptMessages: response.promptMessages } : {}),
-            });
+
+            if (response.structuredOutput) {
+                messages.value.push({
+                    role: "debug",
+                    content: "",
+                    createdAt: new Date().toISOString(),
+                    status: "normal",
+                    debugMessages: toStructuredDecisionDebugMessages(response.structuredOutput),
+                    structuredDecision: response.structuredOutput,
+                });
+                showDebug.value = true;
+            }
+
+            if (response.assistantMessageId || response.output.trim().length > 0) {
+                messages.value.push({
+                    id: response.assistantMessageId || response.requestId,
+                    role: "assistant",
+                    senderDisplayName: assistantDisplayName,
+                    senderSourceType: "ai_character",
+                    content: response.output,
+                    createdAt: new Date().toISOString(),
+                    status: "normal",
+                    ...(response.promptMessages ? { promptMessages: response.promptMessages } : {}),
+                });
+            }
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
             console.error("[chat] error:", e);
@@ -176,7 +230,8 @@ export function useChatViewModel() {
         }
 
         try {
-            const result = await apiDryRunChat(characterId, conversationId, prompt, speakerActorId);
+            const mode = streamMode.value ? "non-structured" : "structured";
+            const result = await apiDryRunChat(characterId, conversationId, prompt, speakerActorId, mode);
             console.group("[dry-run] Assembled prompt messages");
             for (const msg of result.messages) {
                 console.log(`--- [${msg.role}] ---`);
