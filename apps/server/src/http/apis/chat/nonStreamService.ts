@@ -28,12 +28,12 @@ export async function handleNonStreamChatRequest(context: HttpApiContext, body: 
     });
     const { requestId, model, structuredOutput } = response;
 
-    if (structuredOutput?.control.summarizeSuggested) {
-        context.logger.debug("chat: summarize suggested (TODO)", {
-            requestId,
-            urgency: structuredOutput.control.summarizeUrgency,
-            reason: structuredOutput.control.summarizeReason,
-        });
-    }
+    // if (structuredOutput?.control.summarizeSuggested) {
+    //     context.logger.debug("chat: summarize suggested (TODO)", {
+    //         requestId,
+    //         urgency: structuredOutput.control.summarizeUrgency,
+    //         reason: structuredOutput.control.summarizeReason,
+    //     });
+    // }
     return response;
 }

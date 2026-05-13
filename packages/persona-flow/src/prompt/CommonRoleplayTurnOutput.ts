@@ -3,12 +3,6 @@ export type CommonRoleplayTurnOutput = {
 
     replyText: string;
 
-    control: {
-        summarizeSuggested: boolean;
-        summarizeReason: string;
-        summarizeUrgency: "none" | "low" | "normal" | "high";
-    };
-
     skip: {
         reasonCode:
         | "none"

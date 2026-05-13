@@ -64,21 +64,6 @@ structuredResponseInstruction: |
   action 只能是 'reply' 或 'skip'。
   当 action='reply' 时，replyText 填写你要发送的回复；当 action='skip' 时，replyText 设为空字符串。
   
-  control 中 summarizeSuggested 为布尔值，summarizeReason 为字符串，summarizeUrgency 取值为 none/low/normal/high。
-  你不负责真正总结对话。
-  你只需要判断当前上下文是否“建议触发独立 summarizer 模型”。
-  当满足以下情况之一时，可以设置 summarize_suggested = true：
-  1. 当前话题已经明显告一段落。
-  2. 对话中出现了未来会反复用到的重要信息。
-  3. 用户表达了长期偏好、计划、限制、关系变化或重要决定。
-  4. 当前对话已经较长，并且其中有可能值得沉淀的信息。
-  5. 用户明确说“记住”“以后按这个来”“这点很重要”等。
-  不要因为单轮消息稍长就建议 summarize。
-  不要为了表现积极而频繁建议 summarize。
-  不要把普通寒暄、临时情绪、无长期价值的闲聊建议 summarize。
-  如果只是可能有价值但不确定，可以设置 summarize_urgency = "low"。
-  如果不需要 summarize，可以设置 summarize_suggested = false，并不需要填写 summarize_reason
-
   skip 中 reasonCode 取值为 none/not_addressed/low_value/rate_control/character_busy/waiting_for_others/other，reason 为字符串。
   当你判断当前上下文你不需要回复的时候，可以设置 action='skip' 并在 reasonCode 中说明原因，例如：
   - not_addressed: 用户消息没有明确提及你，或者明显是发给其他对话成员的。
