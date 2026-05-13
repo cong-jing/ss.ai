@@ -1,8 +1,8 @@
 import type { ModelClient, ModelGenerationInput, ModelGenerationResult, ModelStreamCallbacks, ModelStreamResult, ModelToolCall, ModelUsage } from "@ss-ai/persona-flow";
 import type { Mistral as MistralSDKClient } from "@mistralai/mistralai";
-import { extractStructuredResult, extractText, extractTextDelta, extractToolCallsFromMessage, extractUsage, normalizeToolCall, toSdkMessages } from "./mistral/messageTransforms.js";
-import { mistralStructuredOutputSchema } from "./mistral/structuredOutputSchema.js";
-import { withTimeout } from "./mistral/timeout.js";
+import { extractStructuredResult, extractText, extractTextDelta, extractToolCallsFromMessage, extractUsage, normalizeToolCall, toSdkMessages } from "./messageTransforms.js";
+import { mistralStructuredOutputSchema } from "./structuredOutputSchema.js";
+import { withTimeout } from "./timeout.js";
 
 type MistralSDKModule = typeof import("@mistralai/mistralai");
 

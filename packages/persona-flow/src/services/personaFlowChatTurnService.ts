@@ -1,10 +1,12 @@
 import type { PromptRenderMode } from "../prompt/promptRenderer.js";
 import type { AppStores } from "../stores/appStores.js";
 import { normalizeAssistantOutput, prepareChatTurnContext } from "./chatTurnPreparation.js";
+import { createNoopPersonaFlowLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
 import type { PersonaChatResponse } from "./personaFlowModelService.js";
 
 export interface PersonaFlowChatTurnServiceDependencies {
     stores: AppStores;
+    logger?: PersonaFlowLogger;
     getModelServiceForUser: (userId: string) => Promise<{
         chat: (request: { messages: Array<{ role: "system" | "user" | "assistant"; content: string }>; mode?: "non-structured" | "structured"; functionName?: string }) => Promise<PersonaChatResponse>;
         chatStream: (request: {
@@ -51,9 +53,20 @@ export interface PersonaStreamTurnRequest {
 }
 
 export class PersonaFlowChatTurnService {
-    constructor(private readonly deps: PersonaFlowChatTurnServiceDependencies) { }
+    private readonly logger: PersonaFlowLogger;
+
+    constructor(private readonly deps: PersonaFlowChatTurnServiceDependencies) {
+        this.logger = deps.logger ?? createNoopPersonaFlowLogger();
+    }
 
     async dryRunTurn(input: PersonaDryRunTurnRequest): Promise<{ messages: Array<{ role: "system" | "user" | "assistant"; content: string }> }> {
+        this.logger.debug("persona-flow/chat-turn: dry-run requested", {
+            userId: input.userId,
+            characterId: input.characterId,
+            conversationId: input.conversationId,
+            llmResponseMode: input.llmResponseMode,
+        });
+
         const prepared = await prepareChatTurnContext({
             stores: this.deps.stores,
             userId: input.userId,
@@ -63,6 +76,12 @@ export class PersonaFlowChatTurnService {
             llmResponseMode: input.llmResponseMode,
             senderActorId: input.senderActorId,
             persistUserMessage: false,
+            logger: this.logger,
+        });
+
+        this.logger.verbose("persona-flow/chat-turn: dry-run prepared", {
+            conversationId: input.conversationId,
+            renderedMessageCount: prepared.rendered.messages.length,
         });
 
         return { messages: prepared.rendered.messages };
@@ -77,6 +96,13 @@ export class PersonaFlowChatTurnService {
         structuredOutput?: PersonaChatResponse["structuredOutput"];
         assembledMessages?: Array<{ role: "system" | "user" | "assistant"; content: string }>;
     }> {
+        this.logger.debug("persona-flow/chat-turn: chat requested", {
+            userId: input.userId,
+            characterId: input.characterId,
+            conversationId: input.conversationId,
+            llmResponseMode: input.llmResponseMode,
+        });
+
         const prepared = await prepareChatTurnContext({
             stores: this.deps.stores,
             userId: input.userId,
@@ -86,6 +112,7 @@ export class PersonaFlowChatTurnService {
             llmResponseMode: input.llmResponseMode,
             senderActorId: input.senderActorId,
             persistUserMessage: true,
+            logger: this.logger,
         });
 
         const modelService = await this.deps.getModelServiceForUser(input.userId);
@@ -108,6 +135,11 @@ export class PersonaFlowChatTurnService {
         );
 
         if (shouldSkip) {
+            this.logger.debug("persona-flow/chat-turn: assistant message skipped", {
+                requestId: response.requestId,
+                conversationId: input.conversationId,
+                reason: response.structuredOutput?.action === "skip" ? "structured-skip" : "empty-output",
+            });
             return {
                 requestId: response.requestId,
                 model: response.model,
@@ -125,6 +157,12 @@ export class PersonaFlowChatTurnService {
             senderActorId: prepared.selfActorId,
             content: normalizedAssistantOutput,
             createdAt: new Date().toISOString(),
+        });
+
+        this.logger.verbose("persona-flow/chat-turn: assistant message appended", {
+            requestId: response.requestId,
+            conversationId: input.conversationId,
+            assistantMessageId,
         });
 
         return {
@@ -148,6 +186,13 @@ export class PersonaFlowChatTurnService {
         streamCompleted: boolean;
         streamFinishReason?: string;
     }> {
+        this.logger.debug("persona-flow/chat-turn: stream requested", {
+            userId: input.userId,
+            characterId: input.characterId,
+            conversationId: input.conversationId,
+            llmResponseMode: input.llmResponseMode,
+        });
+
         const prepared = await prepareChatTurnContext({
             stores: this.deps.stores,
             userId: input.userId,
@@ -157,6 +202,7 @@ export class PersonaFlowChatTurnService {
             llmResponseMode: input.llmResponseMode,
             senderActorId: input.senderActorId,
             persistUserMessage: true,
+            logger: this.logger,
         });
 
         const selfActor = prepared.promptContext.actorMap.get(prepared.selfActorId);
@@ -185,6 +231,10 @@ export class PersonaFlowChatTurnService {
                 }
                 const chunk = normalizedSoFar.slice(normalizedSentLength);
                 normalizedSentLength = normalizedSoFar.length;
+                this.logger.verbose("persona-flow/chat-turn: stream chunk emitted", {
+                    conversationId: input.conversationId,
+                    chunkLength: chunk.length,
+                });
                 input.onChunk?.(chunk);
             },
         });
@@ -192,6 +242,10 @@ export class PersonaFlowChatTurnService {
         const fullResponse = normalizeAssistantOutput(streamResponse.output, normalizeNames);
         if (fullResponse.length > normalizedSentLength) {
             const tail = fullResponse.slice(normalizedSentLength);
+            this.logger.verbose("persona-flow/chat-turn: stream tail emitted", {
+                conversationId: input.conversationId,
+                chunkLength: tail.length,
+            });
             input.onChunk?.(tail);
         }
 
@@ -203,6 +257,22 @@ export class PersonaFlowChatTurnService {
             content: fullResponse,
             createdAt: new Date().toISOString(),
         });
+
+        this.logger.verbose("persona-flow/chat-turn: stream assistant message appended", {
+            requestId: streamResponse.requestId,
+            conversationId: input.conversationId,
+            assistantMessageId,
+            streamCompleted: streamResponse.streamCompleted ?? streamResponse.completed,
+            streamFinishReason: streamResponse.streamFinishReason ?? streamResponse.finishReason,
+        });
+
+        if (!(streamResponse.streamCompleted ?? streamResponse.completed)) {
+            this.logger.warn("persona-flow/chat-turn: stream ended without completion", {
+                requestId: streamResponse.requestId,
+                conversationId: input.conversationId,
+                finishReason: streamResponse.streamFinishReason ?? streamResponse.finishReason,
+            });
+        }
 
         return {
             requestId: streamResponse.requestId,

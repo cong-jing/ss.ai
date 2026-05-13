@@ -23,3 +23,4 @@ export * from "./llm/modelClient.js";
 export * from "./services/personaFlowModelService.js";
 export * from "./services/chatTurnPreparation.js";
 export * from "./services/personaFlowChatTurnService.js";
+export * from "./services/personaFlowLogger.js";

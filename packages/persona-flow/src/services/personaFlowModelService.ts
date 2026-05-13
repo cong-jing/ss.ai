@@ -10,6 +10,7 @@ import type {
     ModelUsage,
     ModelStreamResult,
 } from "../llm/modelClient.js";
+import { createNoopPersonaFlowLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
 
 export interface PersonaChatRequest {
     messages: RenderedMessage[];
@@ -46,13 +47,21 @@ export interface PersonaFlowModelServiceDependencies {
     timeoutMs: number;
     maxRetries?: number;
     onPromptLog?: (entry: PersonaPromptLogEntry) => void;
-    onVerboseLog?: (message: string, payload: unknown) => void;
+    logger?: PersonaFlowLogger;
 }
 
 export class PersonaFlowModelService {
-    constructor(private readonly deps: PersonaFlowModelServiceDependencies) { }
+    private readonly logger: PersonaFlowLogger;
+
+    constructor(private readonly deps: PersonaFlowModelServiceDependencies) {
+        this.logger = deps.logger ?? createNoopPersonaFlowLogger();
+    }
 
     async ensureFunctionReady(functionName = "chat"): Promise<void> {
+        this.logger.debug("persona-flow/model: ensure function runtime", {
+            userId: this.deps.userId,
+            functionName,
+        });
         await this.resolveFunctionModelRuntime(functionName);
     }
 
@@ -60,6 +69,10 @@ export class PersonaFlowModelService {
         modelName: string;
         client: ModelClient;
     }> {
+        this.logger.verbose("persona-flow/model: resolving runtime", {
+            userId: this.deps.userId,
+            functionName,
+        });
         const prefs = await this.deps.userPreferencesStore.getUserPreferences(this.deps.userId);
         const fnModel = prefs?.functionModels?.[functionName];
         if (!fnModel?.provider || !fnModel?.model) {
@@ -84,6 +97,13 @@ export class PersonaFlowModelService {
             model: fnModel.model,
             apiUrl: providerConfig.apiUrl,
             apiKey: credential.apiKeyEncrypted,
+        });
+
+        this.logger.debug("persona-flow/model: runtime resolved", {
+            userId: this.deps.userId,
+            functionName,
+            provider: fnModel.provider,
+            model: fnModel.model,
         });
 
         return {
@@ -142,7 +162,7 @@ export class PersonaFlowModelService {
         const functionName = request.functionName ?? "chat";
         const { modelName, client } = await this.resolveFunctionModelRuntime(functionName);
 
-        this.deps.onVerboseLog?.("PersonaFlow chat: sending messages to LLM", {
+        this.logger.verbose("persona-flow/model: chat request", {
             requestId,
             mode,
             functionName,
@@ -177,6 +197,12 @@ export class PersonaFlowModelService {
             }
         } catch (err: unknown) {
             const errorMessage = err instanceof Error ? err.message : "Unknown error";
+            this.logger.error("persona-flow/model: chat failed", {
+                requestId,
+                mode,
+                functionName,
+                error: errorMessage,
+            });
             this.writePromptLog(requestId, request, modelName, {
                 status: "failed",
                 outputText: output,
@@ -189,14 +215,14 @@ export class PersonaFlowModelService {
         }
 
         for (const toolCall of toolCalls) {
-            this.deps.onVerboseLog?.("PersonaFlow chat: tool call requested (TODO: execute function)", {
+            this.logger.debug("persona-flow/model: tool call requested (TODO)", {
                 requestId,
                 functionName,
                 toolCall,
             });
         }
 
-        this.deps.onVerboseLog?.("PersonaFlow chat: completed", {
+        this.logger.verbose("persona-flow/model: chat completed", {
             requestId,
             mode,
             functionName,
@@ -232,10 +258,15 @@ export class PersonaFlowModelService {
         const { modelName, client } = await this.resolveFunctionModelRuntime(functionName);
 
         if (mode !== "non-structured") {
+            this.logger.warn("persona-flow/model: chatStream called with unsupported mode", {
+                requestId,
+                mode,
+                functionName,
+            });
             throw new Error("PersonaFlow chatStream currently supports only non-structured mode.");
         }
 
-        this.deps.onVerboseLog?.("PersonaFlow chatStream: sending messages to LLM", {
+        this.logger.verbose("persona-flow/model: chatStream request", {
             requestId,
             mode,
             functionName,
@@ -254,7 +285,7 @@ export class PersonaFlowModelService {
                 {
                     onTextDelta: request.onTextDelta,
                     onToolCall: (toolCall) => {
-                        this.deps.onVerboseLog?.("PersonaFlow chatStream: tool call requested (TODO: execute function)", {
+                        this.logger.debug("persona-flow/model: stream tool call requested (TODO)", {
                             requestId,
                             functionName,
                             toolCall,
@@ -264,6 +295,12 @@ export class PersonaFlowModelService {
             );
         } catch (err: unknown) {
             streamError = err instanceof Error ? err.message : "Unknown error";
+            this.logger.error("persona-flow/model: chatStream failed", {
+                requestId,
+                mode,
+                functionName,
+                error: streamError,
+            });
             throw err;
         } finally {
             this.writePromptLog(requestId, request, modelName, {
@@ -278,10 +315,15 @@ export class PersonaFlowModelService {
         }
 
         if (!streamResult) {
+            this.logger.error("persona-flow/model: chatStream missing stream result", {
+                requestId,
+                mode,
+                functionName,
+            });
             throw new Error("PersonaFlow chatStream ended without a stream result.");
         }
 
-        this.deps.onVerboseLog?.("PersonaFlow chatStream: completed", {
+        this.logger.verbose("persona-flow/model: chatStream completed", {
             requestId,
             mode,
             functionName,
@@ -293,7 +335,7 @@ export class PersonaFlowModelService {
         });
 
         if (!streamResult.completed) {
-            this.deps.onVerboseLog?.("PersonaFlow chatStream: stream ended without completion marker", {
+            this.logger.warn("persona-flow/model: stream ended without completion marker", {
                 requestId,
                 functionName,
                 finishReason: streamResult.finishReason,

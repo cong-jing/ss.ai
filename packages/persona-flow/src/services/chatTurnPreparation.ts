@@ -4,6 +4,7 @@ import type { PromptRenderMode, RenderedPrompt } from "../prompt/promptRenderer.
 import { promptRenderer } from "../prompt/promptRenderer.js";
 import type { AppStores } from "../stores/appStores.js";
 import type { Message } from "../stores/chat/message.js";
+import { createNoopPersonaFlowLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
 
 export class PersonaFlowTurnError extends Error {
     constructor(public readonly status: number, message: string) {
@@ -93,6 +94,7 @@ export interface PrepareChatTurnInput {
     llmResponseMode: PromptRenderMode;
     senderActorId?: unknown;
     persistUserMessage?: boolean;
+    logger?: PersonaFlowLogger;
 }
 
 export interface PreparedChatTurn {
@@ -104,13 +106,27 @@ export interface PreparedChatTurn {
 }
 
 export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promise<PreparedChatTurn> {
+    const logger = input.logger ?? createNoopPersonaFlowLogger();
     const persistUserMessage = input.persistUserMessage ?? true;
+
+    logger.debug("persona-flow/turn: preparing context", {
+        userId: input.userId,
+        characterId: input.characterId,
+        conversationId: input.conversationId,
+        llmResponseMode: input.llmResponseMode,
+        persistUserMessage,
+        hasSenderActorId: typeof input.senderActorId === "string" && input.senderActorId.trim().length > 0,
+    });
 
     const character = await input.stores.character.getCharacterById({
         userId: input.userId,
         characterId: input.characterId,
     });
     if (!character || character.status === "archived") {
+        logger.warn("persona-flow/turn: character not found or archived", {
+            userId: input.userId,
+            characterId: input.characterId,
+        });
         throw new PersonaFlowTurnError(404, `Character not found: ${input.characterId}`);
     }
 
@@ -119,9 +135,18 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
         conversationId: input.conversationId,
     });
     if (!conversation) {
+        logger.warn("persona-flow/turn: conversation not found", {
+            userId: input.userId,
+            conversationId: input.conversationId,
+        });
         throw new PersonaFlowTurnError(404, `Conversation not found: ${input.conversationId}`);
     }
     if (conversation.characterId !== input.characterId) {
+        logger.warn("persona-flow/turn: conversation and character mismatch", {
+            conversationId: input.conversationId,
+            expectedCharacterId: input.characterId,
+            actualCharacterId: conversation.characterId,
+        });
         throw new PersonaFlowTurnError(404, `Conversation not found for character: ${input.conversationId}`);
     }
 
@@ -132,6 +157,9 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
 
     const selfActor = actors.find(actor => actor.role === "self");
     if (!selfActor) {
+        logger.warn("persona-flow/turn: self actor missing", {
+            conversationId: input.conversationId,
+        });
         throw new PersonaFlowTurnError(404, `Self actor not found for conversation ${input.conversationId}`);
     }
 
@@ -144,9 +172,17 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
             conversationId: input.conversationId,
             userId: input.userId,
         });
+        logger.debug("persona-flow/turn: sender actor resolved via user actor", {
+            conversationId: input.conversationId,
+            senderActorId: resolvedSenderActorId,
+        });
     } else {
         const senderActor = actors.find(actor => actor.id === requestedSenderActorId);
         resolvedSenderActorId = requireOtherActor(senderActor, requestedSenderActorId);
+        logger.debug("persona-flow/turn: sender actor resolved via request", {
+            conversationId: input.conversationId,
+            senderActorId: resolvedSenderActorId,
+        });
     }
 
     const userMessage: Message = {
@@ -159,6 +195,11 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
 
     if (persistUserMessage) {
         await input.stores.chat.appendMessage(userMessage);
+        logger.verbose("persona-flow/turn: appended user message", {
+            conversationId: input.conversationId,
+            userMessageId: userMessage.id,
+            senderActorId: resolvedSenderActorId,
+        });
     }
 
     const promptContext = await PromptContextBuilder.build({
@@ -173,6 +214,11 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
     });
 
     const rendered = promptRenderer.render(promptContext, { mode: input.llmResponseMode });
+
+    logger.verbose("persona-flow/turn: prompt rendered", {
+        conversationId: input.conversationId,
+        renderedMessageCount: rendered.messages.length,
+    });
 
     return {
         selfActorId: selfActor.id,

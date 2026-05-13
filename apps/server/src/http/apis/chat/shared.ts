@@ -3,7 +3,7 @@ import {
     PersonaFlowChatTurnService,
     PersonaFlowModelService,
 } from "@ss-ai/persona-flow";
-import { createModelClientFromConfig } from "../../../agent/clients/clientFactory.js";
+import { createModelClientFromConfig } from "../../../modelClients/clientFactory.js";
 import { PromptLogger } from "../../../util/promptLog.js";
 import type { HttpApiContext } from "../apiContext.js";
 
@@ -72,12 +72,32 @@ export async function createChatModelService(context: HttpApiContext, userId: st
         timeoutMs: context.config.agent.timeoutMs,
         maxRetries: context.config.agent.maxRetries,
         onPromptLog: (entry) => promptLogger.write(entry),
-        onVerboseLog: (message, payload) => context.logger.verbose(
-            message,
-            payload && typeof payload === "object"
-                ? payload as Record<string, unknown>
-                : { payload },
-        ),
+        logger: {
+            debug: (message, payload) => context.logger.debug(
+                message,
+                payload && typeof payload === "object"
+                    ? payload as Record<string, unknown>
+                    : { payload },
+            ),
+            verbose: (message, payload) => context.logger.verbose(
+                message,
+                payload && typeof payload === "object"
+                    ? payload as Record<string, unknown>
+                    : { payload },
+            ),
+            warn: (message, payload) => context.logger.warn(
+                message,
+                payload && typeof payload === "object"
+                    ? payload as Record<string, unknown>
+                    : { payload },
+            ),
+            error: (message, payload) => context.logger.error(
+                message,
+                payload && typeof payload === "object"
+                    ? payload as Record<string, unknown>
+                    : { payload },
+            ),
+        },
     });
 
     try {
@@ -93,6 +113,32 @@ export async function createChatModelService(context: HttpApiContext, userId: st
 export function createChatTurnService(context: HttpApiContext): PersonaFlowChatTurnService {
     return new PersonaFlowChatTurnService({
         stores: context.stores,
+        logger: {
+            debug: (message, payload) => context.logger.debug(
+                message,
+                payload && typeof payload === "object"
+                    ? payload as Record<string, unknown>
+                    : { payload },
+            ),
+            verbose: (message, payload) => context.logger.verbose(
+                message,
+                payload && typeof payload === "object"
+                    ? payload as Record<string, unknown>
+                    : { payload },
+            ),
+            warn: (message, payload) => context.logger.warn(
+                message,
+                payload && typeof payload === "object"
+                    ? payload as Record<string, unknown>
+                    : { payload },
+            ),
+            error: (message, payload) => context.logger.error(
+                message,
+                payload && typeof payload === "object"
+                    ? payload as Record<string, unknown>
+                    : { payload },
+            ),
+        },
         getModelServiceForUser: (userId: string) => createChatModelService(context, userId),
     });
 }

@@ -1,5 +1,5 @@
 import type { ModelClient, ModelClientFactoryInput } from "@ss-ai/persona-flow";
-import { MistralModelClient } from "./mistralModelClient.js";
+import { MistralModelClient } from "./mistral/mistralModelClient.js";
 
 export function createModelClientFromConfig(config: ModelClientFactoryInput): ModelClient {
     const normalizedProvider = config.provider.toLowerCase();
