@@ -1,7 +1,6 @@
 import type { PromptContext } from "./promptConext.js";
 import { buildSystemMessages, type RenderedMessage, type BuildSystemMessagesInput } from "./systemPromptBuilder.js";
 import { buildActorAliases } from "./actorAlias.js";
-import { getPromptBlocks } from "./localizedPromptBlocks.js";
 
 export type { RenderedMessage, BuildSystemMessagesInput };
 
@@ -14,15 +13,6 @@ export type RenderedPrompt = {
 };
 
 export type PromptRenderMode = "non-structured" | "structured";
-
-const FALLBACK_STRUCTURED_RESPONSE_INSTRUCTION = [
-    "你必须输出一个 JSON 对象，不要输出任何对象外的文本。",
-    "JSON 对象必须包含字段: action, replyText, control, skip。",
-    "action 只能是 'reply' 或 'skip'。",
-    "当 action='reply' 时，replyText 填写你要发送的回复；当 action='skip' 时，replyText 设为空字符串。",
-    "control 中 summarizeSuggested 为布尔值，summarizeReason 为字符串，summarizeUrgency 取值为 none/low/normal/high。",
-    "skip 中 reasonCode 取值为 none/not_addressed/low_value/rate_control/character_busy/waiting_for_others/other，reason 为字符串。",
-].join("\n");
 
 /**
  * Map an actor role to an LLM message role.
@@ -71,7 +61,7 @@ function stripAssistantPrefixes(content: string, aliasToken?: string, displayNam
 }
 
 export const promptRenderer = {
-    render(context: PromptContext, options?: { mode?: PromptRenderMode }): RenderedPrompt {
+    async render(context: PromptContext, options?: { mode?: PromptRenderMode }): Promise<RenderedPrompt> {
         const mode: PromptRenderMode = options?.mode ?? "non-structured";
         const selfActor = context.actors.find(actor => actor.role === "self");
         const preferredSelfName = context.character?.displayName || context.character?.name;
@@ -84,14 +74,12 @@ export const promptRenderer = {
             displayNameOverridesByActorId: aliasOverrides,
         });
 
-        const systemMessages = buildSystemMessages({
+        const systemMessages = await buildSystemMessages({
             character: context.character,
             userProfile: context.userProfile,
             actors: context.actors,
-            language: context.character?.language ?? undefined,
+            structuredOutput: mode === "structured",
         });
-        const promptBlocks = getPromptBlocks(context.character?.language ?? undefined);
-        const structuredInstruction = promptBlocks.structuredResponseInstruction || FALLBACK_STRUCTURED_RESPONSE_INSTRUCTION;
 
         // Each history message becomes "DisplayName: content" with the correct LLM role.
         const historyMessages: RenderedMessage[] = context.recentMessages.map(m => {
@@ -113,10 +101,6 @@ export const promptRenderer = {
             content: `${currentLabel}: ${context.currentUserMessage.content}`,
         };
 
-        const structuredInstructionMessage: RenderedMessage[] = mode === "structured"
-            ? [{ role: "system", content: structuredInstruction }]
-            : [];
-
-        return { messages: [...systemMessages, ...structuredInstructionMessage, ...historyMessages, userMessage] };
+        return { messages: [...systemMessages, ...historyMessages, userMessage] };
     },
 };

@@ -213,7 +213,7 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
         conversationActorStore: input.stores.conversationActor,
     });
 
-    const rendered = promptRenderer.render(promptContext, { mode: input.llmResponseMode });
+    const rendered = await promptRenderer.render(promptContext, { mode: input.llmResponseMode });
 
     logger.verbose("persona-flow/turn: prompt rendered", {
         conversationId: input.conversationId,

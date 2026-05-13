@@ -5,13 +5,14 @@
     "type": "module",
     "scripts": {
         "test": "tsx --test test/.run.ts",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "prompt:preview": "tsx src/prompt/promptPreview.ts"
     },
     "exports": {
         ".": "./src/index.ts"
     },
     "dependencies": {
-        "yaml": "^2.8.4"
+        "handlebars": "^4.7.9"
     },
     "devDependencies": {
         "@types/node": "^25.6.2",

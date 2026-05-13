@@ -17,6 +17,7 @@
         "dev:server": "tsx apps/server/src/index.ts",
         "dev:web": "npm run dev --workspace=apps/web",
         "dev:qq-bot": "chcp 65001 > nul && tsx apps/qq-bot/src/index.ts --config ./qq-bot.env",
+        "prompt:preview": "npm run prompt:preview --workspace=packages/persona-flow",
         "start": "npm run start:server",
         "start:server": "node apps/server/dist/index.js",
         "test": "npm run test --workspaces --if-present"
@@ -25,6 +26,7 @@
         "@mistralai/mistralai": "^2.2.1",
         "ajv": "^8.20.0",
         "express": "^4.19.2",
+        "handlebars": "^4.7.9",
         "vue": "^3.5.13",
         "zod": "^4.3.6"
     },
