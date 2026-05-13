@@ -60,8 +60,8 @@ export async function handleGroupMessage(event: any, context: MessageHandlerCont
     const text: string = (event.raw_message ?? "").trim();
     if (!text) return;
 
-    const prompt = removeAtSelfPrefix(text, selfId);
-    if (!prompt) {
+    const userMessageText = removeAtSelfPrefix(text, selfId);
+    if (!userMessageText) {
         return;
     }
 
@@ -86,7 +86,7 @@ export async function handleGroupMessage(event: any, context: MessageHandlerCont
         });
     }
 
-    const reply = await context.chat(conversationId, prompt, actorId ?? undefined);
+    const reply = await context.chat(conversationId, userMessageText, actorId ?? undefined);
     if (!reply) return;
 
     context.sendAction("send_group_msg", {

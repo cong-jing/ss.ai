@@ -1,4 +1,4 @@
-import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatMode, type ChatStreamEvent, type GetMessagesResponse } from "@ss-ai/contracts";
+import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMessagesResponse, type LlmResponseMode } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
 
 export async function apiGetMessages(conversationId: string): Promise<GetMessagesResponse> {
@@ -23,39 +23,39 @@ export async function apiDeleteMessage(conversationId: string, messageId: string
 export async function apiSendChatMessage(
     characterId: string,
     conversationId: string,
-    prompt: string,
-    speakerActorId?: string,
-    mode: ChatMode = "structured",
-    includePrompt = false,
+    userMessageText: string,
+    senderActorId?: string,
+    llmResponseMode: LlmResponseMode = "structured",
+    includeAssembledMessages = false,
 ) {
-    return callApi(ApiChat, { characterId, conversationId, prompt, speakerActorId, mode, includePrompt });
+    return callApi(ApiChat, { characterId, conversationId, userMessageText, senderActorId, llmResponseMode, includeAssembledMessages });
 }
 
 export async function apiDryRunChat(
     characterId: string,
     conversationId: string,
-    prompt: string,
-    speakerActorId?: string,
-    mode: ChatMode = "structured",
+    userMessageText: string,
+    senderActorId?: string,
+    llmResponseMode: LlmResponseMode = "structured",
 ) {
-    return callApi(ApiChatDryRun, { characterId, conversationId, prompt, speakerActorId, mode });
+    return callApi(ApiChatDryRun, { characterId, conversationId, userMessageText, senderActorId, llmResponseMode });
 }
 
 export async function apiStreamChatMessage(
     characterId: string,
     conversationId: string,
-    prompt: string,
-    speakerActorId: string | undefined,
-    mode: ChatMode = "non-structured",
+    userMessageText: string,
+    senderActorId: string | undefined,
+    llmResponseMode: LlmResponseMode = "non-structured",
     onChunk: (content: string) => void,
     signal?: AbortSignal,
-    includePrompt = false,
-    onPrompt?: (messages: { role: string; content: string }[]) => void
+    includeAssembledMessages = false,
+    onAssembledMessages?: (messages: { role: string; content: string }[]) => void
 ): Promise<{ requestId: string; model: string }> {
     const response = await fetch(ApiChatStream.apiUrl, {
         method: ApiChatStream.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ characterId, conversationId, prompt, speakerActorId, mode, includePrompt }),
+        body: JSON.stringify({ characterId, conversationId, userMessageText, senderActorId, llmResponseMode, includeAssembledMessages }),
         signal
     });
 
@@ -84,8 +84,8 @@ export async function apiStreamChatMessage(
                 onChunk(event.content);
             } else if (event.type === "done") {
                 result = { requestId: event.requestId, model: event.model };
-            } else if (event.type === "prompt") {
-                onPrompt?.(event.messages);
+            } else if (event.type === "assembledMessages") {
+                onAssembledMessages?.(event.messages);
             }
         }
     }

@@ -12,8 +12,8 @@ export type MessageHandlerContext = {
     ) => Promise<string>;
     chat: (
         conversationId: string,
-        prompt: string,
-        speakerActorId?: string,
+        userMessageText: string,
+        senderActorId?: string,
     ) => Promise<string | null>;
     sendAction: (action: string, params: Record<string, unknown>) => void;
 };

@@ -31,7 +31,7 @@ describe("message handlers", () => {
 
         const sendActions: Array<{ action: string; params: Record<string, unknown> }> = [];
         let createActorCalls = 0;
-        const chatCalls: Array<{ conversationId: string; prompt: string; speakerActorId?: string }> = [];
+        const chatCalls: Array<{ conversationId: string; userMessageText: string; senderActorId?: string }> = [];
 
         const context: MessageHandlerContext = {
             getCharacterId: () => "char-1",
@@ -41,8 +41,8 @@ describe("message handlers", () => {
                 createActorCalls += 1;
                 return "actor-private-1";
             },
-            chat: async (conversationId, prompt, speakerActorId) => {
-                chatCalls.push({ conversationId, prompt, speakerActorId });
+            chat: async (conversationId, userMessageText, senderActorId) => {
+                chatCalls.push({ conversationId, userMessageText, senderActorId });
                 return "reply";
             },
             sendAction: (action, params) => {
@@ -63,8 +63,8 @@ describe("message handlers", () => {
         assert.equal(sendActions.length, 2);
         assert.equal(sendActions[0]?.action, "send_private_msg");
         assert.equal(chatCalls.length, 2);
-        assert.equal(chatCalls[0]?.speakerActorId, "actor-private-1");
-        assert.equal(chatCalls[1]?.speakerActorId, "actor-private-1");
+        assert.equal(chatCalls[0]?.senderActorId, "actor-private-1");
+        assert.equal(chatCalls[1]?.senderActorId, "actor-private-1");
         assert.equal(getPrivateActorBinding(10001)?.conversationId, "conv-private-1");
     });
 
@@ -73,7 +73,7 @@ describe("message handlers", () => {
 
         const sendActions: Array<{ action: string; params: Record<string, unknown> }> = [];
         let createActorCalls = 0;
-        const chatCalls: Array<{ prompt: string; speakerActorId?: string }> = [];
+        const chatCalls: Array<{ userMessageText: string; senderActorId?: string }> = [];
 
         const context: MessageHandlerContext = {
             getCharacterId: () => "char-1",
@@ -83,8 +83,8 @@ describe("message handlers", () => {
                 createActorCalls += 1;
                 return "actor-group-1";
             },
-            chat: async (_conversationId, prompt, speakerActorId) => {
-                chatCalls.push({ prompt, speakerActorId });
+            chat: async (_conversationId, userMessageText, senderActorId) => {
+                chatCalls.push({ userMessageText, senderActorId });
                 return "group-reply";
             },
             sendAction: (action, params) => {
@@ -122,8 +122,8 @@ describe("message handlers", () => {
 
         assert.equal(createActorCalls, 1);
         assert.equal(chatCalls.length, 1);
-        assert.equal(chatCalls[0]?.prompt, "hello group");
-        assert.equal(chatCalls[0]?.speakerActorId, "actor-group-1");
+        assert.equal(chatCalls[0]?.userMessageText, "hello group");
+        assert.equal(chatCalls[0]?.senderActorId, "actor-group-1");
         assert.equal(sendActions.length, 1);
         assert.equal(sendActions[0]?.action, "send_group_msg");
         assert.equal(getGroupMemberActorBinding(20001, 10001)?.conversationId, "conv-group-1");

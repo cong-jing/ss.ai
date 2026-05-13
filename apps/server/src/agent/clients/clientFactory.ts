@@ -1,7 +1,7 @@
-import { AgentConfig, ModelClient } from "../types.js";
+import type { ModelClient, ModelClientFactoryInput } from "@ss-ai/persona-flow";
 import { MistralModelClient } from "./mistralModelClient.js";
 
-export function createModelClientFromConfig(config: Pick<AgentConfig, "provider" | "apiKey" | "apiUrl" | "model">): ModelClient {
+export function createModelClientFromConfig(config: ModelClientFactoryInput): ModelClient {
     const normalizedProvider = config.provider.toLowerCase();
 
     if (normalizedProvider === "mistral" || normalizedProvider === "mistral.ai") {

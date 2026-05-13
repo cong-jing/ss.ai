@@ -98,14 +98,14 @@ const messageHandlerContext: MessageHandlerContext = {
         return resolveConversationId(characterId, type, id);
     },
     createLocalActor,
-    chat: async (conversationId, prompt, speakerActorId) => {
+    chat: async (conversationId, userMessageText, senderActorId) => {
         const characterId = selectedCharacterId;
         if (!characterId) {
             logWarn("[bot] character not initialized, skipping message");
             return null;
         }
-        logInfo(`[bot] chat: character=${characterId}, conversation=${conversationId}, speakerActorId=${speakerActorId ?? "(none)"}, prompt="${prompt}"`);
-        const reply = await chat(characterId, conversationId, prompt, speakerActorId);
+        logInfo(`[bot] chat: character=${characterId}, conversation=${conversationId}, senderActorId=${senderActorId ?? "(none)"}, userMessageText="${userMessageText}"`);
+        const reply = await chat(characterId, conversationId, userMessageText, senderActorId);
         logInfo(`[bot] reply: "${reply}"`);
         return reply;
     },

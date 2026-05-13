@@ -123,10 +123,10 @@ function buildPreviewText(messages: Array<{ role: string; content: string }>): s
 async function refreshPromptPreview(force = false) {
   const characterId = activeCharacterId.value;
   const conversationId = activeConversationId.value;
-  const speakerActorId = selectedActorId.value;
-  const prompt = chatDraftInput.value.trim();
+  const senderActorId = selectedActorId.value;
+  const userMessageText = chatDraftInput.value.trim();
 
-  if (!characterId || !conversationId || !speakerActorId || !prompt) {
+  if (!characterId || !conversationId || !senderActorId || !userMessageText) {
     if (force) {
       previewError.value = "请先选择角色、对话、actor，并输入消息。";
       previewText.value = "";
@@ -146,8 +146,8 @@ async function refreshPromptPreview(force = false) {
   isRefreshing.value = true;
   previewError.value = null;
   try {
-    const mode = streamMode.value ? "non-structured" : "structured";
-    const result = await apiDryRunChat(characterId, conversationId, prompt, speakerActorId, mode);
+    const llmResponseMode = streamMode.value ? "non-structured" : "structured";
+    const result = await apiDryRunChat(characterId, conversationId, userMessageText, senderActorId, llmResponseMode);
     previewText.value = buildPreviewText(result.messages);
     previewUpdatedAt.value = new Date().toLocaleTimeString();
     lastPreviewKey.value = key;

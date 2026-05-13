@@ -75,20 +75,20 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
           {{ message.deleting ? 'Deleting...' : 'Delete' }}
         </button>
         <button
-          v-if="message.role === 'assistant' && message.promptMessages"
+          v-if="message.role === 'assistant' && message.assembledMessages"
           class="view-prompt-btn"
           :class="{ active: showPrompt }"
           @click="showPrompt = !showPrompt"
         >
-          {{ showPrompt ? 'Hide Prompt' : 'View Prompt' }}
+          {{ showPrompt ? 'Hide Assembled Input' : 'View Assembled Input' }}
         </button>
         <time v-if="message.createdAt">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
       </div>
     </header>
     <p class="message-content">{{ message.content }}</p>
-    <div v-if="showPrompt && message.promptMessages" class="prompt-expand">
+    <div v-if="showPrompt && message.assembledMessages" class="prompt-expand">
       <div
-        v-for="(m, i) in message.promptMessages"
+        v-for="(m, i) in message.assembledMessages"
         :key="i"
         class="debug-msg"
         :class="`debug-role-${m.role}`"

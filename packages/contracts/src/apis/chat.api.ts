@@ -1,6 +1,6 @@
 import { ApiDefine } from "../apiBase.js";
 
-export type ChatMode = "non-structured" | "structured";
+export type LlmResponseMode = "non-structured" | "structured";
 
 export interface ChatRequest {
     /** Character to chat with. */
@@ -8,12 +8,12 @@ export interface ChatRequest {
     /** Conversation to continue. Must belong to characterId. */
     conversationId: string;
     /** Optional sender actor for this user message. */
-    speakerActorId?: string;
-    prompt: string;
-    /** Generation mode. Defaults to `structured` when omitted. */
-    mode?: ChatMode;
-    /** When true, the response will include the assembled prompt messages for debugging. */
-    includePrompt?: boolean;
+    senderActorId?: string;
+    userMessageText: string;
+    /** LLM response mode. Defaults to `structured` when omitted. */
+    llmResponseMode?: LlmResponseMode;
+    /** When true, the response will include assembled LLM input messages for debugging. */
+    includeAssembledMessages?: boolean;
 }
 
 export interface ChatResponse {
@@ -26,8 +26,8 @@ export interface ChatResponse {
     assistantMessageId?: string;
     /** Structured decision payload from non-structured/structured dual-mode pipeline. */
     structuredOutput?: ChatStructuredOutput;
-    /** Assembled prompt messages, only present when request included `includePrompt: true`. */
-    promptMessages?: ChatDryRunMessage[];
+    /** Assembled LLM input messages, only present when request included `includeAssembledMessages: true`. */
+    assembledMessages?: ChatDryRunMessage[];
 }
 
 export interface ChatStructuredOutput {
@@ -57,19 +57,19 @@ export interface ChatStreamRequest {
     /** Conversation to continue. Must belong to characterId. */
     conversationId: string;
     /** Optional sender actor for this user message. */
-    speakerActorId?: string;
-    prompt: string;
-    /** Generation mode for stream endpoint. Defaults to `non-structured` when omitted. */
-    mode?: ChatMode;
-    /** When true, a `prompt` SSE event is sent first with the assembled prompt messages. */
-    includePrompt?: boolean;
+    senderActorId?: string;
+    userMessageText: string;
+    /** LLM response mode for stream endpoint. Defaults to `non-structured` when omitted. */
+    llmResponseMode?: LlmResponseMode;
+    /** When true, an `assembledMessages` SSE event is sent first with assembled LLM input messages. */
+    includeAssembledMessages?: boolean;
 }
 
 /** SSE stream event — one per `data:` line */
 export type ChatStreamEvent =
     | { type: "chunk"; content: string }
     | { type: "done"; requestId: string; model: string }
-    | { type: "prompt"; messages: ChatDryRunMessage[] };
+    | { type: "assembledMessages"; messages: ChatDryRunMessage[] };
 
 export const ApiChat = new ApiDefine<ChatRequest, ChatResponse>("/v1/chat", "POST");
 
@@ -85,10 +85,10 @@ export interface ChatDryRunRequest {
     /** Conversation used to build prompt context. Must belong to characterId. */
     conversationId: string;
     /** Optional sender actor for this user message. */
-    speakerActorId?: string;
-    prompt: string;
-    /** Prompt rendering mode. Defaults to `structured` when omitted. */
-    mode?: ChatMode;
+    senderActorId?: string;
+    userMessageText: string;
+    /** LLM response mode for prompt assembly. Defaults to `structured` when omitted. */
+    llmResponseMode?: LlmResponseMode;
 }
 
 export interface ChatDryRunMessage {
@@ -100,5 +100,5 @@ export interface ChatDryRunResponse {
     messages: ChatDryRunMessage[];
 }
 
-/** Dry-run endpoint: assembles the prompt without sending to the LLM. */
+/** Dry-run endpoint: assembles LLM input messages without sending to the LLM. */
 export const ApiChatDryRun = new ApiDefine<ChatDryRunRequest, ChatDryRunResponse>("/v1/chat/dry-run", "POST");

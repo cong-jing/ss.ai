@@ -3,6 +3,10 @@
     "version": "0.1.0",
     "private": true,
     "type": "module",
+    "scripts": {
+        "test": "tsx --test test/.run.ts",
+        "typecheck": "tsc --noEmit"
+    },
     "exports": {
         ".": "./src/index.ts"
     },
@@ -10,6 +14,8 @@
         "yaml": "^2.8.4"
     },
     "devDependencies": {
-        "@types/node": "^25.6.2"
+        "@types/node": "^25.6.2",
+        "tsx": "*",
+        "typescript": "*"
     }
 }

@@ -81,9 +81,9 @@ function mockApiResponse<T>(path: string, method: string, body?: unknown): T {
     }
 
     if (method === "POST" && path === "/v1/chat") {
-        const payload = (body ?? {}) as { prompt?: string };
+        const payload = (body ?? {}) as { userMessageText?: string };
         return {
-            output: `[dry-run] ${payload.prompt ?? ""}`,
+            output: `[dry-run] ${payload.userMessageText ?? ""}`,
             model: "dry-run-model",
             requestId: `dry-run-request-${Date.now()}`,
         } as T;
@@ -173,14 +173,14 @@ export async function createLocalActor(
 export async function chat(
     characterId: string,
     conversationId: string,
-    prompt: string,
-    speakerActorId?: string,
+    userMessageText: string,
+    senderActorId?: string,
 ): Promise<string> {
     const res = await apiFetch<ChatResponse>("/v1/chat", "POST", {
         characterId,
         conversationId,
-        prompt,
-        ...(speakerActorId ? { speakerActorId } : {}),
+        userMessageText,
+        ...(senderActorId ? { senderActorId } : {}),
     });
     return res.output;
 }

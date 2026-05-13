@@ -59,31 +59,31 @@ export function useChatViewModel() {
     const streamMode = useLocalStorage("chat.streamMode", false);
 
     async function sendMessage(text: string, stream = false) {
-        const prompt = text.trim();
-        if (!prompt) {
+        const userMessageText = text.trim();
+        if (!userMessageText) {
             return;
         }
 
         const characterId = activeCharacterId.value;
         const conversationId = activeConversationId.value;
-        const speakerActorId = selectedActorId.value;
-        if (!characterId || !conversationId || !speakerActorId) {
+        const senderActorId = selectedActorId.value;
+        if (!characterId || !conversationId || !senderActorId) {
             const message = "Please select a character, conversation, and actor before sending a message.";
             error.value = message;
             toast.error(message);
             return;
         }
 
-        const selectedActor = actors.value.find(a => a.id === speakerActorId);
+        const selectedActor = actors.value.find(a => a.id === senderActorId);
         const assistantDisplayName = activeCharacter.value?.displayName ?? activeCharacter.value?.name;
 
         messages.value.push({
             id: createId("user"),
             role: "user",
-            senderActorId: speakerActorId,
+            senderActorId,
             senderDisplayName: selectedActor?.displayName,
             senderSourceType: selectedActor?.sourceType,
-            content: prompt,
+            content: userMessageText,
             createdAt: new Date().toISOString(),
             status: "normal"
         });
@@ -104,12 +104,12 @@ export function useChatViewModel() {
             });
 
             try {
-                let capturedPromptMessages: import("./chatTypes").DebugMessage[] | undefined;
+                let capturedAssembledMessages: import("./chatTypes").DebugMessage[] | undefined;
                 const result = await apiStreamChatMessage(
                     characterId,
                     conversationId,
-                    prompt,
-                    speakerActorId,
+                    userMessageText,
+                    senderActorId,
                     "non-structured",
                     (chunk) => {
                         const msg = messages.value.find(m => m.id === msgId);
@@ -117,14 +117,14 @@ export function useChatViewModel() {
                     },
                     undefined,
                     true,
-                    (msgs) => { capturedPromptMessages = msgs; }
+                    (msgs) => { capturedAssembledMessages = msgs; }
                 );
 
                 const msg = messages.value.find(m => m.id === msgId);
                 if (msg) {
                     msg.status = "normal";
                     msg.id = result.requestId || msgId;
-                    if (capturedPromptMessages) msg.promptMessages = capturedPromptMessages;
+                    if (capturedAssembledMessages) msg.assembledMessages = capturedAssembledMessages;
                 }
             } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
@@ -145,8 +145,8 @@ export function useChatViewModel() {
             const response = await apiSendChatMessage(
                 characterId,
                 conversationId,
-                prompt,
-                speakerActorId,
+                userMessageText,
+                senderActorId,
                 "structured",
                 true,
             );
@@ -172,7 +172,7 @@ export function useChatViewModel() {
                     content: response.output,
                     createdAt: new Date().toISOString(),
                     status: "normal",
-                    ...(response.promptMessages ? { promptMessages: response.promptMessages } : {}),
+                    ...(response.assembledMessages ? { assembledMessages: response.assembledMessages } : {}),
                 });
             }
         } catch (e) {
@@ -218,21 +218,21 @@ export function useChatViewModel() {
     const showDebug = useLocalStorage("chat.showDebug", false);
 
     async function dryRunPrompt(text: string) {
-        const prompt = text.trim();
-        if (!prompt) return;
+        const userMessageText = text.trim();
+        if (!userMessageText) return;
 
         const characterId = activeCharacterId.value;
         const conversationId = activeConversationId.value;
-        const speakerActorId = selectedActorId.value;
-        if (!characterId || !conversationId || !speakerActorId) {
+        const senderActorId = selectedActorId.value;
+        if (!characterId || !conversationId || !senderActorId) {
             toast.error("Please select a character, conversation, and actor before dry-run.");
             return;
         }
 
         try {
-            const mode = streamMode.value ? "non-structured" : "structured";
-            const result = await apiDryRunChat(characterId, conversationId, prompt, speakerActorId, mode);
-            console.group("[dry-run] Assembled prompt messages");
+            const llmResponseMode = streamMode.value ? "non-structured" : "structured";
+            const result = await apiDryRunChat(characterId, conversationId, userMessageText, senderActorId, llmResponseMode);
+            console.group("[dry-run] Assembled LLM input messages");
             for (const msg of result.messages) {
                 console.log(`--- [${msg.role}] ---`);
                 console.log(msg.content);

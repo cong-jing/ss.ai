@@ -1,4 +1,4 @@
-import type { ModelClient, ModelGenerationInput, ModelGenerationResult, ModelStreamCallbacks, ModelStreamResult, ModelToolCall, ModelUsage } from "../types.js";
+import type { ModelClient, ModelGenerationInput, ModelGenerationResult, ModelStreamCallbacks, ModelStreamResult, ModelToolCall, ModelUsage } from "@ss-ai/persona-flow";
 import type { Mistral as MistralSDKClient } from "@mistralai/mistralai";
 import { extractStructuredResult, extractText, extractTextDelta, extractToolCallsFromMessage, extractUsage, normalizeToolCall, toSdkMessages } from "./mistral/messageTransforms.js";
 import { mistralStructuredOutputSchema } from "./mistral/structuredOutputSchema.js";

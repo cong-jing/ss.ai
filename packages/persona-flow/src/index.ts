@@ -19,3 +19,7 @@ export * from "./prompt/systemPromptBuilder.js";
 export * from "./prompt/promptRenderer.js";
 export * from "./prompt/localizedPromptBlocks.js";
 export * from "./prompt/commonRoleplayTurnOutput.js";
+export * from "./llm/modelClient.js";
+export * from "./services/personaFlowModelService.js";
+export * from "./services/chatTurnPreparation.js";
+export * from "./services/personaFlowChatTurnService.js";

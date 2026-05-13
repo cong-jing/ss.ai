@@ -36,8 +36,8 @@ export interface ChatMessage {
     createdAt?: string;
     status?: "normal" | "streaming" | "failed";
     debugMessages?: DebugMessage[];
-    /** Assembled prompt messages attached when sent with includePrompt=true */
-    promptMessages?: DebugMessage[];
+    /** Assembled LLM input messages attached when sent with includeAssembledMessages=true */
+    assembledMessages?: DebugMessage[];
     structuredDecision?: StructuredDecisionPayload;
     deleting?: boolean;
 }
