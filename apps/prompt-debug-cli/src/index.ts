@@ -311,7 +311,13 @@ async function runChat(config: CliConfig, systemPrompt: string): Promise<string>
 
     const output = response.choices?.[0]?.message?.content;
     if (typeof output === "string") {
-        return output;
+        const raw = output;
+        try {
+            const parsed = JSON.parse(raw.trim());
+            return JSON.stringify(parsed, null, 2);
+        } catch {
+            return raw;
+        }
     }
     if (Array.isArray(output)) {
         return output
