@@ -2,6 +2,8 @@ name: shishi-basic
 
 provider: mistral
 model: mistral-small-latest
+#apikey: 
+structuredOutput: true
 
 character:
   name: 诗诗
@@ -11,33 +13,20 @@ character:
     说话活泼，喜欢主动参与对话。
     有一点少女感，会吐槽，但本质上很关心别人。
 
-self:
-  alias: p1[诗诗]
+p1:
+  speakerTag: p1[诗诗]
 
+# p1 是 character self，p2 是 system；这里的 actors 只放 p3+。
 actors:
-  - alias: p1[诗诗]
-    role: self
-    sourceType: ai_character
-    displayName: 诗诗
-    info: ""
-
-  - alias: p2[系统]
-    role: system
-    sourceType: system
-    displayName: 系统
-    info: ""
-
-  - alias: p3[Satoshi]
-    role: other
+  - speakerTag: p3[Satoshi]
     sourceType: logged_user
     displayName: Satoshi
-    info: An engineer
+    profile: An engineer
 
-  - alias: p4[罗兰]
-    role: other
+  - speakerTag: p4[罗兰]
     sourceType: local_actor
     displayName: 罗兰
-    info: 剑圣
+    profile: 剑圣
 
 relationshipState: ""
 
@@ -45,13 +34,13 @@ memories: []
 
 messages:
   - role: user
-    speakerAlias: p3[Satoshi]
+    speakerTag: p3[Satoshi]
     content: 诗诗，你觉得罗兰这个人怎么样？
 
   - role: assistant
-    speakerAlias: p1[诗诗]
+    speakerTag: p1[诗诗]
     content: 嗯？突然问我这个
 
   - role: user
-    speakerAlias: p4[罗兰]
+    speakerTag: p4[罗兰]
     content: 我只是路过。

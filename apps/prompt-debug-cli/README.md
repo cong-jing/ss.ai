@@ -1,24 +1,6 @@
 # Prompt Debug CLI
 
-一个用于调试 prompt 的命令行工具。
-
-它会读取 YAML 配置文件，构造 PromptViewModel，渲染 `main.md.hbs`，并可选直接调用模型完成一次 chat，最后将结果输出到控制台和日志文件。
-
-## 适用场景
-
-- 快速验证模板变量映射是否正确
-- 对比不同角色/actor/消息组合下的 prompt 渲染结果
-- 在不经过 server API 的情况下直接做 prompt + 模型联调
-
-## 为什么不走 server API
-
-当前是 prompt 调试工具，建议直接调用 persona-flow + 模型 SDK：
-
-1. 链路短，排查更快
-2. 不受 HTTP 层鉴权、路由和中间件干扰
-3. 更容易构造“脱离数据库”的测试数据
-
-后续如果要给前端共享或做远程联调，再考虑补 server API。
+一个用于调试 prompt 的命令行工具。读取 YAML 配置，渲染模板，并可选调用模型执行一轮 chat。
 
 ## 配置文件
 
@@ -26,16 +8,52 @@
 
 - `examples/shishi-basic.yaml`
 
-核心字段：
+最小可用 YAML：
 
-- `provider` / `model`
-- `character`
-- `self`
-- `actors`
-- `relationshipState`
-- `memories`
-- `messages`
-- `structuredOutput`（可选，默认 `true`）
+```yaml
+provider: mistral
+model: mistral-small-latest
+
+character:
+	displayName: 诗诗
+	description: 一个开朗热情的女孩
+	personaPrompt: |
+		说话活泼，喜欢主动参与对话。
+
+actors:
+	- sourceType: logged_user
+		displayName: Satoshi
+		profile: An engineer
+
+messages:
+	- role: user
+		speakerTag: p3[Satoshi]
+		content: 诗诗，你觉得罗兰这个人怎么样？
+```
+
+配置建议：
+
+- `p1.speakerTag` 可省略，会自动生成 `p1[character.displayName]`
+- `actors[]` 只放 p3+（`logged_user` / `local_actor`）
+- `actors[].speakerTag` 可省略，会自动按顺序生成 `p3/p4/...`
+- `p2` 不需要配置，固定为 `p2[system]`
+
+兼容旧字段（建议逐步迁移）：
+
+- `self.alias` -> `p1.speakerTag`
+- `actors[].alias` -> `actors[].speakerTag`
+- `actors[].info` -> `actors[].profile`
+- `messages[].speakerAlias` -> `messages[].speakerTag`
+
+路径规则：
+
+- 程序优先使用启动命令所在目录（`INIT_CWD`）解析相对配置路径；没有 `INIT_CWD` 时使用当前进程目录。
+- 渲染模板按以下顺序查找：
+1. 配置文件同目录下 `main.md.hbs`
+2. 启动目录下 `main.md.hbs`
+3. 当前进程目录下 `main.md.hbs`
+4. 启动目录下 `packages/persona-flow/data/prompts/zh-CN/main.md.hbs`（本仓库开发回退）
+- 推荐运行目录结构：`.runtime/prompt-debug/`，并在调用命令时传入配置文件路径。
 
 ## 命令
 
@@ -51,11 +69,19 @@ npm run prompt:debug -- --config apps/prompt-debug-cli/examples/shishi-basic.yam
 npm run prompt:debug -- -c apps/prompt-debug-cli/examples/shishi-basic.yaml
 ```
 
+指定模板文件：
+
+```bash
+npm run prompt:debug -- -c apps/prompt-debug-cli/examples/shishi-basic.yaml -t .runtime/prompt-debug/main.md.hbs
+```
+
 ### 仅渲染，不调用模型
 
 ```bash
 npm run prompt:debug -- -c apps/prompt-debug-cli/examples/shishi-basic.yaml -r
 ```
+
+`-r` 模式除了输出 system prompt，还会输出“组装后的消息数组（system + history）”，便于对照最终发给模型的输入。
 
 ### 指定输出文件
 
@@ -72,6 +98,7 @@ npm run prompt:debug -- -c apps/prompt-debug-cli/examples/shishi-basic.yaml --no
 ## 参数说明
 
 - `--config`, `-c`：配置文件路径（必填）
+- `--template`, `-t`：模板文件路径（可选）
 - `--out`, `-o`：输出日志文件路径（可选）
 - `--render-only`, `-r`：仅渲染 prompt，不调用模型
 - `--no-log`, `-n`：不写日志文件，仅控制台输出
@@ -100,18 +127,18 @@ npm run prompt:debug -- -c apps/prompt-debug-cli/examples/shishi-basic.yaml --no
 2. 环境变量 `MISTRAL_API_KEY`
 3. 环境变量 `MODEL_API_KEY`
 
-## 你现在问的三个点（结论）
+## Q/A
 
-1. 必须加输出参数吗？
-- 不必须。
+Q: 输出文件参数必须给吗？
+A: 不必须。不传 `--out` 会按默认规则写到配置文件同目录。
 
-2. 默认能否跟输入文件同目录同名加后缀？
-- 可以，已经实现。
+Q: 模板必须写 `-t` 吗？
+A: 不必须。CLI 会按“路径规则”自动查找 `main.md.hbs`。需要固定模板时再用 `-t`。
 
-3. 参数能不能更短？
-- 可以，已经支持 `-c/-o/-r/-n`。
+Q: 参数有短写吗？
+A: 有，支持 `-c/-t/-o/-r/-n`。
 
-## 建议下一步追加功能
+## 后续功能建议
 
 1. `--dump-messages`
 - 把最终发给 LLM 的完整 messages JSON 一并落盘，便于比对。

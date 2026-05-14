@@ -1,6 +1,16 @@
-import type { AppStores, Character, Conversation, ConversationActor, Message, UserCharacterState, UserPreferences, UserProviderCredential, UserProfile } from "../../src/index.js";
+import type {
+    AppStores,
+    Character,
+    Conversation,
+    ConversationActor,
+    Message,
+    UserCharacterState,
+    UserPreferences,
+    UserProviderCredential,
+    UserProfile,
+} from "../../src/index.js";
 
-class InMemoryCharacterStore implements AppStores["character"] {
+class InMemoryCharacterStore {
     private readonly records = new Map<string, Character>();
 
     async createCharacter(character: Character): Promise<void> {
@@ -46,7 +56,7 @@ class InMemoryCharacterStore implements AppStores["character"] {
     }
 }
 
-class InMemoryConversationStore implements AppStores["conversation"] {
+class InMemoryConversationStore {
     private readonly records = new Map<string, Conversation>();
 
     async listConversations(input: { userId: string; characterId: string }): Promise<Conversation[]> {
@@ -94,7 +104,7 @@ class InMemoryConversationStore implements AppStores["conversation"] {
     }
 }
 
-class InMemoryConversationActorStore implements AppStores["conversationActor"] {
+class InMemoryConversationActorStore {
     private readonly records = new Map<string, ConversationActor>();
 
     async getActorById(id: string): Promise<ConversationActor | null> {
@@ -164,7 +174,7 @@ class InMemoryConversationActorStore implements AppStores["conversationActor"] {
     }
 }
 
-class InMemoryChatStore implements AppStores["chat"] {
+class InMemoryChatStore {
     private readonly messages: Message[] = [];
     private readonly states = new Map<string, UserCharacterState>();
 
@@ -201,7 +211,7 @@ class InMemoryChatStore implements AppStores["chat"] {
     }
 }
 
-class InMemoryUserProfileStore implements AppStores["userProfile"] {
+class InMemoryUserProfileStore {
     private readonly records = new Map<string, UserProfile>();
 
     async getUserProfile(userId: string): Promise<UserProfile | null> {
@@ -218,7 +228,7 @@ class InMemoryUserProfileStore implements AppStores["userProfile"] {
     }
 }
 
-class InMemoryUserPreferencesStore implements AppStores["userPreferences"] {
+class InMemoryUserPreferencesStore {
     private readonly records = new Map<string, UserPreferences>();
 
     async getUserPreferences(userId: string): Promise<UserPreferences | null> {
@@ -266,7 +276,7 @@ class InMemoryUserPreferencesStore implements AppStores["userPreferences"] {
     }
 }
 
-class InMemoryUserProviderCredentialStore implements AppStores["providerCredential"] {
+class InMemoryUserProviderCredentialStore {
     private readonly records = new Map<string, UserProviderCredential>();
 
     private key(input: { userId: string; provider: string }): string {

@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Mistral } from "@mistralai/mistralai";
 import { renderPromptTemplate, type PromptViewModel } from "@ss-ai/persona-flow";
 import { parse as parseYaml } from "yaml";
@@ -16,17 +15,20 @@ type CliConfig = {
         description?: string;
         personaPrompt?: string;
     };
-    self?: {
-        alias?: string;
-    };
     p1?: {
         speakerTag?: string;
     };
+    self?: {
+        // Backward compatibility with old config shape.
+        alias?: string;
+    };
     actors?: Array<{
+        // Deprecated, use speakerTag.
         alias?: string;
         role?: string;
         sourceType?: string;
         displayName?: string;
+        // Deprecated, use profile.
         info?: string;
         profile?: string;
         speakerTag?: string;
@@ -35,6 +37,9 @@ type CliConfig = {
     memories?: string[];
     messages?: Array<{
         role?: "system" | "user" | "assistant";
+        // Preferred field name for history speaker label.
+        speakerTag?: string;
+        // Backward compatibility with old config shape.
         speakerAlias?: string;
         content?: string;
     }>;
@@ -43,14 +48,13 @@ type CliConfig = {
 
 type CliArgs = {
     configPath: string;
+    templatePath: string | null;
     outputPath: string | null;
     renderOnly: boolean;
 };
 
-const __dir = dirname(fileURLToPath(import.meta.url));
-const workspaceRoot = resolve(__dir, "../../../");
-const packageRoot = resolve(__dir, "../");
-const defaultTemplatePath = resolve(workspaceRoot, "packages/persona-flow/data/prompts/zh-CN/main.md.hbs");
+const runtimeCwd = process.cwd();
+const startupCwd = process.env.INIT_CWD?.trim() || runtimeCwd;
 
 async function resolveExistingInputPath(inputPath: string): Promise<string> {
     if (inputPath.startsWith("/")) {
@@ -58,9 +62,8 @@ async function resolveExistingInputPath(inputPath: string): Promise<string> {
     }
 
     const candidates = [
-        resolve(process.cwd(), inputPath),
-        resolve(packageRoot, inputPath),
-        resolve(workspaceRoot, inputPath),
+        resolve(startupCwd, inputPath),
+        resolve(runtimeCwd, inputPath),
     ];
 
     for (const candidate of candidates) {
@@ -72,8 +75,54 @@ async function resolveExistingInputPath(inputPath: string): Promise<string> {
         }
     }
 
-    // Fall back to workspace root based path for clearer project-level behavior.
-    return resolve(workspaceRoot, inputPath);
+    return resolve(startupCwd, inputPath);
+}
+
+async function resolvePromptTemplatePath(configPath: string): Promise<string> {
+    const candidates = [
+        resolve(dirname(configPath), "main.md.hbs"),
+        resolve(startupCwd, "main.md.hbs"),
+        resolve(runtimeCwd, "main.md.hbs"),
+        resolve(startupCwd, "packages/persona-flow/data/prompts/zh-CN/main.md.hbs"),
+    ];
+
+    for (const candidate of candidates) {
+        try {
+            await fs.access(candidate);
+            return candidate;
+        } catch {
+            // try next candidate
+        }
+    }
+
+    throw new Error([
+        "Prompt template not found.",
+        "Expected one of:",
+        `- ${candidates[0]}`,
+        `- ${candidates[1]}`,
+    ].join("\n"));
+}
+
+async function resolveOptionalPath(inputPath: string): Promise<string> {
+    if (inputPath.startsWith("/")) {
+        return inputPath;
+    }
+
+    const candidates = [
+        resolve(startupCwd, inputPath),
+        resolve(runtimeCwd, inputPath),
+    ];
+
+    for (const candidate of candidates) {
+        try {
+            await fs.access(candidate);
+            return candidate;
+        } catch {
+            // try next candidate
+        }
+    }
+
+    return resolve(startupCwd, inputPath);
 }
 
 function resolveOutputPath(outputPath: string): string {
@@ -81,8 +130,7 @@ function resolveOutputPath(outputPath: string): string {
         return outputPath;
     }
 
-    // Prefer workspace-root relative output so logs end up in predictable locations.
-    return resolve(workspaceRoot, outputPath);
+    return resolve(startupCwd, outputPath);
 }
 
 function buildDefaultOutputPath(configPath: string, renderOnly: boolean): string {
@@ -95,6 +143,7 @@ function buildDefaultOutputPath(configPath: string, renderOnly: boolean): string
 
 async function parseArgs(argv: string[]): Promise<CliArgs> {
     let configPath = "";
+    let templatePath: string | undefined;
     let outputPath: string | undefined;
     let renderOnly = false;
     let noLog = false;
@@ -109,6 +158,11 @@ async function parseArgs(argv: string[]): Promise<CliArgs> {
         }
         if ((arg === "--out" || arg === "-o") && argv[i + 1]) {
             outputPath = argv[i + 1];
+            i += 1;
+            continue;
+        }
+        if ((arg === "--template" || arg === "-t") && argv[i + 1]) {
+            templatePath = argv[i + 1];
             i += 1;
             continue;
         }
@@ -135,6 +189,7 @@ async function parseArgs(argv: string[]): Promise<CliArgs> {
     }
 
     const resolvedConfigPath = await resolveExistingInputPath(configPath);
+    const resolvedTemplatePath = templatePath ? await resolveOptionalPath(templatePath) : null;
     let resolvedOutputPath: string | null;
     if (noLog) {
         resolvedOutputPath = null;
@@ -146,6 +201,7 @@ async function parseArgs(argv: string[]): Promise<CliArgs> {
 
     return {
         configPath: resolvedConfigPath,
+        templatePath: resolvedTemplatePath,
         outputPath: resolvedOutputPath,
         renderOnly,
     };
@@ -201,14 +257,15 @@ function toChatMessages(config: CliConfig, systemPrompt: string): Array<{
     const history = (config.messages ?? []).map((message) => {
         const role = message.role ?? "user";
         const content = message.content ?? "";
+        const speakerTag = message.speakerTag ?? message.speakerAlias;
 
-        if (role === "system" || !message.speakerAlias) {
+        if (role === "system" || !speakerTag) {
             return { role, content };
         }
 
         return {
             role,
-            content: `${message.speakerAlias}: ${content}`,
+            content: `${speakerTag}: ${content}`,
         };
     });
 
@@ -218,16 +275,20 @@ function toChatMessages(config: CliConfig, systemPrompt: string): Array<{
     ];
 }
 
-async function render(configPath: string): Promise<{
+async function render(configPath: string, templatePath?: string | null): Promise<{
     config: CliConfig;
     systemPrompt: string;
+    templatePath: string;
+    assembledMessages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
 }> {
     const raw = await fs.readFile(configPath, "utf-8");
     const config = parseYaml(raw) as CliConfig;
     const viewModel = toPromptViewModel(config);
-    const systemPrompt = await renderPromptTemplate(defaultTemplatePath, viewModel);
+    const resolvedTemplatePath = templatePath ?? await resolvePromptTemplatePath(configPath);
+    const systemPrompt = await renderPromptTemplate(resolvedTemplatePath, viewModel);
+    const assembledMessages = toChatMessages(config, systemPrompt);
 
-    return { config, systemPrompt };
+    return { config, systemPrompt, templatePath: resolvedTemplatePath, assembledMessages };
 }
 
 async function runChat(config: CliConfig, systemPrompt: string): Promise<string> {
@@ -274,14 +335,22 @@ async function maybeWriteLog(outputPath: string | null, content: string): Promis
 
 async function main(): Promise<void> {
     const args = await parseArgs(process.argv.slice(2));
-    const { config, systemPrompt } = await render(args.configPath);
+    const { config, systemPrompt, templatePath, assembledMessages } = await render(args.configPath, args.templatePath);
 
     const sections: string[] = [];
     sections.push(`# Prompt Debug Run: ${config.name ?? "unnamed"}`);
     sections.push(`- provider: ${config.provider}`);
     sections.push(`- model: ${config.model}`);
+    sections.push(`- template: ${templatePath}`);
     sections.push("\n## Rendered System Prompt\n");
     sections.push(systemPrompt);
+
+    if (args.renderOnly) {
+        sections.push("\n## Assembled Messages (Render Only)\n");
+        sections.push("```json");
+        sections.push(JSON.stringify(assembledMessages, null, 2));
+        sections.push("```");
+    }
 
     if (!args.renderOnly) {
         const output = await runChat(config, systemPrompt);
