@@ -175,12 +175,22 @@ export async function chat(
     conversationId: string,
     userMessageText: string,
     senderActorId?: string,
-): Promise<string> {
+): Promise<string | null> {
     const res = await apiFetch<ChatResponse>("/v1/chat", "POST", {
         characterId,
         conversationId,
         userMessageText,
+        llmResponseMode: "structured",
         ...(senderActorId ? { senderActorId } : {}),
     });
+
+    if (res.structuredOutput?.action === "skip") {
+        return null;
+    }
+
+    if (res.structuredOutput?.replyText?.trim()) {
+        return res.structuredOutput.replyText;
+    }
+
     return res.output;
 }

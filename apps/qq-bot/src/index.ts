@@ -106,6 +106,10 @@ const messageHandlerContext: MessageHandlerContext = {
         }
         logInfo(`[bot] chat: character=${characterId}, conversation=${conversationId}, senderActorId=${senderActorId ?? "(none)"}, userMessageText="${userMessageText}"`);
         const reply = await chat(characterId, conversationId, userMessageText, senderActorId);
+        if (reply == null) {
+            logInfo("[bot] chat skipped by structured decision");
+            return null;
+        }
         logInfo(`[bot] reply: "${reply}"`);
         return reply;
     },
