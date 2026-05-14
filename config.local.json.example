@@ -5,21 +5,16 @@
     },
     "logger": {
         "level": "debug",
-        "logFilePath": "./logs/dev.log",
+        "logFilePath": "./.runtime/logs/ss-ai.log",
         "includeSourceLocation": true,
         "includeStackTrace": false
+    },
+    "promptLog": {
+        "enabled": true,
+        "filePath": "./.runtime/logs/ss-ai.prompt.log"
     },
     "runtimeFiles": {
         "tempDir": "./.runtime/temp-dev",
         "userDataDir": "./.runtime/user-data-dev"
-    },
-    "agent": {
-        "currentProvider": "mistral.ai"
-    },
-    "models": {
-        "mistral.ai": {
-            "apiKey": "YOUR_LOCAL_API_KEY",
-            "availableModels": []
-        }
     }
 }

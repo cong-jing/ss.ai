@@ -1,0 +1,1 @@
+npm run prompt:debug -- -c .runtime/prompt-debug/basic-test.yaml

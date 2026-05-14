@@ -2,7 +2,7 @@ name: shishi-basic
 
 provider: mistral
 model: mistral-small-latest
-#apikey: 
+#apiKey: 
 structuredOutput: true
 
 character:
