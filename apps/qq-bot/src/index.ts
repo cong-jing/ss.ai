@@ -55,9 +55,9 @@ const ONEBOT_ACCESS_TOKEN = process.env.NAPCAT_ACCESS_TOKEN
     ?? process.env.ONEBOT_ACCESS_TOKEN
     ?? "";
 const CHARACTER_NAME = process.env.CHARACTER_NAME?.trim() ?? "";
-const OUTPUT_DIR = resolvePathFromProject(process.env.OUTPUT_DIR, "user-data-dev/qq-bot");
+const OUTPUT_DIR = resolvePathFromProject(process.env.OUTPUT_DIR, ".runtime/qq-bot");
 const CONVERSATION_MAP_PATH = resolve(OUTPUT_DIR, "conversation-map.json");
-const LOG_FILE_PATH = resolvePathFromProject(process.env.LOG_FILE_PATH, "user-data-dev/qq-bot/qq-bot.log");
+const LOG_FILE_PATH = resolvePathFromProject(process.env.LOG_FILE_PATH, ".runtime/qq-bot/qq-bot.log");
 const IS_DRY_RUN = ["1", "true", "yes", "on"].includes(
     (process.env.QQ_BOT_DRY_RUN ?? "").trim().toLowerCase(),
 );

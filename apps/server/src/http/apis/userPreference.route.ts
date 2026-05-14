@@ -1,7 +1,7 @@
 import * as UserPreferenceApi from "@ss-ai/contracts/apis/userPreference";
 import type { ErrorResponse } from "@ss-ai/contracts";
 import { AI_FUNCTIONS } from "@ss-ai/contracts";
-import { createModelClientFromConfig } from "../../modelClients/clientFactory.js";
+import { createModelClientFromConfig } from "@ss-ai/persona-flow-model-client";
 import { registerApi } from "../registerApi.js";
 import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
 

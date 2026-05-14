@@ -1,21 +1,21 @@
 {
-    "name": "@ss-ai/prompt-debug-cli",
+    "name": "@ss-ai/persona-flow-model-client",
     "version": "0.1.0",
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "tsx src/index.ts",
-        "start": "node dist/index.js",
-        "build": "tsc -p tsconfig.json"
+        "typecheck": "tsc --noEmit"
+    },
+    "exports": {
+        ".": "./src/index.ts"
     },
     "dependencies": {
+        "@mistralai/mistralai": "^2.2.1",
         "@ss-ai/persona-flow": "*",
-        "@ss-ai/persona-flow-model-client": "*",
-        "yaml": "^2.8.4"
+        "zod": "^4.3.6"
     },
     "devDependencies": {
         "@types/node": "^22.7.4",
-        "tsx": "^4.19.1",
         "typescript": "^5.6.3"
     }
 }
