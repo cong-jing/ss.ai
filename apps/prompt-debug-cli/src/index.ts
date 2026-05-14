@@ -19,12 +19,17 @@ type CliConfig = {
     self?: {
         alias?: string;
     };
+    p1?: {
+        speakerTag?: string;
+    };
     actors?: Array<{
         alias?: string;
         role?: string;
         sourceType?: string;
         displayName?: string;
         info?: string;
+        profile?: string;
+        speakerTag?: string;
     }>;
     relationshipState?: string;
     memories?: string[];
@@ -147,40 +152,42 @@ async function parseArgs(argv: string[]): Promise<CliArgs> {
 }
 
 function toPromptViewModel(config: CliConfig): PromptViewModel {
-    const actors = (config.actors ?? []).map((actor) => {
-        const alias = actor.alias ?? "";
-        const role = actor.role ?? "other";
-        const sourceType = actor.sourceType ?? "local_actor";
-        const displayName = (actor.displayName ?? "").trim() || alias;
-        const isSelf = role === "self";
+    const normalizedActors = (config.actors ?? [])
+        .filter(actor => actor.role !== "self" && actor.role !== "system")
+        .map((actor, index) => {
+            const sourceType: PromptViewModel["actors"][number]["sourceType"] = actor.sourceType === "logged_user"
+                ? "logged_user"
+                : "local_actor";
+            const displayName = (actor.displayName ?? "").trim() || "unknown";
+            const speakerTag = actor.speakerTag
+                ?? actor.alias
+                ?? `p${index + 3}[${displayName}]`;
+            const profile = (actor.profile ?? actor.info ?? "").trim() || "（无）";
 
-        return {
-            alias,
-            role,
-            sourceType,
-            info: actor.info ?? "",
-            isSelf,
-            displayName,
-            description: isSelf ? (config.character?.description ?? "") : "",
-            personaPrompt: isSelf ? (config.character?.personaPrompt ?? "") : "",
-        };
-    });
+            return {
+                speakerTag,
+                displayName,
+                sourceType,
+                profile,
+            };
+        });
 
-    const fallbackSelfAlias = actors.find(actor => actor.isSelf)?.alias ?? "";
-    const selfAlias = config.self?.alias ?? fallbackSelfAlias;
-    const selfActor = actors.find(actor => actor.alias === selfAlias || actor.isSelf);
+    const selfDisplayName = (config.character?.displayName || config.character?.name || "").trim() || "self";
+    const selfSpeakerTag = config.p1?.speakerTag
+        ?? config.self?.alias
+        ?? `p1[${selfDisplayName}]`;
 
     return {
-        self: {
-            alias: selfAlias,
-            displayName: (
-                selfActor?.displayName
-                || config.character?.displayName
-                || config.character?.name
-                || selfAlias
-            ),
+        p1: {
+            speakerTag: selfSpeakerTag,
+            displayName: selfDisplayName,
+            description: config.character?.description ?? "",
+            personaPrompt: config.character?.personaPrompt ?? "",
         },
-        actors,
+        p2: {
+            speakerTag: "p2[system]",
+        },
+        actors: normalizedActors,
         relationshipState: config.relationshipState ?? "",
         memories: config.memories ?? [],
         structuredOutput: config.structuredOutput ?? true,

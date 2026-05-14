@@ -1,13 +1,13 @@
 import type { ConversationActor } from "../stores/character/conversationActor.js";
 
-export type ActorAlias = {
+export type ActorSpeakerTag = {
     actorId: string;
     index: number;
     displayName: string;
-    token: string;
+    speakerTag: string;
 };
 
-type BuildActorAliasesOptions = {
+type BuildActorSpeakerTagsOptions = {
     displayNameOverridesByActorId?: Map<string, string>;
 };
 
@@ -22,7 +22,7 @@ function normalizeDisplayName(name: string): string {
     return cleaned || "unknown";
 }
 
-function sortActorsForAlias(actors: ConversationActor[]): ConversationActor[] {
+function sortActorsForSpeakerTag(actors: ConversationActor[]): ConversationActor[] {
     return [...actors].sort((a, b) => {
         const orderDiff = roleOrder(a) - roleOrder(b);
         if (orderDiff !== 0) return orderDiff;
@@ -34,30 +34,30 @@ function sortActorsForAlias(actors: ConversationActor[]): ConversationActor[] {
     });
 }
 
-export function buildActorAliases(
+export function buildActorSpeakerTags(
     actors: ConversationActor[] | null | undefined,
-    options?: BuildActorAliasesOptions,
+    options?: BuildActorSpeakerTagsOptions,
 ): {
-    aliases: ActorAlias[];
-    aliasByActorId: Map<string, ActorAlias>;
+    speakerTags: ActorSpeakerTag[];
+    speakerTagByActorId: Map<string, ActorSpeakerTag>;
 } {
     if (!actors || actors.length === 0) {
-        return { aliases: [], aliasByActorId: new Map() };
+        return { speakerTags: [], speakerTagByActorId: new Map() };
     }
 
-    const sorted = sortActorsForAlias(actors);
-    const aliases = sorted.map((actor, index): ActorAlias => {
+    const sorted = sortActorsForSpeakerTag(actors);
+    const speakerTags = sorted.map((actor, index): ActorSpeakerTag => {
         const overriddenDisplayName = options?.displayNameOverridesByActorId?.get(actor.id)?.trim();
         const displayName = normalizeDisplayName(overriddenDisplayName || actor.displayName);
-        const aliasIndex = index + 1;
+        const tagIndex = index + 1;
         return {
             actorId: actor.id,
-            index: aliasIndex,
+            index: tagIndex,
             displayName,
-            token: `p${aliasIndex}[${displayName}]`,
+            speakerTag: `p${tagIndex}[${displayName}]`,
         };
     });
 
-    const aliasByActorId = new Map<string, ActorAlias>(aliases.map(alias => [alias.actorId, alias]));
-    return { aliases, aliasByActorId };
+    const speakerTagByActorId = new Map<string, ActorSpeakerTag>(speakerTags.map(item => [item.actorId, item]));
+    return { speakerTags, speakerTagByActorId };
 }

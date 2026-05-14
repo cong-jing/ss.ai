@@ -1,5 +1,5 @@
-import type { CommonRoleplayTurnOutput } from "../prompt/commonRoleplayTurnOutput.js";
-import type { RenderedMessage } from "../prompt/systemPromptBuilder.js";
+import type { CommonRoleplayTurnOutput } from "../structuredOutput/commonRoleplayTurnOutput.js";
+import type { RenderedMessage } from "../prompt/system/systemPromptBuilder.js";
 
 export type GenerationMode = "non-structured" | "structured";
 

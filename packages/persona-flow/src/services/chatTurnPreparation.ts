@@ -1,5 +1,5 @@
-import type { PromptContext } from "../prompt/promptConext.js";
-import { PromptContextBuilder } from "../prompt/promptConext.js";
+import type { PromptContext } from "../prompt/promptContext.js";
+import { PromptContextBuilder } from "../prompt/promptContext.js";
 import type { PromptRenderMode, RenderedPrompt } from "../prompt/promptRenderer.js";
 import { promptRenderer } from "../prompt/promptRenderer.js";
 import type { AppStores } from "../stores/appStores.js";
