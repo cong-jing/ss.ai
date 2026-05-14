@@ -5,8 +5,7 @@
     "type": "module",
     "scripts": {
         "test": "tsx --test test/.run.ts",
-        "typecheck": "tsc --noEmit",
-        "prompt:preview": "tsx src/prompt/promptPreview.ts"
+        "typecheck": "tsc --noEmit"
     },
     "exports": {
         ".": "./src/index.ts"

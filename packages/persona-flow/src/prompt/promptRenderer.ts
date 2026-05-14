@@ -1,8 +1,6 @@
-import type { PromptContext } from "./promptConext.js";
-import { buildSystemMessages, type RenderedMessage, type BuildSystemMessagesInput } from "./systemPromptBuilder.js";
-import { buildActorAliases } from "./actorAlias.js";
-
-export type { RenderedMessage, BuildSystemMessagesInput };
+import type { PromptContext } from "./promptContext.js";
+import { buildSystemMessages, type RenderedMessage } from "./system/systemPromptBuilder.js";
+import { buildActorSpeakerTags } from "./speakerTag.js";
 
 /**
  * Rendered prompt structure with all messages for the LLM.
@@ -38,10 +36,10 @@ function stripRepeatedPrefix(text: string, regex: RegExp): string {
     return output;
 }
 
-function stripAssistantPrefixes(content: string, aliasToken?: string, displayName?: string): string {
+function stripAssistantPrefixes(content: string, speakerTag?: string, displayName?: string): string {
     let output = content.trimStart();
 
-    // Remove one or more generated actor alias prefixes: p1[SS]:
+    // Remove one or more generated speaker tag prefixes: p1[SS]:
     output = stripRepeatedPrefix(output, /^p\d+\[[^\]]+\]\s*[:：]\s*/u);
 
     // Remove one or more direct name prefixes for self actor: SS:
@@ -51,10 +49,10 @@ function stripAssistantPrefixes(content: string, aliasToken?: string, displayNam
         output = stripRepeatedPrefix(output, new RegExp(`^${escaped}\\s*[:：]\\s*`, "u"));
     }
 
-    // Fallback: alias token from current actor map, if provided.
-    if (aliasToken) {
-        const escapedAlias = escapeRegExp(aliasToken);
-        output = stripRepeatedPrefix(output, new RegExp(`^${escapedAlias}\\s*[:：]\\s*`, "u"));
+    // Fallback: speaker tag from current actor map, if provided.
+    if (speakerTag) {
+        const escapedTag = escapeRegExp(speakerTag);
+        output = stripRepeatedPrefix(output, new RegExp(`^${escapedTag}\\s*[:：]\\s*`, "u"));
     }
 
     return output;
@@ -70,7 +68,7 @@ export const promptRenderer = {
             aliasOverrides.set(selfActor.id, preferredSelfName);
         }
 
-        const { aliasByActorId } = buildActorAliases(context.actors, {
+        const { speakerTagByActorId } = buildActorSpeakerTags(context.actors, {
             displayNameOverridesByActorId: aliasOverrides,
         });
 
@@ -85,17 +83,17 @@ export const promptRenderer = {
         const historyMessages: RenderedMessage[] = context.recentMessages.map(m => {
             const actor = context.actorMap.get(m.senderActorId);
             const role = actor ? toLlmRole(actor.role) : "user";
-            const alias = aliasByActorId.get(m.senderActorId);
-            const label = alias?.token ?? `p?[${actor?.displayName ?? m.senderActorId}]`;
+            const tag = speakerTagByActorId.get(m.senderActorId);
+            const label = tag?.speakerTag ?? `p?[${actor?.displayName ?? m.senderActorId}]`;
             const normalized = role === "assistant"
-                ? stripAssistantPrefixes(m.content, alias?.token, alias?.displayName || actor?.displayName)
+                ? stripAssistantPrefixes(m.content, tag?.speakerTag, tag?.displayName || actor?.displayName)
                 : m.content;
             return { role, content: `${label}: ${normalized}` };
         });
 
         const currentActor = context.actorMap.get(context.currentUserMessage.senderActorId);
-        const currentAlias = aliasByActorId.get(context.currentUserMessage.senderActorId);
-        const currentLabel = currentAlias?.token ?? `p?[${currentActor?.displayName ?? context.currentUserMessage.senderActorId}]`;
+        const currentTag = speakerTagByActorId.get(context.currentUserMessage.senderActorId);
+        const currentLabel = currentTag?.speakerTag ?? `p?[${currentActor?.displayName ?? context.currentUserMessage.senderActorId}]`;
         const userMessage: RenderedMessage = {
             role: "user",
             content: `${currentLabel}: ${context.currentUserMessage.content}`,

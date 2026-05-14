@@ -18,7 +18,6 @@
         "dev:web": "npm run dev --workspace=apps/web",
         "dev:qq-bot": "chcp 65001 > nul && tsx apps/qq-bot/src/index.ts --config ./qq-bot.env",
         "prompt:debug": "npm run dev --workspace=apps/prompt-debug-cli --",
-        "prompt:preview": "npm run prompt:preview --workspace=packages/persona-flow",
         "start": "npm run start:server",
         "start:server": "node apps/server/dist/index.js",
         "test": "npm run test --workspaces --if-present"

@@ -1,7 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Character, UserProfile } from "../index.js";
-import type { ConversationActor } from "../stores/character/conversationActor.js";
+import type { Character, UserProfile } from "../../index.js";
+import type { ConversationActor } from "../../stores/character/conversationActor.js";
 import { buildPromptViewModel } from "./buildPromptViewModel.js";
 import { renderPromptTemplate } from "./renderPromptTemplate.js";
 
@@ -23,9 +23,8 @@ export interface BuildSystemMessagesInput {
     structuredOutput?: boolean;
 }
 
-
 const __dir = dirname(fileURLToPath(import.meta.url));
-const MAIN_TEMPLATE_PATH = resolve(__dir, "../../data/prompts/zh-CN/main.md.hbs");
+const MAIN_TEMPLATE_PATH = resolve(__dir, "../../../data/prompts/zh-CN/main.md.hbs");
 
 export async function buildSystemMessages(input: BuildSystemMessagesInput): Promise<RenderedMessage[]> {
     const viewModel = buildPromptViewModel({
