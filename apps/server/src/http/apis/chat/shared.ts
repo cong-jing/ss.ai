@@ -3,7 +3,7 @@ import {
     PersonaFlowChatTurnService,
     PersonaFlowModelService,
 } from "@ss-ai/persona-flow";
-import { createModelClientFromConfig } from "../../../modelClients/clientFactory.js";
+import { createModelClientFromConfig } from "@ss-ai/persona-flow-model-client";
 import { PromptLogger } from "../../../util/promptLog.js";
 import type { HttpApiContext } from "../apiContext.js";
 

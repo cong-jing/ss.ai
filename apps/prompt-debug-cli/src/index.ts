@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
-import { Mistral } from "@mistralai/mistralai";
 import { renderPromptTemplate, type PromptViewModel } from "@ss-ai/persona-flow";
+import { createModelClientFromConfig } from "@ss-ai/persona-flow-model-client";
 import { parse as parseYaml } from "yaml";
 
 type CliConfig = {
@@ -9,6 +9,8 @@ type CliConfig = {
     provider: string;
     model: string;
     apiKey?: string;
+    apiUrl?: string;
+    timeoutMs?: number;
     character?: {
         name?: string;
         displayName?: string;
@@ -50,6 +52,7 @@ type CliArgs = {
     configPath: string;
     templatePath: string | null;
     outputPath: string | null;
+    dumpMessages: boolean;
     renderOnly: boolean;
 };
 
@@ -141,10 +144,24 @@ function buildDefaultOutputPath(configPath: string, renderOnly: boolean): string
     return resolve(fileDir, `${base}${suffix}`);
 }
 
+function buildDefaultMessagesDumpPath(configPath: string): string {
+    const fileDir = dirname(configPath);
+    const ext = extname(configPath);
+    const base = basename(configPath, ext || undefined);
+    return resolve(fileDir, `${base}.messages.json`);
+}
+
+function buildMessagesDumpPathFromOutput(outputPath: string): string {
+    const ext = extname(outputPath);
+    const base = basename(outputPath, ext || undefined);
+    return resolve(dirname(outputPath), `${base}.messages.json`);
+}
+
 async function parseArgs(argv: string[]): Promise<CliArgs> {
     let configPath = "";
     let templatePath: string | undefined;
     let outputPath: string | undefined;
+    let dumpMessages = false;
     let renderOnly = false;
     let noLog = false;
     const positional: string[] = [];
@@ -164,6 +181,10 @@ async function parseArgs(argv: string[]): Promise<CliArgs> {
         if ((arg === "--template" || arg === "-t") && argv[i + 1]) {
             templatePath = argv[i + 1];
             i += 1;
+            continue;
+        }
+        if (arg === "--dump-messages" || arg === "-d") {
+            dumpMessages = true;
             continue;
         }
         if (arg === "--render-only" || arg === "-r") {
@@ -203,6 +224,7 @@ async function parseArgs(argv: string[]): Promise<CliArgs> {
         configPath: resolvedConfigPath,
         templatePath: resolvedTemplatePath,
         outputPath: resolvedOutputPath,
+        dumpMessages,
         renderOnly,
     };
 }
@@ -291,46 +313,38 @@ async function render(configPath: string, templatePath?: string | null): Promise
     return { config, systemPrompt, templatePath: resolvedTemplatePath, assembledMessages };
 }
 
-async function runChat(config: CliConfig, systemPrompt: string): Promise<string> {
-    const provider = (config.provider ?? "").toLowerCase();
-    if (provider !== "mistral" && provider !== "mistral.ai") {
-        throw new Error(`Unsupported provider in prompt-debug-cli: ${config.provider}`);
-    }
-
+async function runChat(
+    config: CliConfig,
+    assembledMessages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+): Promise<string> {
     const apiKey = config.apiKey || process.env.MISTRAL_API_KEY || process.env.MODEL_API_KEY;
     if (!apiKey) {
         throw new Error("Missing API key. Set config.apiKey or env MISTRAL_API_KEY / MODEL_API_KEY.");
     }
 
-    const client = new Mistral({ apiKey });
-    const response = await client.chat.complete({
+    const client = createModelClientFromConfig({
+        provider: config.provider,
         model: config.model,
-        messages: toChatMessages(config, systemPrompt),
-        responseFormat: { type: "text" },
+        apiKey,
+        apiUrl: config.apiUrl ?? "https://api.mistral.ai",
     });
 
-    const output = response.choices?.[0]?.message?.content;
-    if (typeof output === "string") {
-        const raw = output;
-        try {
-            const parsed = JSON.parse(raw.trim());
-            return JSON.stringify(parsed, null, 2);
-        } catch {
-            return raw;
-        }
+    const result = await client.generateNonStructured({
+        messages: assembledMessages,
+        timeoutMs: config.timeoutMs ?? 60000,
+    });
+
+    const raw = result.output;
+    if (!raw) {
+        return "";
     }
-    if (Array.isArray(output)) {
-        return output
-            .map((part) => {
-                if (typeof part === "string") return part;
-                if (part && typeof part === "object" && "text" in part && typeof part.text === "string") {
-                    return part.text;
-                }
-                return "";
-            })
-            .join("");
+
+    try {
+        const parsed = JSON.parse(raw.trim());
+        return JSON.stringify(parsed, null, 2);
+    } catch {
+        return raw;
     }
-    return "";
 }
 
 async function maybeWriteLog(outputPath: string | null, content: string): Promise<void> {
@@ -339,9 +353,18 @@ async function maybeWriteLog(outputPath: string | null, content: string): Promis
     await fs.writeFile(outputPath, content, "utf-8");
 }
 
+async function maybeWriteMessagesDump(path: string | null, messages: Array<{ role: "system" | "user" | "assistant"; content: string }>): Promise<void> {
+    if (!path) return;
+    await fs.mkdir(dirname(path), { recursive: true });
+    await fs.writeFile(path, JSON.stringify(messages, null, 2), "utf-8");
+}
+
 async function main(): Promise<void> {
     const args = await parseArgs(process.argv.slice(2));
     const { config, systemPrompt, templatePath, assembledMessages } = await render(args.configPath, args.templatePath);
+    const messagesDumpPath = args.dumpMessages
+        ? (args.outputPath ? buildMessagesDumpPathFromOutput(args.outputPath) : buildDefaultMessagesDumpPath(args.configPath))
+        : null;
 
     const sections: string[] = [];
     sections.push(`# Prompt Debug Run: ${config.name ?? "unnamed"}`);
@@ -351,15 +374,13 @@ async function main(): Promise<void> {
     sections.push("\n## Rendered System Prompt\n");
     sections.push(systemPrompt);
 
-    if (args.renderOnly) {
-        sections.push("\n## Assembled Messages (Render Only)\n");
-        sections.push("```json");
-        sections.push(JSON.stringify(assembledMessages, null, 2));
-        sections.push("```");
-    }
+    sections.push("\n## Assembled Messages\n");
+    sections.push("```json");
+    sections.push(JSON.stringify(assembledMessages, null, 2));
+    sections.push("```");
 
     if (!args.renderOnly) {
-        const output = await runChat(config, systemPrompt);
+        const output = await runChat(config, assembledMessages);
         sections.push("\n## Chat Output\n");
         sections.push(output || "(empty)");
     }
@@ -367,8 +388,12 @@ async function main(): Promise<void> {
     const report = sections.join("\n");
     console.log(report);
     await maybeWriteLog(args.outputPath, report);
+    await maybeWriteMessagesDump(messagesDumpPath, assembledMessages);
     if (args.outputPath) {
         console.log(`\n[prompt-debug-cli] 日志已写入: ${args.outputPath}`);
+    }
+    if (messagesDumpPath) {
+        console.log(`[prompt-debug-cli] 消息数组已写入: ${messagesDumpPath}`);
     }
 }
 

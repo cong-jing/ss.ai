@@ -83,6 +83,8 @@ npm run prompt:debug -- -c apps/prompt-debug-cli/examples/shishi-basic.yaml -r
 
 `-r` 模式除了输出 system prompt，还会输出“组装后的消息数组（system + history）”，便于对照最终发给模型的输入。
 
+当前版本在普通模式（不加 `-r`）也会输出“组装后的消息数组”，并写入日志文件。
+
 ### 指定输出文件
 
 ```bash
@@ -95,11 +97,23 @@ npm run prompt:debug -- -c apps/prompt-debug-cli/examples/shishi-basic.yaml -o a
 npm run prompt:debug -- -c apps/prompt-debug-cli/examples/shishi-basic.yaml --no-log
 ```
 
+### 导出组装后的消息数组
+
+```bash
+npm run prompt:debug -- -c apps/prompt-debug-cli/examples/shishi-basic.yaml --dump-messages
+```
+
+启用后会输出独立 JSON 文件：
+
+- 有 `--out`：写到日志同目录，文件名为 `<日志文件名>.messages.json`
+- 无 `--out`：写到配置同目录，文件名为 `<配置文件名>.messages.json`
+
 ## 参数说明
 
 - `--config`, `-c`：配置文件路径（必填）
 - `--template`, `-t`：模板文件路径（可选）
 - `--out`, `-o`：输出日志文件路径（可选）
+- `--dump-messages`, `-d`：额外导出组装后的消息数组 JSON（可选）
 - `--render-only`, `-r`：仅渲染 prompt，不调用模型
 - `--no-log`, `-n`：不写日志文件，仅控制台输出
 
@@ -136,21 +150,18 @@ Q: 模板必须写 `-t` 吗？
 A: 不必须。CLI 会按“路径规则”自动查找 `main.md.hbs`。需要固定模板时再用 `-t`。
 
 Q: 参数有短写吗？
-A: 有，支持 `-c/-t/-o/-r/-n`。
+A: 有，支持 `-c/-t/-o/-d/-r/-n`。
 
 ## 后续功能建议
 
-1. `--dump-messages`
-- 把最终发给 LLM 的完整 messages JSON 一并落盘，便于比对。
-
-2. `--stream`
+1. `--stream`
 - 支持流式输出，观察中间 token 行为与前缀清理效果。
 
-3. `--temperature` / `--topP` / `--maxTokens`
+2. `--temperature` / `--topP` / `--maxTokens`
 - 允许在配置或命令行覆盖采样参数，便于实验。
 
-4. `--repeat N`
+3. `--repeat N`
 - 同一配置多次执行，观察输出波动。
 
-5. `--template`
-- 可切换模板文件路径，方便 A/B prompt 版本。
+4. provider 预设
+- 除 Mistral 外，补充 OpenAI / Anthropic 预设 `apiUrl` 与调用适配。

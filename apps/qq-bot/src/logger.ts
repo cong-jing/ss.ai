@@ -2,7 +2,7 @@ import { mkdirSync } from "fs";
 import { dirname } from "path";
 import pino, { type LevelWithSilent, type Logger } from "pino";
 
-let logFilePath = "./user-data-dev/qq-bot/qq-bot.log";
+let logFilePath = "./.runtime/qq-bot/qq-bot.log";
 let logger = createConsoleLogger();
 
 function createConsoleLogger(): Logger {

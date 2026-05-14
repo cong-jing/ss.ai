@@ -1,5 +1,10 @@
-import type { CommonRoleplayTurnOutput } from "@ss-ai/persona-flow";
-import type { ModelGenerationInput, ModelStructuredResult, ModelToolCall, ModelUsage } from "@ss-ai/persona-flow";
+import type {
+    CommonRoleplayTurnOutput,
+    ModelGenerationInput,
+    ModelStructuredResult,
+    ModelToolCall,
+    ModelUsage,
+} from "@ss-ai/persona-flow";
 import { mistralStructuredOutputSchema } from "./structuredOutputSchema.js";
 
 export function toSdkMessages(input: ModelGenerationInput) {
