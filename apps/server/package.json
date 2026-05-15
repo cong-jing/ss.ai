@@ -13,6 +13,7 @@
     "dependencies": {
         "@ss-ai/contracts": "*",
         "@ss-ai/persona-flow": "*",
+        "@ss-ai/persona-flow-logger": "*",
         "@ss-ai/persona-flow-model-client": "*",
         "@ss-ai/persona-flow-sqlite": "*"
     },

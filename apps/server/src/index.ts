@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { loadRuntimeConfig } from "./util/config.js";
 import { startHttpServer } from "./http/server.js";
-import { createLogger, setGlobalLogger } from "./util/logger.js";
+import { createLogger, setGlobalLogger } from "@ss-ai/persona-flow-logger";
 
 const LOGGER_STACK_LEVEL = 0;
 

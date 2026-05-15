@@ -4,7 +4,7 @@ import {
     getGroupMemberActorBinding,
     setGroupMemberActorBinding,
 } from "../conversationStore.js";
-import { log } from "../logger.js";
+import { getGlobalLogger } from "@ss-ai/persona-flow-logger";
 import { chatForMessage, resolveConversationIdForMessage } from "./messageRuntime.js";
 
 function includesAtSelf(event: any, selfId: string | number): boolean {
@@ -51,7 +51,7 @@ function buildGroupProfileSnapshot(event: any): string {
 export async function handleGroupMessage(event: any, context: MessageHandlerContext): Promise<void> {
     const selfId = context.getBotSelfId();
     if (selfId == null) {
-        log("[bot] TODO: group @self filter needs selfId, skip this message for now");
+        getGlobalLogger().info("[bot] TODO: group @self filter needs selfId, skip this message for now");
         return;
     }
 
@@ -83,7 +83,7 @@ export async function handleGroupMessage(event: any, context: MessageHandlerCont
         const profileSnapshotJson = buildGroupProfileSnapshot(event);
         actorId = await createLocalActor(conversationId, displayName, profileSnapshotJson);
         setGroupMemberActorBinding(event.group_id, event.user_id, { conversationId, actorId });
-        log("[bot] group actor binding created", {
+        getGlobalLogger().info("[bot] group actor binding created", {
             groupId: event.group_id,
             userId: event.user_id,
             conversationId,

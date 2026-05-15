@@ -4,7 +4,7 @@ import {
     getPrivateActorBinding,
     setPrivateActorBinding,
 } from "../conversationStore.js";
-import { log } from "../logger.js";
+import { getGlobalLogger } from "@ss-ai/persona-flow-logger";
 import { chatForMessage, resolveConversationIdForMessage } from "./messageRuntime.js";
 
 function resolvePrivateDisplayName(event: any): string {
@@ -47,7 +47,7 @@ export async function handlePrivateMessage(event: any, context: MessageHandlerCo
         const profileSnapshotJson = buildPrivateProfileSnapshot(event);
         actorId = await createLocalActor(conversationId, displayName, profileSnapshotJson);
         setPrivateActorBinding(event.user_id, { conversationId, actorId });
-        log("[bot] private actor binding created", {
+        getGlobalLogger().info("[bot] private actor binding created", {
             userId: event.user_id,
             conversationId,
             actorId,

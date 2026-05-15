@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import type { RuntimeConfig } from "../../util/config.js";
-import { Logger } from "../../util/logger.js";
+import type { Logger } from "@ss-ai/persona-flow-logger";
 import type { ErrorResponse } from "@ss-ai/contracts";
 import type { AppStores } from "@ss-ai/persona-flow";
 

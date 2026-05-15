@@ -1,7 +1,7 @@
 type ConversationType = "user" | "group";
 
 import { getConversationId, setConversationId } from "../conversationStore.js";
-import { logInfo, logWarn } from "../logger.js";
+import { getGlobalLogger } from "@ss-ai/persona-flow-logger";
 import { chat, createConversation } from "../http/serverClient.js";
 
 export async function resolveConversationIdForMessage(
@@ -10,13 +10,13 @@ export async function resolveConversationIdForMessage(
     id: string | number,
 ): Promise<string | null> {
     if (!characterId) {
-        logWarn("[bot] character not initialized, skipping message");
+        getGlobalLogger().warn("[bot] character not initialized, skipping message");
         return null;
     }
 
     let conversationId = getConversationId(type, id);
     if (!conversationId) {
-        logInfo(`[bot] no conversation for ${type}:${id}, creating new one`);
+        getGlobalLogger().info(`[bot] no conversation for ${type}:${id}, creating new one`);
         conversationId = await createConversation(characterId);
         setConversationId(type, id, conversationId);
     }
@@ -31,20 +31,20 @@ export async function chatForMessage(
     senderActorId: string | undefined,
 ): Promise<string | null> {
     if (!characterId) {
-        logWarn("[bot] character not initialized, skipping message");
+        getGlobalLogger().warn("[bot] character not initialized, skipping message");
         return null;
     }
 
-    logInfo(
+    getGlobalLogger().info(
         `[bot] chat: character=${characterId}, conversation=${conversationId}, senderActorId=${senderActorId ?? "(none)"}, userMessageText="${userMessageText}"`,
     );
 
     const reply = await chat(characterId, conversationId, userMessageText, senderActorId);
     if (reply == null) {
-        logInfo("[bot] chat skipped by structured decision");
+        getGlobalLogger().info("[bot] chat skipped by structured decision");
         return null;
     }
 
-    logInfo(`[bot] reply: "${reply}"`);
+    getGlobalLogger().info(`[bot] reply: "${reply}"`);
     return reply;
 }

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ErrorObject } from "ajv";
-import { LogLevel } from "./logger.js";
+import type { LogLevel } from "@ss-ai/persona-flow-logger";
 
 export interface RuntimeModelEntry {
     provider: string;

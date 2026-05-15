@@ -3,13 +3,19 @@ import { fileURLToPath } from "url";
 import { dirname, isAbsolute, resolve } from "path";
 import WebSocket from "ws";
 import {
+    createLogger,
+    setGlobalLogger,
+    getGlobalLogger,
+    parseLogLevel,
+    type LoggerOptions,
+} from "@ss-ai/persona-flow-logger";
+import {
     findCharacterByName,
     listConversations,
 } from "./http/serverClient.js";
 import {
     configureConversationStore,
 } from "./conversationStore.js";
-import { configureLogger, logError, logInfo, logWarn } from "./logger.js";
 import { createMessageHandlerContext } from "./handlers/messageHandlerContext.js";
 import { handleGroupMessage } from "./handlers/groupMessageHandler.js";
 import { handlePrivateMessage } from "./handlers/privateMessageHandler.js";
@@ -56,12 +62,27 @@ const IS_DRY_RUN = ["1", "true", "yes", "on"].includes(
     (process.env.QQ_BOT_DRY_RUN ?? "").trim().toLowerCase(),
 );
 
-configureLogger(LOG_FILE_PATH);
+const loggerOptions: LoggerOptions = {
+    level: parseLogLevel(process.env.LOG_LEVEL, {
+        strict: true,
+        fallbackLevel: "debug",
+        onInvalid: (raw, fallback) => {
+            process.stderr.write(`[bot] invalid LOG_LEVEL=${String(raw)}; fallback to ${fallback}\n`);
+        },
+    }),
+    logFilePath: LOG_FILE_PATH,
+    includeSourceLocation: true,
+    includeStackTrace: false,
+    clearLogFileOnStart: true,
+    stackLevel: 0,
+};
+setGlobalLogger(createLogger(loggerOptions));
+const logger = getGlobalLogger();
 
 if (dotenvResult.error) {
-    logWarn(`[bot] failed to load config file: ${configPath}`);
+    logger.warn(`[bot] failed to load config file: ${configPath}`);
 } else {
-    logInfo(`[bot] loaded config file: ${configPath}`);
+    logger.info(`[bot] loaded config file: ${configPath}`);
 }
 
 configureConversationStore(CONVERSATION_MAP_PATH);
@@ -78,29 +99,29 @@ const ws = new WebSocket(wsUrl, {
 
 const messageHandlerContext = createMessageHandlerContext({
     config: { isDryRun: IS_DRY_RUN },
-    sendAction,
+    sendAction: (action: string, params: Record<string, unknown>): void => {
+        const payload = {
+            action,
+            params,
+            echo: `echo-${Date.now()}`,
+        };
+        logger.info("[bot] sending action", payload);
+        ws.send(JSON.stringify(payload));
+    },
 });
 
-function sendAction(action: string, params: Record<string, unknown>): void {
-    const payload = {
-        action,
-        params,
-        echo: `echo-${Date.now()}`,
-    };
-    ws.send(JSON.stringify(payload));
-}
 ws.on("open", () => {
-    logInfo("[bot] connected to NapCat OneBot");
-    logInfo(`[bot] bindings store path: ${CONVERSATION_MAP_PATH}`);
-    logInfo(`[bot] log file path: ${LOG_FILE_PATH}`);
+    logger.info("[bot] connected to NapCat OneBot");
+    logger.info(`[bot] bindings store path: ${CONVERSATION_MAP_PATH}`);
+    logger.info(`[bot] log file path: ${LOG_FILE_PATH}`);
     if (IS_DRY_RUN) {
-        logWarn("[bot] dry-run mode enabled: server APIs will be logged but not called");
+        logger.warn("[bot] dry-run mode enabled: server APIs will be logged but not called");
     }
     const selectedCharacterName = messageHandlerContext.getCharacterName();
     if (selectedCharacterName) {
-        logInfo(`[bot] character name: ${selectedCharacterName}`);
+        logger.info(`[bot] character name: ${selectedCharacterName}`);
     }
-    sendAction("get_login_info", {});
+    messageHandlerContext.sendAction("get_login_info", {});
 });
 
 ws.on("message", (data: { toString(): string }): void => {
@@ -108,14 +129,14 @@ ws.on("message", (data: { toString(): string }): void => {
     try {
         event = JSON.parse(data.toString());
     } catch {
-        logWarn("[bot] failed to parse message:", data.toString());
+        logger.warn("[bot] failed to parse message", { raw: data.toString() });
         return;
     }
 
     if (event.echo && typeof event.echo === "string" && event.echo.startsWith("echo-")) {
         if (event.data?.user_id != null) {
             messageHandlerContext.setBotSelfId(event.data.user_id);
-            logInfo("[bot] NapCat login info", {
+            logger.info("[bot] NapCat login info", {
                 selfId: event.data.user_id,
                 nickname: event.data.nickname ?? null,
             });
@@ -124,7 +145,7 @@ ws.on("message", (data: { toString(): string }): void => {
 
     if (event.post_type === "message") {
         const handleIncomingMessage = async (event: any) => {
-            logInfo?.("[bot] incoming message event", event);
+            logger.info("[bot] incoming message event", event);
 
             if (event.self_id != null) {
                 messageHandlerContext.setBotSelfId(event.self_id);
@@ -143,34 +164,34 @@ ws.on("message", (data: { toString(): string }): void => {
             await handlePrivateMessage(event, messageHandlerContext);
         };
         handleIncomingMessage(event).catch((err) => {
-            logError("[bot] error handling message:", err);
+            logger.error("[bot] error handling message", err);
         });
     }
 });
 
 ws.on("error", (err) => {
-    logError("[bot] websocket error:", err);
+    logger.error("[bot] websocket error", err);
 });
 
 ws.on("close", () => {
-    logWarn("[bot] websocket closed");
+    logger.warn("[bot] websocket closed");
 });
 
 
 async function initializeCharacter(): Promise<void> {
     if (!CHARACTER_NAME) {
-        logError("[bot] CHARACTER_NAME is required in config.");
+        logger.error("[bot] CHARACTER_NAME is required in config.");
         return;
     }
 
     const { matches, activeCharacterId } = await findCharacterByName(CHARACTER_NAME);
     if (matches.length === 0) {
-        logError(`[bot] character not found by name: ${CHARACTER_NAME}`);
+        logger.error(`[bot] character not found by name: ${CHARACTER_NAME}`);
         return;
     }
     if (matches.length > 1) {
         const duplicateIds = matches.map(item => item.id).join(", ");
-        logError(`[bot] duplicate character names found: ${CHARACTER_NAME}, ids=${duplicateIds}`);
+        logger.error(`[bot] duplicate character names found: ${CHARACTER_NAME}, ids=${duplicateIds}`);
         return;
     }
 
@@ -178,7 +199,7 @@ async function initializeCharacter(): Promise<void> {
     messageHandlerContext.setCharacter(character.id, character.name);
 
     const conversationInfo = await listConversations(character.id);
-    logInfo("[bot] character initialized", {
+    logger.info("[bot] character initialized", {
         id: character.id,
         name: character.name,
         displayName: character.displayName,
@@ -189,5 +210,5 @@ async function initializeCharacter(): Promise<void> {
 }
 
 initializeCharacter().catch((err) => {
-    logError("[bot] failed to initialize character:", err);
+    logger.error("[bot] failed to initialize character", err);
 });
