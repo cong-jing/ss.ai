@@ -5,20 +5,14 @@ import WebSocket from "ws";
 import {
     findCharacterByName,
     listConversations,
-    createConversation,
-    createLocalActor,
-    chat,
-} from "./serverClient.js";
+} from "./http/serverClient.js";
 import {
     configureConversationStore,
-    getConversationId,
-    setConversationId,
 } from "./conversationStore.js";
-import { configureLogger, log, logError, logInfo, logWarn } from "./logger.js";
-import { handlePrivateMessage } from "./handlers/privateMessageHandler.js";
+import { configureLogger, logError, logInfo, logWarn } from "./logger.js";
+import { createMessageHandlerContext } from "./handlers/messageHandlerContext.js";
 import { handleGroupMessage } from "./handlers/groupMessageHandler.js";
-import type { MessageHandlerContext } from "./handlers/messageHandlerContext.js";
-import { createWsMessageDispatcher } from "./wsMessageDispatcher.js";
+import { handlePrivateMessage } from "./handlers/privateMessageHandler.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "../../..");
@@ -82,39 +76,10 @@ const ws = new WebSocket(wsUrl, {
         : {},
 });
 
-let selectedCharacterId: string | null = null;
-let selectedCharacterName: string | null = null;
-let botSelfId: string | number | null = null;
-
-const messageHandlerContext: MessageHandlerContext = {
-    getCharacterId: () => selectedCharacterId,
-    getBotSelfId: () => botSelfId,
-    resolveConversationId: async (type, id) => {
-        const characterId = selectedCharacterId;
-        if (!characterId) {
-            logWarn("[bot] character not initialized, skipping message");
-            return null;
-        }
-        return resolveConversationId(characterId, type, id);
-    },
-    createLocalActor,
-    chat: async (conversationId, userMessageText, senderActorId) => {
-        const characterId = selectedCharacterId;
-        if (!characterId) {
-            logWarn("[bot] character not initialized, skipping message");
-            return null;
-        }
-        logInfo(`[bot] chat: character=${characterId}, conversation=${conversationId}, senderActorId=${senderActorId ?? "(none)"}, userMessageText="${userMessageText}"`);
-        const reply = await chat(characterId, conversationId, userMessageText, senderActorId);
-        if (reply == null) {
-            logInfo("[bot] chat skipped by structured decision");
-            return null;
-        }
-        logInfo(`[bot] reply: "${reply}"`);
-        return reply;
-    },
+const messageHandlerContext = createMessageHandlerContext({
+    config: { isDryRun: IS_DRY_RUN },
     sendAction,
-};
+});
 
 function sendAction(action: string, params: Record<string, unknown>): void {
     const payload = {
@@ -124,24 +89,73 @@ function sendAction(action: string, params: Record<string, unknown>): void {
     };
     ws.send(JSON.stringify(payload));
 }
-
-/**
- * Get or create a conversationId for a given QQ user or group.
- * If the conversation doesn't exist yet, a new one is created on the server.
- */
-async function resolveConversationId(
-    characterId: string,
-    type: "user" | "group",
-    id: string | number,
-): Promise<string> {
-    let conversationId = getConversationId(type, id);
-    if (!conversationId) {
-        logInfo(`[bot] no conversation for ${type}:${id}, creating new one`);
-        conversationId = await createConversation(characterId);
-        setConversationId(type, id, conversationId);
+ws.on("open", () => {
+    logInfo("[bot] connected to NapCat OneBot");
+    logInfo(`[bot] bindings store path: ${CONVERSATION_MAP_PATH}`);
+    logInfo(`[bot] log file path: ${LOG_FILE_PATH}`);
+    if (IS_DRY_RUN) {
+        logWarn("[bot] dry-run mode enabled: server APIs will be logged but not called");
     }
-    return conversationId;
-}
+    const selectedCharacterName = messageHandlerContext.getCharacterName();
+    if (selectedCharacterName) {
+        logInfo(`[bot] character name: ${selectedCharacterName}`);
+    }
+    sendAction("get_login_info", {});
+});
+
+ws.on("message", (data: { toString(): string }): void => {
+    let event: any;
+    try {
+        event = JSON.parse(data.toString());
+    } catch {
+        logWarn("[bot] failed to parse message:", data.toString());
+        return;
+    }
+
+    if (event.echo && typeof event.echo === "string" && event.echo.startsWith("echo-")) {
+        if (event.data?.user_id != null) {
+            messageHandlerContext.setBotSelfId(event.data.user_id);
+            logInfo("[bot] NapCat login info", {
+                selfId: event.data.user_id,
+                nickname: event.data.nickname ?? null,
+            });
+        }
+    }
+
+    if (event.post_type === "message") {
+        const handleIncomingMessage = async (event: any) => {
+            logInfo?.("[bot] incoming message event", event);
+
+            if (event.self_id != null) {
+                messageHandlerContext.setBotSelfId(event.self_id);
+            }
+
+            const botSelfId = messageHandlerContext.getBotSelfId();
+            if (botSelfId != null && event.user_id === botSelfId) {
+                return;
+            }
+
+            if (event.message_type === "group") {
+                await handleGroupMessage(event, messageHandlerContext);
+                return;
+            }
+
+            await handlePrivateMessage(event, messageHandlerContext);
+        };
+        handleIncomingMessage(event).catch((err) => {
+            logError("[bot] error handling message:", err);
+        });
+    }
+});
+
+ws.on("error", (err) => {
+    logError("[bot] websocket error:", err);
+});
+
+ws.on("close", () => {
+    logWarn("[bot] websocket closed");
+});
+
 
 async function initializeCharacter(): Promise<void> {
     if (!CHARACTER_NAME) {
@@ -161,8 +175,7 @@ async function initializeCharacter(): Promise<void> {
     }
 
     const character = matches[0];
-    selectedCharacterId = character.id;
-    selectedCharacterName = character.name;
+    messageHandlerContext.setCharacter(character.id, character.name);
 
     const conversationInfo = await listConversations(character.id);
     logInfo("[bot] character initialized", {
@@ -174,56 +187,6 @@ async function initializeCharacter(): Promise<void> {
         conversationCount: conversationInfo.conversations.length,
     });
 }
-
-async function handleIncomingMessage(event: any): Promise<void> {
-    logInfo("[bot] incoming message event", event);
-
-    if (event.self_id != null) {
-        botSelfId = event.self_id;
-    }
-
-    if (botSelfId != null && event.user_id === botSelfId) {
-        return;
-    }
-
-    if (event.message_type === "group") {
-        await handleGroupMessage(event, messageHandlerContext);
-        return;
-    }
-
-    await handlePrivateMessage(event, messageHandlerContext);
-}
-
-ws.on("open", () => {
-    logInfo("[bot] connected to NapCat OneBot");
-    logInfo(`[bot] bindings store path: ${CONVERSATION_MAP_PATH}`);
-    logInfo(`[bot] log file path: ${LOG_FILE_PATH}`);
-    if (IS_DRY_RUN) {
-        logWarn("[bot] dry-run mode enabled: server APIs will be logged but not called");
-    }
-    if (selectedCharacterName) {
-        logInfo(`[bot] character name: ${selectedCharacterName}`);
-    }
-    sendAction("get_login_info", {});
-});
-
-ws.on("message", createWsMessageDispatcher({
-    handleIncomingMessage,
-    setBotSelfId: (id) => {
-        botSelfId = id;
-    },
-    logInfo,
-    logWarn,
-    logError,
-}));
-
-ws.on("error", (err) => {
-    logError("[bot] websocket error:", err);
-});
-
-ws.on("close", () => {
-    logWarn("[bot] websocket closed");
-});
 
 initializeCharacter().catch((err) => {
     logError("[bot] failed to initialize character:", err);

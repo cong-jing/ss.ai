@@ -1,9 +1,11 @@
 import type { MessageHandlerContext } from "./messageHandlerContext.js";
+import { createLocalActor } from "../http/serverClient.js";
 import {
     getPrivateActorBinding,
     setPrivateActorBinding,
 } from "../conversationStore.js";
 import { log } from "../logger.js";
+import { chatForMessage, resolveConversationIdForMessage } from "./messageRuntime.js";
 
 function resolvePrivateDisplayName(event: any): string {
     const sender = event.sender ?? {};
@@ -29,7 +31,11 @@ export async function handlePrivateMessage(event: any, context: MessageHandlerCo
     const text: string = (event.raw_message ?? "").trim();
     if (!text) return;
 
-    const conversationId = await context.resolveConversationId("user", event.user_id);
+    const conversationId = await resolveConversationIdForMessage(
+        context.getCharacterId(),
+        "user",
+        event.user_id,
+    );
     if (!conversationId) return;
 
     let actorId: string | null = null;
@@ -39,7 +45,7 @@ export async function handlePrivateMessage(event: any, context: MessageHandlerCo
     } else {
         const displayName = resolvePrivateDisplayName(event);
         const profileSnapshotJson = buildPrivateProfileSnapshot(event);
-        actorId = await context.createLocalActor(conversationId, displayName, profileSnapshotJson);
+        actorId = await createLocalActor(conversationId, displayName, profileSnapshotJson);
         setPrivateActorBinding(event.user_id, { conversationId, actorId });
         log("[bot] private actor binding created", {
             userId: event.user_id,
@@ -49,7 +55,12 @@ export async function handlePrivateMessage(event: any, context: MessageHandlerCo
         });
     }
 
-    const reply = await context.chat(conversationId, text, actorId ?? undefined);
+    const reply = await chatForMessage(
+        context.getCharacterId(),
+        conversationId,
+        text,
+        actorId ?? undefined,
+    );
     if (!reply) return;
 
     context.sendAction("send_private_msg", {

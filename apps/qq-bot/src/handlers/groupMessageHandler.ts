@@ -1,9 +1,11 @@
 import type { MessageHandlerContext } from "./messageHandlerContext.js";
+import { createLocalActor } from "../http/serverClient.js";
 import {
     getGroupMemberActorBinding,
     setGroupMemberActorBinding,
 } from "../conversationStore.js";
 import { log } from "../logger.js";
+import { chatForMessage, resolveConversationIdForMessage } from "./messageRuntime.js";
 
 function includesAtSelf(event: any, selfId: string | number): boolean {
     if (Array.isArray(event.message)) {
@@ -65,7 +67,11 @@ export async function handleGroupMessage(event: any, context: MessageHandlerCont
         return;
     }
 
-    const conversationId = await context.resolveConversationId("group", event.group_id);
+    const conversationId = await resolveConversationIdForMessage(
+        context.getCharacterId(),
+        "group",
+        event.group_id,
+    );
     if (!conversationId) return;
 
     let actorId: string | null = null;
@@ -75,7 +81,7 @@ export async function handleGroupMessage(event: any, context: MessageHandlerCont
     } else {
         const displayName = resolveGroupDisplayName(event);
         const profileSnapshotJson = buildGroupProfileSnapshot(event);
-        actorId = await context.createLocalActor(conversationId, displayName, profileSnapshotJson);
+        actorId = await createLocalActor(conversationId, displayName, profileSnapshotJson);
         setGroupMemberActorBinding(event.group_id, event.user_id, { conversationId, actorId });
         log("[bot] group actor binding created", {
             groupId: event.group_id,
@@ -86,7 +92,12 @@ export async function handleGroupMessage(event: any, context: MessageHandlerCont
         });
     }
 
-    const reply = await context.chat(conversationId, userMessageText, actorId ?? undefined);
+    const reply = await chatForMessage(
+        context.getCharacterId(),
+        conversationId,
+        userMessageText,
+        actorId ?? undefined,
+    );
     if (!reply) return;
 
     context.sendAction("send_group_msg", {

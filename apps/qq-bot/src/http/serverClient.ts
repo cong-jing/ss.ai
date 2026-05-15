@@ -6,7 +6,7 @@ import type {
     CreateConversationActorResponse,
     ChatResponse,
 } from "@ss-ai/contracts";
-import { log } from "./logger.js";
+import { logInfo } from "../logger.js";
 
 function getServerUrl(): string {
     return process.env.CHAT_SERVER_URL
@@ -94,7 +94,7 @@ function mockApiResponse<T>(path: string, method: string, body?: unknown): T {
 
 async function apiFetch<T>(path: string, method: string, body?: unknown): Promise<T> {
     if (isDryRunMode()) {
-        log("[bot][dry-run] would call server api", {
+        logInfo("[bot][dry-run] would call server api", {
             baseUrl: getServerUrl(),
             method,
             path,

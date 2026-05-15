@@ -16,9 +16,12 @@ function setupTempRuntime(): void {
     tempDirs.push(dir);
     configureConversationStore(path.join(dir, "conversation-map.json"));
     configureLogger(path.join(dir, "qq-bot.log"));
+    process.env.QQ_BOT_DRY_RUN = "1";
 }
 
 afterEach(() => {
+    delete process.env.QQ_BOT_DRY_RUN;
+
     while (tempDirs.length > 0) {
         const dir = tempDirs.pop();
         if (dir) fs.rmSync(dir, { recursive: true, force: true });
@@ -30,21 +33,11 @@ describe("message handlers", () => {
         setupTempRuntime();
 
         const sendActions: Array<{ action: string; params: Record<string, unknown> }> = [];
-        let createActorCalls = 0;
-        const chatCalls: Array<{ conversationId: string; userMessageText: string; senderActorId?: string }> = [];
 
         const context: MessageHandlerContext = {
             getCharacterId: () => "char-1",
             getBotSelfId: () => 999,
-            resolveConversationId: async () => "conv-private-1",
-            createLocalActor: async () => {
-                createActorCalls += 1;
-                return "actor-private-1";
-            },
-            chat: async (conversationId, userMessageText, senderActorId) => {
-                chatCalls.push({ conversationId, userMessageText, senderActorId });
-                return "reply";
-            },
+            getConfig: () => ({ isDryRun: true }),
             sendAction: (action, params) => {
                 sendActions.push({ action, params });
             },
@@ -59,34 +52,23 @@ describe("message handlers", () => {
         await handlePrivateMessage(event, context);
         await handlePrivateMessage(event, context);
 
-        assert.equal(createActorCalls, 1);
         assert.equal(sendActions.length, 2);
         assert.equal(sendActions[0]?.action, "send_private_msg");
-        assert.equal(chatCalls.length, 2);
-        assert.equal(chatCalls[0]?.senderActorId, "actor-private-1");
-        assert.equal(chatCalls[1]?.senderActorId, "actor-private-1");
-        assert.equal(getPrivateActorBinding(10001)?.conversationId, "conv-private-1");
+        const binding = getPrivateActorBinding(10001);
+        assert.ok(binding);
+        assert.ok(binding.actorId.startsWith("dry-run-actor-"));
+        assert.ok(binding.conversationId.startsWith("dry-run-conversation-"));
     });
 
     it("group handler only processes @self messages", async () => {
         setupTempRuntime();
 
         const sendActions: Array<{ action: string; params: Record<string, unknown> }> = [];
-        let createActorCalls = 0;
-        const chatCalls: Array<{ userMessageText: string; senderActorId?: string }> = [];
 
         const context: MessageHandlerContext = {
             getCharacterId: () => "char-1",
             getBotSelfId: () => 999,
-            resolveConversationId: async () => "conv-group-1",
-            createLocalActor: async () => {
-                createActorCalls += 1;
-                return "actor-group-1";
-            },
-            chat: async (_conversationId, userMessageText, senderActorId) => {
-                chatCalls.push({ userMessageText, senderActorId });
-                return "group-reply";
-            },
+            getConfig: () => ({ isDryRun: true }),
             sendAction: (action, params) => {
                 sendActions.push({ action, params });
             },
@@ -102,8 +84,6 @@ describe("message handlers", () => {
             context,
         );
 
-        assert.equal(createActorCalls, 0);
-        assert.equal(chatCalls.length, 0);
         assert.equal(sendActions.length, 0);
 
         await handleGroupMessage(
@@ -120,12 +100,11 @@ describe("message handlers", () => {
             context,
         );
 
-        assert.equal(createActorCalls, 1);
-        assert.equal(chatCalls.length, 1);
-        assert.equal(chatCalls[0]?.userMessageText, "hello group");
-        assert.equal(chatCalls[0]?.senderActorId, "actor-group-1");
         assert.equal(sendActions.length, 1);
         assert.equal(sendActions[0]?.action, "send_group_msg");
-        assert.equal(getGroupMemberActorBinding(20001, 10001)?.conversationId, "conv-group-1");
+        const binding = getGroupMemberActorBinding(20001, 10001);
+        assert.ok(binding);
+        assert.ok(binding.actorId.startsWith("dry-run-actor-"));
+        assert.ok(binding.conversationId.startsWith("dry-run-conversation-"));
     });
 });
