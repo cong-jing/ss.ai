@@ -5,10 +5,12 @@ import {
     ApiCreateCharacter,
     ApiGetActiveCharacter,
     ApiSetActiveCharacter,
+    ApiListCharacterPromptModes,
 } from "@ss-ai/contracts";
 import type {
     Character,
     CharacterModelConfig,
+    PromptModesResponse,
     ListCharactersResponse,
     SetActiveCharacterResponse,
     ListConversationsResponse,
@@ -31,19 +33,24 @@ export async function apiListCharacters(): Promise<ListCharactersResponse> {
     return callApi(ApiListCharacters);
 }
 
+export async function apiListCharacterPromptModes(): Promise<PromptModesResponse> {
+    return callApi(ApiListCharacterPromptModes);
+}
+
 export async function apiCreateCharacter(
     name: string,
     displayName = "",
     description = "",
     personaPrompt = "",
     greetingMessage?: string,
+    promptMode?: Character["promptMode"],
 ): Promise<Character> {
-    return callApi(ApiCreateCharacter, { name, displayName, description, personaPrompt, greetingMessage });
+    return callApi(ApiCreateCharacter, { name, displayName, description, personaPrompt, greetingMessage, promptMode });
 }
 
 export async function apiUpdateCharacter(
     id: string,
-    patch: { name?: string; displayName?: string; description?: string; personaPrompt?: string; greetingMessage?: string; modelConfig?: CharacterModelConfig },
+    patch: { name?: string; displayName?: string; description?: string; personaPrompt?: string; greetingMessage?: string; promptMode?: Character["promptMode"]; modelConfig?: CharacterModelConfig },
 ): Promise<Character> {
     const res = await fetch(`/v1/characters/${encodeURIComponent(id)}`, {
         method: "PATCH",

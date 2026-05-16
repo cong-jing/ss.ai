@@ -6,11 +6,15 @@ import {
     ApiDeleteCharacter,
     ApiGetActiveCharacter,
     ApiSetActiveCharacter,
+    ApiListCharacterPromptModes,
+    DEFAULT_PROMPT_MODE,
+    PROMPT_MODES,
     type CreateCharacterRequest,
     type UpdateCharacterRequest,
     type ListCharactersResponse,
     type Character as ContractCharacter,
     type ConversationInfo,
+    type PromptMode as ContractPromptMode,
 } from "@ss-ai/contracts";
 import type { Character as PFCharacter, Conversation } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
@@ -37,10 +41,16 @@ function toContractCharacter(c: PFCharacter): ContractCharacter {
         personaPrompt: c.personaPrompt,
         greetingMessage: c.greetingMessage ?? null,
         modelConfig,
+        promptMode: c.promptMode ?? DEFAULT_PROMPT_MODE,
         status: c.status,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
     };
+}
+
+function normalizePromptMode(value: unknown): ContractPromptMode | undefined {
+    if (typeof value !== "string") return undefined;
+    return (PROMPT_MODES as readonly string[]).includes(value) ? value as ContractPromptMode : undefined;
 }
 
 function toContractConversation(c: Conversation): ConversationInfo {
@@ -77,6 +87,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 greetingMessage: typeof body.greetingMessage === "string" ? body.greetingMessage.trim() || null : null,
                 avatarUrl: null,
                 modelConfig: {},
+                promptMode: normalizePromptMode(body.promptMode) ?? DEFAULT_PROMPT_MODE,
                 generationConfig: {},
                 memoryConfig: {},
                 status: "active",
@@ -147,6 +158,9 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                     ? body.greetingMessage.trim() || null
                     : null;
             }
+            if (Object.prototype.hasOwnProperty.call(body, "promptMode")) {
+                patch.promptMode = normalizePromptMode(body.promptMode) ?? DEFAULT_PROMPT_MODE;
+            }
             if (Object.prototype.hasOwnProperty.call(body, "modelConfig")
                 && body.modelConfig !== null && typeof body.modelConfig === "object") {
                 patch.modelConfig = body.modelConfig as Record<string, unknown>;
@@ -202,6 +216,10 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
             };
         },
         handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
+    });
+
+    registerApi(context.app, ApiListCharacterPromptModes, {
+        handleRequest: async () => ({ promptModes: [...PROMPT_MODES] }),
     });
 
 }

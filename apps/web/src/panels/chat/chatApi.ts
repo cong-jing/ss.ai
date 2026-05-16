@@ -1,4 +1,4 @@
-import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMessagesResponse, type LlmResponseMode } from "@ss-ai/contracts";
+import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMessagesResponse, type LlmResponseMode, type PromptMode } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
 
 export async function apiGetMessages(conversationId: string): Promise<GetMessagesResponse> {
@@ -27,8 +27,9 @@ export async function apiSendChatMessage(
     senderActorId?: string,
     llmResponseMode: LlmResponseMode = "structured",
     includeAssembledMessages = false,
+    promptMode?: PromptMode,
 ) {
-    return callApi(ApiChat, { characterId, conversationId, userMessageText, senderActorId, llmResponseMode, includeAssembledMessages });
+    return callApi(ApiChat, { characterId, conversationId, userMessageText, senderActorId, llmResponseMode, includeAssembledMessages, promptMode });
 }
 
 export async function apiDryRunChat(
@@ -37,8 +38,9 @@ export async function apiDryRunChat(
     userMessageText: string,
     senderActorId?: string,
     llmResponseMode: LlmResponseMode = "structured",
+    promptMode?: PromptMode,
 ) {
-    return callApi(ApiChatDryRun, { characterId, conversationId, userMessageText, senderActorId, llmResponseMode });
+    return callApi(ApiChatDryRun, { characterId, conversationId, userMessageText, senderActorId, llmResponseMode, promptMode });
 }
 
 export async function apiStreamChatMessage(
@@ -50,12 +52,13 @@ export async function apiStreamChatMessage(
     onChunk: (content: string) => void,
     signal?: AbortSignal,
     includeAssembledMessages = false,
-    onAssembledMessages?: (messages: { role: string; content: string }[]) => void
+    onAssembledMessages?: (messages: { role: string; content: string }[]) => void,
+    promptMode?: PromptMode
 ): Promise<{ requestId: string; model: string }> {
     const response = await fetch(ApiChatStream.apiUrl, {
         method: ApiChatStream.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ characterId, conversationId, userMessageText, senderActorId, llmResponseMode, includeAssembledMessages }),
+        body: JSON.stringify({ characterId, conversationId, userMessageText, senderActorId, llmResponseMode, promptMode, includeAssembledMessages }),
         signal
     });
 

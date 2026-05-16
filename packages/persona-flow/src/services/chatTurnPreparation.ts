@@ -1,5 +1,5 @@
+import type { PromptMode } from "@ss-ai/contracts";
 import type { PromptContext } from "../prompt/promptContext.js";
-import type { PromptMode } from "../prompt/promptMode.js";
 import { PromptContextBuilder } from "../prompt/promptContext.js";
 import type { PromptRenderMode, RenderedPrompt } from "../prompt/promptRenderer.js";
 import { promptRenderer } from "../prompt/promptRenderer.js";

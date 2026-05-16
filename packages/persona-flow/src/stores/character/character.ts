@@ -1,3 +1,5 @@
+import type { PromptMode } from "@ss-ai/contracts";
+
 export type CharacterStatus = "active" | "archived";
 export type PromptLanguage = "zh-CN" | "ja-JP" | "en-US";
 
@@ -37,6 +39,9 @@ export type Character = {
 
     /** Model selection config. Example: { provider: "mistral", model: "mistral-large-latest" } */
     modelConfig: Record<string, unknown>;
+
+    /** Prompt rendering mode used when assembling prompts for this character. */
+    promptMode?: PromptMode | null;
 
     /** LLM generation parameters. Example: { temperature: 0.8, maxTokens: 1200 } */
     generationConfig: Record<string, unknown>;

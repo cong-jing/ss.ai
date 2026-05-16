@@ -1,4 +1,5 @@
 import { sqliteTable, text, primaryKey } from "drizzle-orm/sqlite-core";
+import { DEFAULT_PROMPT_MODE } from "@ss-ai/contracts";
 
 // ── conversation_actors ───────────────────────────────────────────────────────
 export const conversationActors = sqliteTable("conversation_actors", {
@@ -54,6 +55,7 @@ export const characters = sqliteTable("characters", {
     greetingMessage: text("greeting_message"),
     avatarUrl: text("avatar_url"),
     modelConfigJson: text("model_config_json").notNull().default("{}"),
+    promptMode: text("prompt_mode").notNull().default(DEFAULT_PROMPT_MODE),
     generationConfigJson: text("generation_config_json").notNull().default("{}"),
     memoryConfigJson: text("memory_config_json").notNull().default("{}"),
     language: text("language").default("zh-CN"),

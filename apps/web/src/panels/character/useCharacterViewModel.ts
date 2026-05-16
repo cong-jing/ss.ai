@@ -1,8 +1,8 @@
 import { ref, computed } from 'vue'
-import type { Character, CharacterModelConfig } from '@ss-ai/contracts'
-import { AI_FUNCTIONS, type AiFunction } from '@ss-ai/contracts'
+import type { Character, CharacterModelConfig, PromptMode } from '@ss-ai/contracts'
+import { AI_FUNCTIONS, DEFAULT_PROMPT_MODE, type AiFunction } from '@ss-ai/contracts'
 import {
-    apiListCharacters, apiCreateCharacter, apiUpdateCharacter,
+    apiListCharacters, apiListCharacterPromptModes, apiCreateCharacter, apiUpdateCharacter,
     apiDeleteCharacter, apiSetActiveCharacter,
 } from '../userProfile/userProfileApi'
 import { useToast } from '../../shared/ui/useToast'
@@ -11,6 +11,7 @@ import { bumpContextVersion } from '../../shared/state/appState'
 // ── Module-level singleton state ──────────────────────────────────────────────
 
 export const characters = ref<Character[]>([])
+export const promptModes = ref<PromptMode[]>([])
 export const activeCharacterId = ref<string | null>(null)
 export const isLoadingCharacters = ref(false)
 export const isSavingCharacter = ref(false)
@@ -28,15 +29,18 @@ function emptyOverrides(): Record<AiFunction, FnOverride> {
 }
 
 export const editDraft = ref<{
-    name: string; displayName: string; description: string; personaPrompt: string; greetingMessage: string
+    name: string; displayName: string; description: string; personaPrompt: string; greetingMessage: string; promptMode: PromptMode
     modelOverrides: Record<AiFunction, FnOverride>
-}>({ name: '', displayName: '', description: '', personaPrompt: '', greetingMessage: '', modelOverrides: emptyOverrides() })
+}>({ name: '', displayName: '', description: '', personaPrompt: '', greetingMessage: '', promptMode: DEFAULT_PROMPT_MODE, modelOverrides: emptyOverrides() })
 
 const savedDraftJson = ref('')
 export const isDirty = computed(() => JSON.stringify(editDraft.value) !== savedDraftJson.value)
 
 function syncDraft(): void {
     const c = activeCharacter.value
+    const defaultPromptMode = promptModes.value.includes(DEFAULT_PROMPT_MODE)
+        ? DEFAULT_PROMPT_MODE
+        : (promptModes.value[0] ?? DEFAULT_PROMPT_MODE)
     const overrides = emptyOverrides()
     if (c?.modelConfig) {
         for (const fn of AI_FUNCTIONS) {
@@ -52,6 +56,7 @@ function syncDraft(): void {
         description: c?.description ?? '',
         personaPrompt: c?.personaPrompt ?? '',
         greetingMessage: c?.greetingMessage ?? '',
+        promptMode: c?.promptMode ?? defaultPromptMode,
         modelOverrides: overrides,
     }
     savedDraftJson.value = JSON.stringify(editDraft.value)
@@ -65,8 +70,12 @@ export function useCharacterViewModel() {
     async function load(): Promise<void> {
         isLoadingCharacters.value = true
         try {
-            const { characters: list, activeCharacterId: currentId } = await apiListCharacters()
+            const [{ characters: list, activeCharacterId: currentId }, promptModeRes] = await Promise.all([
+                apiListCharacters(),
+                apiListCharacterPromptModes(),
+            ])
             characters.value = list
+            promptModes.value = promptModeRes.promptModes
             activeCharacterId.value = currentId
             syncDraft()
         } catch (e) {
@@ -97,6 +106,7 @@ export function useCharacterViewModel() {
             const created = await apiCreateCharacter(
                 name.trim(), displayName.trim(), description.trim(), personaPrompt.trim(),
                 greetingMessage.trim() || undefined,
+                editDraft.value.promptMode,
             )
             characters.value.push(created)
             await apiSetActiveCharacter(created.id)
@@ -129,6 +139,7 @@ export function useCharacterViewModel() {
                 description: editDraft.value.description,
                 personaPrompt: editDraft.value.personaPrompt,
                 greetingMessage: editDraft.value.greetingMessage,
+                promptMode: editDraft.value.promptMode,
                 modelConfig,
             })
             const idx = characters.value.findIndex(c => c.id === updated.id)
@@ -170,6 +181,7 @@ export function useCharacterViewModel() {
 
     return {
         characters, activeCharacterId, activeCharacter, isLoadingCharacters, isSavingCharacter,
+        promptModes,
         editDraft, isDirty, load, select, create, save, remove, syncDraft,
     }
 }

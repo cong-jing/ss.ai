@@ -1,6 +1,7 @@
 import { and, eq, desc, inArray } from "drizzle-orm";
 import { characters, type CharacterRow, type NewCharacterRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
+import { DEFAULT_PROMPT_MODE } from "@ss-ai/contracts";
 import type { Character, CharacterStatus, PromptLanguage, CharacterStore } from "@ss-ai/persona-flow";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -29,6 +30,7 @@ function rowToCharacter(row: CharacterRow): Character {
         greetingMessage: row.greetingMessage ?? null,
         avatarUrl: row.avatarUrl ?? null,
         modelConfig: safeParseJsonObject(row.modelConfigJson),
+        promptMode: (row.promptMode as Character["promptMode"]) ?? DEFAULT_PROMPT_MODE,
         generationConfig: safeParseJsonObject(row.generationConfigJson),
         memoryConfig: safeParseJsonObject(row.memoryConfigJson),
         language: (row.language as PromptLanguage | null) ?? null,
@@ -49,6 +51,7 @@ function characterToInsertRow(character: Character): NewCharacterRow {
         greetingMessage: character.greetingMessage ?? null,
         avatarUrl: character.avatarUrl ?? null,
         modelConfigJson: JSON.stringify(character.modelConfig),
+        promptMode: character.promptMode ?? DEFAULT_PROMPT_MODE,
         generationConfigJson: JSON.stringify(character.generationConfig),
         memoryConfigJson: JSON.stringify(character.memoryConfig),
         language: character.language ?? "zh-CN",
@@ -116,6 +119,7 @@ export class SQLiteCharacterStore implements CharacterStore {
         if (patch.greetingMessage !== undefined) values.greetingMessage = patch.greetingMessage ?? null;
         if (patch.avatarUrl !== undefined) values.avatarUrl = patch.avatarUrl ?? null;
         if (patch.modelConfig !== undefined) values.modelConfigJson = JSON.stringify(patch.modelConfig);
+        if (patch.promptMode !== undefined) values.promptMode = patch.promptMode ?? DEFAULT_PROMPT_MODE;
         if (patch.generationConfig !== undefined) values.generationConfigJson = JSON.stringify(patch.generationConfig);
         if (patch.memoryConfig !== undefined) values.memoryConfigJson = JSON.stringify(patch.memoryConfig);
         if (patch.status !== undefined) values.status = patch.status;

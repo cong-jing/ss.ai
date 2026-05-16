@@ -1,8 +1,7 @@
-import type { LlmResponseMode } from "@ss-ai/contracts";
+import { DEFAULT_PROMPT_MODE, PROMPT_MODES, type LlmResponseMode, type PromptMode } from "@ss-ai/contracts";
 import {
     PersonaFlowChatTurnService,
     PersonaFlowModelService,
-    PromptMode,
 } from "@ss-ai/persona-flow";
 import { createModelClientFromConfig } from "@ss-ai/persona-flow-model-client";
 import { PromptLogger } from "../../../util/promptLog.js";
@@ -53,18 +52,18 @@ export function resolveLlmResponseMode(value: unknown, endpoint: string, default
     throw new HttpStatusError(400, `${endpoint}: llmResponseMode must be 'structured' or 'non-structured'.`);
 }
 
-const promptModes = new Set<string>(Object.values(PromptMode));
+const promptModes = new Set<string>(PROMPT_MODES);
 
 export function resolvePromptMode(value: unknown, endpoint: string): PromptMode {
     if (value === undefined || value === null || value === "") {
-        return PromptMode.SingleCharacterChat;
+        return DEFAULT_PROMPT_MODE;
     }
     if (typeof value === "string" && promptModes.has(value)) {
         return value as PromptMode;
     }
     throw new HttpStatusError(
         400,
-        `${endpoint}: promptMode must be one of ${Object.values(PromptMode).join(", ")}.`,
+        `${endpoint}: promptMode must be one of ${PROMPT_MODES.join(", ")}.`,
     );
 }
 

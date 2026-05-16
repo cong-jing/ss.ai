@@ -1,4 +1,5 @@
 import { ref, watch } from "vue";
+import { DEFAULT_PROMPT_MODE } from "@ss-ai/contracts";
 import { apiDryRunChat, apiSendChatMessage, apiStreamChatMessage, apiGetMessages, apiDeleteMessage } from "./chatApi";
 import type { ChatMessage } from "./chatTypes";
 import { contextVersion } from "../../shared/state/appState";
@@ -117,7 +118,8 @@ export function useChatViewModel() {
                     },
                     undefined,
                     true,
-                    (msgs) => { capturedAssembledMessages = msgs; }
+                    (msgs) => { capturedAssembledMessages = msgs; },
+                    activeCharacter.value?.promptMode ?? DEFAULT_PROMPT_MODE,
                 );
 
                 const msg = messages.value.find(m => m.id === msgId);
@@ -149,6 +151,7 @@ export function useChatViewModel() {
                 senderActorId,
                 "structured",
                 true,
+                activeCharacter.value?.promptMode ?? DEFAULT_PROMPT_MODE,
             );
 
             if (response.structuredOutput) {
@@ -231,7 +234,7 @@ export function useChatViewModel() {
 
         try {
             const llmResponseMode = streamMode.value ? "non-structured" : "structured";
-            const result = await apiDryRunChat(characterId, conversationId, userMessageText, senderActorId, llmResponseMode);
+            const result = await apiDryRunChat(characterId, conversationId, userMessageText, senderActorId, llmResponseMode, activeCharacter.value?.promptMode ?? DEFAULT_PROMPT_MODE);
             console.group("[dry-run] Assembled LLM input messages");
             for (const msg of result.messages) {
                 console.log(`--- [${msg.role}] ---`);

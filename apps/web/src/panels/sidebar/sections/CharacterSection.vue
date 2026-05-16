@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import type { Character } from "@ss-ai/contracts";
+import type { Character, PromptMode } from "@ss-ai/contracts";
 import { useLocalStorage } from "../../../shared/ui/useLocalStorage";
+
+const promptModeLabels: Record<PromptMode, string> = {
+  single_character_chat: "Single Character Chat",
+  multi_character_event_log: "Multi Character Event Log",
+  dm_narrator: "DM / Narrator",
+  live_chat: "Live Chat",
+};
 
 const props = defineProps<{
   isOpen: boolean;
   activeCharacter: Character | null;
   isEditing: boolean;
+  promptModes: PromptMode[];
   editDraft: {
     name: string;
     displayName: string;
     description: string;
     personaPrompt: string;
+    promptMode: PromptMode;
   };
   isDirty: boolean;
   isSavingCharacter: boolean;
@@ -62,6 +71,13 @@ const showDebug = useLocalStorage("chat.showDebug", false);
           <label class="field-label">Persona</label>
           <textarea v-model="props.editDraft.personaPrompt" class="textarea" rows="3" :disabled="isSavingCharacter" />
 
+          <label class="field-label">Prompt Mode</label>
+          <select v-model="props.editDraft.promptMode" class="select" :disabled="isSavingCharacter">
+            <option v-for="mode in promptModes" :key="mode" :value="mode">
+              {{ promptModeLabels[mode] }}
+            </option>
+          </select>
+
           <div class="actions">
             <button
               class="mini-btn primary"
@@ -90,6 +106,10 @@ const showDebug = useLocalStorage("chat.showDebug", false);
           <div class="read-row">
             <span class="field-label">Persona</span>
             <p class="read-value multiline">{{ activeCharacter.personaPrompt || "(空)" }}</p>
+          </div>
+          <div class="read-row">
+            <span class="field-label">Prompt Mode</span>
+            <p class="read-value">{{ promptModeLabels[activeCharacter.promptMode] || activeCharacter.promptMode }}</p>
           </div>
 
           <div class="actions">
@@ -191,6 +211,17 @@ const showDebug = useLocalStorage("chat.showDebug", false);
   font-size: 11px;
   padding: 4px 6px;
   font-family: inherit;
+}
+
+.select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 4px 6px;
+  font-family: inherit;
+  background: #fff;
 }
 
 .textarea {

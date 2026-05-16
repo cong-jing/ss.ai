@@ -1,5 +1,5 @@
 import type { PromptContext } from "./promptContext.js";
-import type { PromptMode } from "./promptMode.js";
+import type { PromptMode } from "@ss-ai/contracts";
 
 export type RenderedMessage = {
     role: "system" | "user" | "assistant";

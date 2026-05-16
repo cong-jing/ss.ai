@@ -1,11 +1,7 @@
 import { ApiDefine } from "../apiBase.js";
+import type { PromptMode } from "../promptMode.js";
 
 export type LlmResponseMode = "non-structured" | "structured";
-export type PromptMode =
-    | "single_character_chat"
-    | "multi_character_event_log"
-    | "dm_narrator"
-    | "live_chat";
 
 export interface ChatRequest {
     /** Character to chat with. */

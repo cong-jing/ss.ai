@@ -1,5 +1,5 @@
 import type { PromptRenderMode } from "../prompt/promptRenderer.js";
-import type { PromptMode } from "../prompt/promptMode.js";
+import type { PromptMode } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
 import { normalizeAssistantOutput, prepareChatTurnContext } from "./chatTurnPreparation.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";

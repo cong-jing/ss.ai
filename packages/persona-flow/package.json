@@ -11,6 +11,7 @@
         ".": "./src/index.ts"
     },
     "dependencies": {
+        "@ss-ai/contracts": "workspace:*",
         "handlebars": "^4.7.9"
     },
     "devDependencies": {

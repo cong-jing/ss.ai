@@ -1,5 +1,5 @@
 import type { PromptContext } from "./promptContext.js";
-import { PromptMode } from "./promptMode.js";
+import { DEFAULT_PROMPT_MODE, type PromptMode } from "@ss-ai/contracts";
 import type { ModePromptRenderer, PromptRendererOptions, RenderedPrompt } from "./promptTypes.js";
 import { dmNarratorPromptRenderer } from "./modes/dmNarrator/promptRenderer.js";
 import { liveChatPromptRenderer } from "./modes/liveChat/promptRenderer.js";
@@ -14,15 +14,15 @@ export type {
 } from "./promptTypes.js";
 
 const rendererByPromptMode: Record<PromptMode, ModePromptRenderer> = {
-    [PromptMode.SingleCharacterChat]: singleCharacterChatPromptRenderer,
-    [PromptMode.MultiCharacterEventLog]: multiCharacterEventLogPromptRenderer,
-    [PromptMode.DmNarrator]: dmNarratorPromptRenderer,
-    [PromptMode.LiveChat]: liveChatPromptRenderer,
+    single_character_chat: singleCharacterChatPromptRenderer,
+    multi_character_event_log: multiCharacterEventLogPromptRenderer,
+    dm_narrator: dmNarratorPromptRenderer,
+    live_chat: liveChatPromptRenderer,
 };
 
 export const promptRenderer = {
     async render(context: PromptContext, options?: PromptRendererOptions): Promise<RenderedPrompt> {
-        const promptMode = options?.promptMode ?? PromptMode.SingleCharacterChat;
+        const promptMode = options?.promptMode ?? DEFAULT_PROMPT_MODE;
         const renderer = rendererByPromptMode[promptMode] ?? singleCharacterChatPromptRenderer;
         return await renderer.render(context, { mode: options?.mode });
     },

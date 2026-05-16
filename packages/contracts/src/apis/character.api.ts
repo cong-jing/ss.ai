@@ -1,7 +1,7 @@
 import { ApiDefine } from "../apiBase.js";
+import type { PromptMode } from "../promptMode.js";
 import type { AiFunction } from "../aiFunctions.js";
 import type { ConversationInfo } from "./conversation.api.js";
-
 // ── Domain type ────────────────────────────────────────────────────────────────
 
 export interface CharacterFunctionModel {
@@ -24,6 +24,7 @@ export interface Character {
     personaPrompt: string;
     greetingMessage: string | null;
     modelConfig: CharacterModelConfig;
+    promptMode: PromptMode;
     status: "active" | "archived";
     createdAt: string;
     updatedAt: string;
@@ -37,6 +38,7 @@ export interface CreateCharacterRequest {
     description?: string;
     personaPrompt?: string;
     greetingMessage?: string;
+    promptMode?: PromptMode;
 }
 
 export interface UpdateCharacterRequest {
@@ -45,6 +47,7 @@ export interface UpdateCharacterRequest {
     description?: string;
     personaPrompt?: string;
     greetingMessage?: string;
+    promptMode?: PromptMode;
     /** Full replacement of modelConfig. Absent keys inherit from user preference. */
     modelConfig?: CharacterModelConfig;
 }
@@ -53,6 +56,10 @@ export interface ListCharactersResponse {
     characters: Character[];
     /** null when no character has been selected yet. */
     activeCharacterId: string | null;
+}
+
+export interface PromptModesResponse {
+    promptModes: PromptMode[];
 }
 
 // ── API endpoints ──────────────────────────────────────────────────────────────
@@ -80,6 +87,9 @@ export const ApiUpdateCharacter = new ApiDefine<UpdateCharacterRequest, Characte
  * The `:id` segment is a URL template; replace it with the actual id when calling.
  */
 export const ApiDeleteCharacter = new ApiDefine<void, void>("/v1/characters/:id", "DELETE");
+
+/** GET /v1/character-prompt-modes — list selectable prompt modes for character cards. */
+export const ApiListCharacterPromptModes = new ApiDefine<void, PromptModesResponse>("/v1/character-prompt-modes", "GET");
 
 // ── Active character ───────────────────────────────────────────────────────────
 
