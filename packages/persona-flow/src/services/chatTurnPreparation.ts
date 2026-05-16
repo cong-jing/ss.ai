@@ -1,4 +1,5 @@
 import type { PromptContext } from "../prompt/promptContext.js";
+import type { PromptMode } from "../prompt/promptMode.js";
 import { PromptContextBuilder } from "../prompt/promptContext.js";
 import type { PromptRenderMode, RenderedPrompt } from "../prompt/promptRenderer.js";
 import { promptRenderer } from "../prompt/promptRenderer.js";
@@ -92,6 +93,7 @@ export interface PrepareChatTurnInput {
     conversationId: string;
     userMessageText: string;
     llmResponseMode: PromptRenderMode;
+    promptMode?: PromptMode;
     senderActorId?: unknown;
     persistUserMessage?: boolean;
     logger?: PersonaFlowLogger;
@@ -114,6 +116,7 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
         characterId: input.characterId,
         conversationId: input.conversationId,
         llmResponseMode: input.llmResponseMode,
+        promptMode: input.promptMode,
         persistUserMessage,
         hasSenderActorId: typeof input.senderActorId === "string" && input.senderActorId.trim().length > 0,
     });
@@ -213,7 +216,10 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
         conversationActorStore: input.stores.conversationActor,
     });
 
-    const rendered = await promptRenderer.render(promptContext, { mode: input.llmResponseMode });
+    const rendered = await promptRenderer.render(promptContext, {
+        mode: input.llmResponseMode,
+        promptMode: input.promptMode,
+    });
 
     logger.verbose("persona-flow/turn: prompt rendered", {
         conversationId: input.conversationId,

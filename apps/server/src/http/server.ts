@@ -51,7 +51,7 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
         next()
     })
 
-    const { db } = openDatabase(
+    const { sqlite, db } = openDatabase(
         path.join(config.runtimeFiles.userDataDir, "app.db"),
         (sql: unknown) => logger.verbose("[db]", { sql: String(sql) })
     );
@@ -77,6 +77,10 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
     registerCharacterRoutes(apiContext);
     registerConversationRoutes(apiContext);
     registerConversationActorRoutes(apiContext);
+
+    (app as typeof app & { closeDatabase?: () => void }).closeDatabase = () => {
+        sqlite.close();
+    };
 
     return app;
 }

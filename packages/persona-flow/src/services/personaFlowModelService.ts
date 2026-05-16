@@ -1,5 +1,5 @@
 import type { CommonRoleplayTurnOutput } from "../structuredOutput/commonRoleplayTurnOutput.js";
-import type { RenderedMessage } from "../prompt/system/systemPromptBuilder.js";
+import type { RenderedMessage } from "../prompt/promptTypes.js";
 import type { UserPreferencesStore } from "../stores/user/userPreferencesStore.js";
 import type { UserProviderCredentialStore } from "../stores/user/userProviderCredentialStore.js";
 import type {

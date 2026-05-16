@@ -4,7 +4,7 @@ import path from "node:path";
 import supertest from "supertest";
 import { createHttpServer } from "../../src/http/server.js";
 import type { RuntimeConfig, RuntimeModelEntry } from "../../src/util/config.js";
-import { Logger, setGlobalLogger } from "../../src/util/logger.js";
+import { Logger, setGlobalLogger } from "@ss-ai/persona-flow-logger";
 import { InMemoryCharacterStore } from "./inMemoryCharacterStore.js";
 import { InMemoryUserProfileStore } from "./inMemoryUserProfileStore.js";
 import { InMemoryUserPreferencesStore } from "./inMemoryUserPreferencesStore.js";
@@ -67,11 +67,14 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}): T
         providerCredential: new InMemoryUserProviderCredentialStore(),
     };
 
-    const app = createHttpServer(config, { stores });
+    const app = createHttpServer(config, { stores }) as typeof createHttpServer extends (...args: any[]) => infer T ? T & { closeDatabase?: () => void } : never;
 
     return {
         agent: supertest(app),
         stores,
-        cleanup: () => fs.rmSync(tmpDir, { recursive: true, force: true }),
+        cleanup: () => {
+            app.closeDatabase?.();
+            fs.rmSync(tmpDir, { recursive: true, force: true });
+        },
     };
 }

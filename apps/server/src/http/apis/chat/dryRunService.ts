@@ -5,6 +5,7 @@ import {
     requireNonEmptyString,
     requireUserMessageText,
     resolveLlmResponseMode,
+    resolvePromptMode,
 } from "./shared.js";
 
 export async function handleDryRunChatRequest(context: HttpApiContext, body: ChatDryRunRequest & { userId?: string }) {
@@ -12,6 +13,7 @@ export async function handleDryRunChatRequest(context: HttpApiContext, body: Cha
     const characterId = requireNonEmptyString(body?.characterId, "characterId", "chat/dry-run");
     const conversationId = requireNonEmptyString(body?.conversationId, "conversationId", "chat/dry-run");
     const llmResponseMode = resolveLlmResponseMode(body?.llmResponseMode, "chat/dry-run", "structured");
+    const promptMode = resolvePromptMode(body?.promptMode, "chat/dry-run");
     const userId: string = typeof body?.userId === "string"
         ? body.userId
         : DEFAULT_USER_ID;
@@ -30,6 +32,7 @@ export async function handleDryRunChatRequest(context: HttpApiContext, body: Cha
         conversationId,
         userMessageText,
         llmResponseMode,
+        promptMode,
         senderActorId: body?.senderActorId,
     });
 }

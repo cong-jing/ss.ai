@@ -1,4 +1,5 @@
 import type { PromptRenderMode } from "../prompt/promptRenderer.js";
+import type { PromptMode } from "../prompt/promptMode.js";
 import type { AppStores } from "../stores/appStores.js";
 import { normalizeAssistantOutput, prepareChatTurnContext } from "./chatTurnPreparation.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
@@ -27,6 +28,7 @@ export interface PersonaChatTurnRequest {
     conversationId: string;
     userMessageText: string;
     llmResponseMode: PromptRenderMode;
+    promptMode?: PromptMode;
     senderActorId?: unknown;
     includeAssembledMessages?: boolean;
 }
@@ -37,6 +39,7 @@ export interface PersonaDryRunTurnRequest {
     conversationId: string;
     userMessageText: string;
     llmResponseMode: PromptRenderMode;
+    promptMode?: PromptMode;
     senderActorId?: unknown;
 }
 
@@ -46,6 +49,7 @@ export interface PersonaStreamTurnRequest {
     conversationId: string;
     userMessageText: string;
     llmResponseMode: "non-structured";
+    promptMode?: PromptMode;
     senderActorId?: unknown;
     includeAssembledMessages?: boolean;
     onAssembledMessages?: (messages: Array<{ role: "system" | "user" | "assistant"; content: string }>) => void;
@@ -65,6 +69,7 @@ export class PersonaFlowChatTurnService {
             characterId: input.characterId,
             conversationId: input.conversationId,
             llmResponseMode: input.llmResponseMode,
+            promptMode: input.promptMode,
         });
 
         const prepared = await prepareChatTurnContext({
@@ -74,6 +79,7 @@ export class PersonaFlowChatTurnService {
             conversationId: input.conversationId,
             userMessageText: input.userMessageText,
             llmResponseMode: input.llmResponseMode,
+            promptMode: input.promptMode,
             senderActorId: input.senderActorId,
             persistUserMessage: false,
             logger: this.logger,
@@ -101,6 +107,7 @@ export class PersonaFlowChatTurnService {
             characterId: input.characterId,
             conversationId: input.conversationId,
             llmResponseMode: input.llmResponseMode,
+            promptMode: input.promptMode,
         });
 
         const prepared = await prepareChatTurnContext({
@@ -110,6 +117,7 @@ export class PersonaFlowChatTurnService {
             conversationId: input.conversationId,
             userMessageText: input.userMessageText,
             llmResponseMode: input.llmResponseMode,
+            promptMode: input.promptMode,
             senderActorId: input.senderActorId,
             persistUserMessage: true,
             logger: this.logger,
@@ -191,6 +199,7 @@ export class PersonaFlowChatTurnService {
             characterId: input.characterId,
             conversationId: input.conversationId,
             llmResponseMode: input.llmResponseMode,
+            promptMode: input.promptMode,
         });
 
         const prepared = await prepareChatTurnContext({
@@ -200,6 +209,7 @@ export class PersonaFlowChatTurnService {
             conversationId: input.conversationId,
             userMessageText: input.userMessageText,
             llmResponseMode: input.llmResponseMode,
+            promptMode: input.promptMode,
             senderActorId: input.senderActorId,
             persistUserMessage: true,
             logger: this.logger,
