@@ -6,6 +6,7 @@ import type { UserProfile } from "../stores/user/userProfile.js";
 import type { UserProfileStore } from "../stores/user/userProfileStore.js";
 import type { ConversationActor } from "../stores/character/conversationActor.js";
 import type { ConversationActorStore } from "../stores/character/conversationActorStore.js";
+import { PersonaFlowLogger } from "../index.js";
 
 export type PromptContext = {
     userProfile: UserProfile | null;
@@ -16,6 +17,8 @@ export type PromptContext = {
     actorMap: Map<string, ConversationActor>;
     recentMessages: Message[];
     currentUserMessage: Message;
+
+    logger?: PersonaFlowLogger | undefined;
 };
 
 export const PromptContextBuilder = {
@@ -29,6 +32,7 @@ export const PromptContextBuilder = {
         characterStore: CharacterStore;
         conversationActorStore: ConversationActorStore;
         historyLimit?: number;
+        logger?: PersonaFlowLogger;
     }): Promise<PromptContext> => {
         const [userProfile, character, allRecentMessages, actors] = await Promise.all([
             input.userProfileStore.getUserProfile(input.userId),

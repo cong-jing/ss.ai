@@ -1,5 +1,5 @@
 import type { ChatStreamEvent, LlmResponseMode } from "@ss-ai/contracts";
-import type { PromptMode } from "@ss-ai/persona-flow";
+import type { PromptMode } from "@ss-ai/contracts";
 import type { Request, Response } from "express";
 import { DEFAULT_USER_ID, type HttpApiContext } from "../apiContext.js";
 import {

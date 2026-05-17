@@ -1,4 +1,3 @@
-import type { PromptContext } from "./promptContext.js";
 import type { PromptMode } from "@ss-ai/contracts";
 
 export type RenderedMessage = {
@@ -15,8 +14,4 @@ export type PromptRenderMode = "non-structured" | "structured";
 export interface PromptRendererOptions {
     mode?: PromptRenderMode;
     promptMode?: PromptMode;
-}
-
-export interface ModePromptRenderer {
-    render(context: PromptContext, options?: { mode?: PromptRenderMode }): Promise<RenderedPrompt>;
 }

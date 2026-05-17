@@ -16,7 +16,7 @@ export * from "./stores/chat/chatStore.js";
 export * from "./stores/appStores.js";
 export * from "./prompt/promptContext.js";
 export * from "./prompt/promptRenderer.js";
-export * from "./prompt/modes/liveChat/buildPromptViewModel.js";
+export * from "./prompt/modes/singleCharacterChat/buildPromptViewModel.js";
 export * from "./structuredOutput/commonRoleplayTurnOutput.js";
 export * from "./llm/modelClient.js";
 export * from "./services/personaFlowModelService.js";
