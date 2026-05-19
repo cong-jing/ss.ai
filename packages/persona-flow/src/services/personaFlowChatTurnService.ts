@@ -3,23 +3,29 @@ import type { PromptMode } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
 import { normalizeAssistantOutput, prepareChatTurnContext } from "./chatTurnPreparation.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
-import type { PersonaChatResponse } from "./personaFlowModelService.js";
+import type { PersonaChatResponse, PersonaFlowModelService } from "./personaFlowModelService.js";
 
 export interface PersonaFlowChatTurnServiceDependencies {
     stores: AppStores;
     logger?: PersonaFlowLogger;
-    getModelServiceForUser: (userId: string) => Promise<{
-        chat: (request: { messages: Array<{ role: "system" | "user" | "assistant"; content: string }>; mode?: "non-structured" | "structured"; functionName?: string }) => Promise<PersonaChatResponse>;
-        chatStream: (request: {
-            messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
-            mode?: "non-structured" | "structured";
-            functionName?: string;
-            onTextDelta?: (delta: string) => void;
-        }) => Promise<PersonaChatResponse & {
-            completed: boolean;
-            finishReason?: string;
-        }>;
-    }>;
+    modelService: PersonaFlowModelService;
+    // getModelServiceForUser: (userId: string) => Promise<{
+    //     chat: (request: {
+    //         userId: string;
+    //         messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+    //         mode?: "non-structured" | "structured"; functionName?: string
+    //     }) => Promise<PersonaChatResponse>;
+    //     chatStream: (request: {
+    //         userId: string;
+    //         messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+    //         mode?: "non-structured" | "structured";
+    //         functionName?: string;
+    //         onTextDelta?: (delta: string) => void;
+    //     }) => Promise<PersonaChatResponse & {
+    //         completed: boolean;
+    //         finishReason?: string;
+    //     }>;
+    // }>;
 }
 
 export interface PersonaChatTurnRequest {
@@ -123,8 +129,8 @@ export class PersonaFlowChatTurnService {
             logger: this.logger,
         });
 
-        const modelService = await this.deps.getModelServiceForUser(input.userId);
-        const response = await modelService.chat({
+        const response = await this.deps.modelService.chat({
+            userId: input.userId,
             messages: prepared.rendered.messages,
             mode: input.llmResponseMode,
             functionName: "chat",
@@ -225,11 +231,11 @@ export class PersonaFlowChatTurnService {
         let rawAccumulatedOutput = "";
         let normalizedSentLength = 0;
 
-        const modelService = await this.deps.getModelServiceForUser(input.userId);
         if (input.includeAssembledMessages) {
             input.onAssembledMessages?.(prepared.rendered.messages);
         }
-        const streamResponse = await modelService.chatStream({
+        const streamResponse = await this.deps.modelService.chatStream({
+            userId: input.userId,
             messages: prepared.rendered.messages,
             mode: input.llmResponseMode,
             functionName: "chat",

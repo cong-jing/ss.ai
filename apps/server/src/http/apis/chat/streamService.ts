@@ -10,7 +10,7 @@ import {
     requireUserMessageText,
     resolveLlmResponseMode,
     resolvePromptMode,
-} from "./shared.js";
+} from "./chatUtil.js";
 
 export async function handleStreamChatRequest(context: HttpApiContext, req: Request, res: Response): Promise<void> {
     const requestId = `stream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -48,7 +48,7 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
         conversationId,
     });
 
-    const turnService = createChatTurnService(context);
+    const turnService = await createChatTurnService(userId, context);
 
     res.writeHead(200, {
         "Content-Type": "text/event-stream",

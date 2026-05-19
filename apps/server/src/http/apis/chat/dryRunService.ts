@@ -6,7 +6,7 @@ import {
     requireUserMessageText,
     resolveLlmResponseMode,
     resolvePromptMode,
-} from "./shared.js";
+} from "./chatUtil.js";
 
 export async function handleDryRunChatRequest(context: HttpApiContext, body: ChatDryRunRequest & { userId?: string }) {
     const userMessageText = requireUserMessageText(body?.userMessageText, "chat/dry-run");
@@ -25,7 +25,7 @@ export async function handleDryRunChatRequest(context: HttpApiContext, body: Cha
         conversationId,
     });
 
-    const turnService = createChatTurnService(context);
+    const turnService = await createChatTurnService(userId, context);
     return await turnService.dryRunTurn({
         userId,
         characterId,

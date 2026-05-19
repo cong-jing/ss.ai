@@ -67,7 +67,7 @@ export function resolvePromptMode(value: unknown, endpoint: string): PromptMode 
     );
 }
 
-export async function createChatModelService(context: HttpApiContext, userId: string): Promise<PersonaFlowModelService> {
+export async function createChatModelService(userId: string, context: HttpApiContext): Promise<PersonaFlowModelService> {
     const promptLogger = new PromptLogger(context.config.promptLog);
     const service = new PersonaFlowModelService({
         userId,
@@ -87,73 +87,25 @@ export async function createChatModelService(context: HttpApiContext, userId: st
         timeoutMs: context.config.agent.timeoutMs,
         maxRetries: context.config.agent.maxRetries,
         onPromptLog: (entry) => promptLogger.write(entry),
-        logger: {
-            debug: (message, payload) => context.logger.debug(
-                message,
-                payload && typeof payload === "object"
-                    ? payload as Record<string, unknown>
-                    : { payload },
-            ),
-            verbose: (message, payload) => context.logger.verbose(
-                message,
-                payload && typeof payload === "object"
-                    ? payload as Record<string, unknown>
-                    : { payload },
-            ),
-            warn: (message, payload) => context.logger.warn(
-                message,
-                payload && typeof payload === "object"
-                    ? payload as Record<string, unknown>
-                    : { payload },
-            ),
-            error: (message, payload) => context.logger.error(
-                message,
-                payload && typeof payload === "object"
-                    ? payload as Record<string, unknown>
-                    : { payload },
-            ),
-        },
+        logger: context.logger,
     });
 
-    try {
-        await service.ensureFunctionReady("chat");
-    } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        throw new HttpStatusError(400, message);
-    }
+    // try {
+    //     await service.ensureFunctionReady("chat");
+    // } catch (err: unknown) {
+    //     const message = err instanceof Error ? err.message : "Unknown error";
+    //     throw new HttpStatusError(400, message);
+    // }
 
     return service;
 }
 
-export function createChatTurnService(context: HttpApiContext): PersonaFlowChatTurnService {
+export async function createChatTurnService(userId: string, context: HttpApiContext): Promise<PersonaFlowChatTurnService> {
+    const modelService = await createChatModelService(userId, context);
     return new PersonaFlowChatTurnService({
         stores: context.stores,
-        logger: {
-            debug: (message, payload) => context.logger.debug(
-                message,
-                payload && typeof payload === "object"
-                    ? payload as Record<string, unknown>
-                    : { payload },
-            ),
-            verbose: (message, payload) => context.logger.verbose(
-                message,
-                payload && typeof payload === "object"
-                    ? payload as Record<string, unknown>
-                    : { payload },
-            ),
-            warn: (message, payload) => context.logger.warn(
-                message,
-                payload && typeof payload === "object"
-                    ? payload as Record<string, unknown>
-                    : { payload },
-            ),
-            error: (message, payload) => context.logger.error(
-                message,
-                payload && typeof payload === "object"
-                    ? payload as Record<string, unknown>
-                    : { payload },
-            ),
-        },
-        getModelServiceForUser: (userId: string) => createChatModelService(context, userId),
+        logger: context.logger,
+        //getModelServiceForUser: (userId: string) => createChatModelService(context, userId),
+        modelService,
     });
 }

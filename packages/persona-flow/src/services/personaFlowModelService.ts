@@ -13,6 +13,7 @@ import type {
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
 
 export interface PersonaChatRequest {
+    userId: string;
     messages: RenderedMessage[];
     mode?: GenerationMode;
     functionName?: string;
@@ -57,13 +58,13 @@ export class PersonaFlowModelService {
         this.logger = deps.logger ?? createNoopPersonaFlowLogger();
     }
 
-    async ensureFunctionReady(functionName = "chat"): Promise<void> {
-        this.logger.debug("persona-flow/model: ensure function runtime", {
-            userId: this.deps.userId,
-            functionName,
-        });
-        await this.resolveFunctionModelRuntime(functionName);
-    }
+    // async ensureFunctionReady(userId: string, functionName = "chat"): Promise<void> {
+    //     this.logger.debug("persona-flow/model: ensure function runtime", {
+    //         userId,
+    //         functionName,
+    //     });
+    //     await this.resolveFunctionModelRuntime(functionName);
+    // }
 
     private async resolveFunctionModelRuntime(functionName: string): Promise<{
         modelName: string;

@@ -1,6 +1,6 @@
 import type { ConversationActorSourceType } from "@ss-ai/contracts";
 import { DEFAULT_USER_ID, type HttpApiContext } from "../apiContext.js";
-import { HttpStatusError } from "./shared.js";
+import { HttpStatusError } from "./chatUtil.js";
 
 export async function handleGetConversationMessages(context: HttpApiContext, conversationId: string) {
     const conversation = await context.stores.conversation.getConversationById({

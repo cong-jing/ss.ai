@@ -4,8 +4,9 @@ import type { RenderedMessage } from "../prompt/promptTypes.js";
 export type GenerationMode = "non-structured" | "structured";
 
 export interface ModelGenerationInput {
+    provider: string;
+    model: string;
     messages: RenderedMessage[];
-    timeoutMs: number;
 }
 
 export interface ModelToolCall {
@@ -60,6 +61,8 @@ export interface ModelClientFactoryInput {
     model: string;
     apiUrl: string;
     apiKey: string;
+    timeoutMs: number;
+    maxRetries: number;
 }
 
 export type ModelClientFactory = (input: ModelClientFactoryInput) => ModelClient;

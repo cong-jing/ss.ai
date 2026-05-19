@@ -12,7 +12,7 @@ import { toErrorResponse, type HttpApiContext } from "./apiContext.js";
 import { handleDryRunChatRequest } from "./chat/dryRunService.js";
 import { handleDeleteConversationMessage, handleGetConversationMessages } from "./chat/messageService.js";
 import { handleNonStreamChatRequest } from "./chat/nonStreamService.js";
-import { getStatusCode } from "./chat/shared.js";
+import { getStatusCode } from "./chat/chatUtil.js";
 import { handleStreamChatRequest } from "./chat/streamService.js";
 
 export function registerChatRoute(context: HttpApiContext): void {

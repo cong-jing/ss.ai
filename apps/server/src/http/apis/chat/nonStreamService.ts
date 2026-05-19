@@ -6,7 +6,7 @@ import {
     requireUserMessageText,
     resolveLlmResponseMode,
     resolvePromptMode,
-} from "./shared.js";
+} from "./chatUtil.js";
 
 export async function handleNonStreamChatRequest(context: HttpApiContext, body: ChatRequest & { userId?: string }) {
     const userMessageText = requireUserMessageText(body?.userMessageText, "chat");
@@ -18,7 +18,7 @@ export async function handleNonStreamChatRequest(context: HttpApiContext, body: 
 
     context.logger.debug("chat: request received", { userMessageLength: userMessageText.length, userId, characterId, conversationId });
 
-    const turnService = createChatTurnService(context);
+    const turnService = await createChatTurnService(userId, context);
     const response = await turnService.chatTurn({
         userId,
         characterId,
