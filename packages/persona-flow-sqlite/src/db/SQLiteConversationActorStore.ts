@@ -1,6 +1,7 @@
 import { eq, and, isNull } from "drizzle-orm";
-import { conversationActors, type ConversationActorRow } from "./schema.js";
+import { conversationActors, conversations, type ConversationActorRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
+import type { CharacterDbRouter } from "./CharacterDbRouter.js";
 import type {
     ConversationActor,
     ConversationActorRole,
@@ -29,14 +30,36 @@ function rowToActor(row: ConversationActorRow): ConversationActor {
 }
 
 export class SQLiteConversationActorStore implements ConversationActorStore {
-    constructor(private readonly db: DrizzleDb) { }
+    constructor(
+        private readonly db: DrizzleDb,
+        private readonly characterDbRouter?: CharacterDbRouter,
+    ) { }
 
+    /**
+     * TODO: 分库模式下目前是依据核心会话索引遍历角色库查找。后面如果想提速，需要补一个 actor_index 到 core.db 做 O(1) 定位。
+     */
     async getActorById(id: string): Promise<ConversationActor | null> {
-        const rows = await this.db
-            .select()
-            .from(conversationActors)
-            .where(eq(conversationActors.id, id))
-            .limit(1);
+        if (this.characterDbRouter) {
+            const indexedConversations = await this.db
+                .select({ id: conversations.id, userId: conversations.userId, characterId: conversations.characterId })
+                .from(conversations);
+            for (const conversation of indexedConversations) {
+                const conversationDb = this.characterDbRouter.getDbForCharacter({
+                    userId: conversation.userId,
+                    characterId: conversation.characterId,
+                });
+                const rows = await conversationDb
+                    .select()
+                    .from(conversationActors)
+                    .where(eq(conversationActors.id, id))
+                    .limit(1);
+                if (rows.length > 0) {
+                    return rowToActor(rows[0]);
+                }
+            }
+            return null;
+        }
+        const rows = await this.db.select().from(conversationActors).where(eq(conversationActors.id, id)).limit(1);
 
         return rows.length > 0 ? rowToActor(rows[0]) : null;
     }
@@ -45,6 +68,7 @@ export class SQLiteConversationActorStore implements ConversationActorStore {
         conversationId: string;
         activeOnly?: boolean;
     }): Promise<ConversationActor[]> {
+        const db = await this.getDbForConversation(input.conversationId);
         const condition = input.activeOnly
             ? and(
                 eq(conversationActors.conversationId, input.conversationId),
@@ -52,7 +76,7 @@ export class SQLiteConversationActorStore implements ConversationActorStore {
             )
             : eq(conversationActors.conversationId, input.conversationId);
 
-        const rows = await this.db
+        const rows = await db
             .select()
             .from(conversationActors)
             .where(condition);
@@ -101,7 +125,8 @@ export class SQLiteConversationActorStore implements ConversationActorStore {
     }
 
     async createActor(actor: ConversationActor): Promise<void> {
-        await this.db.insert(conversationActors).values({
+        const db = await this.getDbForConversation(actor.conversationId);
+        await db.insert(conversationActors).values({
             id: actor.id,
             conversationId: actor.conversationId,
             role: actor.role,
@@ -114,5 +139,12 @@ export class SQLiteConversationActorStore implements ConversationActorStore {
             createdAt: actor.createdAt,
             updatedAt: actor.updatedAt,
         });
+    }
+
+    private async getDbForConversation(conversationId: string): Promise<DrizzleDb> {
+        if (!this.characterDbRouter) {
+            return this.db;
+        }
+        return await this.characterDbRouter.getDbForConversation({ conversationId });
     }
 }

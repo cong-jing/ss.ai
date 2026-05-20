@@ -2,6 +2,7 @@ import { and, eq, desc } from "drizzle-orm";
 import { messages, type MessageRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
 import type { Message } from "@ss-ai/persona-flow";
+import type { CharacterDbRouter } from "./CharacterDbRouter.js";
 
 function rowToMessage(row: MessageRow): Message {
     return {
@@ -14,10 +15,14 @@ function rowToMessage(row: MessageRow): Message {
 }
 
 export class SQLiteMessageStore {
-    constructor(private readonly db: DrizzleDb) { }
+    constructor(
+        private readonly db: DrizzleDb,
+        private readonly characterDbRouter?: CharacterDbRouter,
+    ) { }
 
     async appendMessage(message: Message): Promise<void> {
-        await this.db.insert(messages).values({
+        const db = await this.getDbForConversation(message.conversationId);
+        await db.insert(messages).values({
             id: message.id,
             conversationId: message.conversationId,
             senderActorId: message.senderActorId,
@@ -31,7 +36,8 @@ export class SQLiteMessageStore {
         conversationId: string;
         limit: number;
     }): Promise<Message[]> {
-        const rows = await this.db
+        const db = await this.getDbForConversation(input.conversationId);
+        const rows = await db
             .select()
             .from(messages)
             .where(eq(messages.conversationId, input.conversationId))
@@ -42,11 +48,19 @@ export class SQLiteMessageStore {
     }
 
     async deleteMessage(input: { conversationId: string; messageId: string }): Promise<void> {
-        await this.db
+        const db = await this.getDbForConversation(input.conversationId);
+        await db
             .delete(messages)
             .where(and(
                 eq(messages.conversationId, input.conversationId),
                 eq(messages.id, input.messageId),
             ));
+    }
+
+    private async getDbForConversation(conversationId: string): Promise<DrizzleDb> {
+        if (!this.characterDbRouter) {
+            return this.db;
+        }
+        return await this.characterDbRouter.getDbForConversation({ conversationId });
     }
 }

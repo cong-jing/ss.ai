@@ -1,5 +1,6 @@
 import express from "express";
 import path from "node:path";
+import fs from "node:fs";
 import { RuntimeConfig } from "../util/config.js";
 import { getGlobalLogger } from "@ss-ai/persona-flow-logger";
 import { registerChatRoute } from "./apis/chat.route.js";
@@ -56,7 +57,13 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
         (sql: unknown) => logger.verbose("[db]", { sql: String(sql) })
     );
 
-    const stores = overrides?.stores ?? createSqliteStores({ db });
+    const characterDbDir = path.join(config.runtimeFiles.userDataDir, "characters");
+    fs.mkdirSync(characterDbDir, { recursive: true });
+    const stores = overrides?.stores ?? createSqliteStores({
+        db,
+        characterDbDir,
+        dblog: (sql: unknown) => logger.verbose("[db.character]", { sql: String(sql) }),
+    });
 
     app.use(express.json());
 

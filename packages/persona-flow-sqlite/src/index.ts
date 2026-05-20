@@ -1,6 +1,7 @@
 // persona-flow-sqlite 的公开入口
 export { openDatabase } from "./db/openDatabase.js";
 export type { OpenDatabaseResult, SqliteDb, DrizzleDb, DbLog } from "./db/openDatabase.js";
+export { openCharacterDatabase } from "./db/openCharacterDatabase.js";
 
 export { createSqliteStores } from "./createSqliteStores.js";
 export { SQLiteChatStore } from "./db/SQLiteChatStore.js";

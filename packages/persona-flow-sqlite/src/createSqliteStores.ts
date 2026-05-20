@@ -7,6 +7,8 @@ import { SQLiteConversationActorStore } from "./db/SQLiteConversationActorStore.
 import { SQLiteUserProfileStore } from "./db/SQLiteUserProfileStore.js";
 import { SQLiteUserPreferencesStore } from "./db/SQLiteUserPreferencesStore.js";
 import { SQLiteUserProviderCredentialStore } from "./db/SQLiteUserProviderCredentialStore.js";
+import { CharacterDbRouter } from "./db/CharacterDbRouter.js";
+import type { DbLog } from "./db/openDatabase.js";
 
 /**
  * Create a fully-wired AppStores backed by SQLite.
@@ -14,16 +16,21 @@ import { SQLiteUserProviderCredentialStore } from "./db/SQLiteUserProviderCreden
  * The caller is responsible for opening the database first via `openDatabase()`.
  * All stores share the same db instance so Drizzle can use a single connection.
  */
-export function createSqliteStores(options: { db: DrizzleDb }): AppStores {
-    const { db } = options;
-    const conversationActor = new SQLiteConversationActorStore(db);
+export function createSqliteStores(options: {
+    db: DrizzleDb;
+    characterDbDir?: string;
+    dblog?: DbLog;
+}): AppStores {
+    const { db, characterDbDir, dblog } = options;
+    const characterDbRouter = characterDbDir ? new CharacterDbRouter(db, characterDbDir, dblog) : undefined;
+    const conversationActor = new SQLiteConversationActorStore(db, characterDbRouter);
     return {
         character: new SQLiteCharacterStore(db),
         userProfile: new SQLiteUserProfileStore(db),
         userPreferences: new SQLiteUserPreferencesStore(db),
-        conversation: new SQLiteConversationStore(db),
+        conversation: new SQLiteConversationStore(db, characterDbRouter),
         conversationActor,
-        chat: new SQLiteChatStore(db),
+        chat: new SQLiteChatStore(db, characterDbRouter),
         providerCredential: new SQLiteUserProviderCredentialStore(db),
     };
 }

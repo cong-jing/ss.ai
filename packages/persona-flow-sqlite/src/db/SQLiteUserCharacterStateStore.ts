@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { userCharacterStates, type UserCharacterStateRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
 import type { UserCharacterState } from "@ss-ai/persona-flow";
+import type { CharacterDbRouter } from "./CharacterDbRouter.js";
 
 function rowToState(row: UserCharacterStateRow): UserCharacterState {
     return {
@@ -14,10 +15,14 @@ function rowToState(row: UserCharacterStateRow): UserCharacterState {
 }
 
 export class SQLiteUserCharacterStateStore {
-    constructor(private readonly db: DrizzleDb) { }
+    constructor(
+        private readonly db: DrizzleDb,
+        private readonly characterDbRouter?: CharacterDbRouter,
+    ) { }
 
     async getState(input: { userId: string; characterId: string }): Promise<UserCharacterState | null> {
-        const rows = await this.db
+        const db = this.getDbForCharacter(input.userId, input.characterId);
+        const rows = await db
             .select()
             .from(userCharacterStates)
             .where(
@@ -32,7 +37,8 @@ export class SQLiteUserCharacterStateStore {
     }
 
     async upsertState(state: UserCharacterState): Promise<void> {
-        await this.db
+        const db = this.getDbForCharacter(state.userId, state.characterId);
+        await db
             .insert(userCharacterStates)
             .values({
                 userId: state.userId,
@@ -48,5 +54,12 @@ export class SQLiteUserCharacterStateStore {
                     updatedAt: state.updatedAt,
                 },
             });
+    }
+
+    private getDbForCharacter(userId: string, characterId: string): DrizzleDb {
+        if (!this.characterDbRouter) {
+            return this.db;
+        }
+        return this.characterDbRouter.getDbForCharacter({ userId, characterId });
     }
 }

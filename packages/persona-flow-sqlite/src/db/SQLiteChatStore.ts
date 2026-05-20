@@ -3,6 +3,7 @@ import type { DrizzleDb } from "./openDatabase.js";
 import { SQLiteMessageStore } from "./SQLiteMessageStore.js";
 import { SQLiteUserCharacterStateStore } from "./SQLiteUserCharacterStateStore.js";
 import type { Message, UserCharacterState } from "@ss-ai/persona-flow";
+import type { CharacterDbRouter } from "./CharacterDbRouter.js";
 
 /**
  * SQLite implementation of ChatStore.
@@ -14,9 +15,9 @@ export class SQLiteChatStore implements ChatStore {
     private readonly msgs: SQLiteMessageStore;
     private readonly characterStates: SQLiteUserCharacterStateStore;
 
-    constructor(private readonly db: DrizzleDb) {
-        this.msgs = new SQLiteMessageStore(db);
-        this.characterStates = new SQLiteUserCharacterStateStore(db);
+    constructor(private readonly db: DrizzleDb, characterDbRouter?: CharacterDbRouter) {
+        this.msgs = new SQLiteMessageStore(db, characterDbRouter);
+        this.characterStates = new SQLiteUserCharacterStateStore(db, characterDbRouter);
     }
 
     // ── Messages ──────────────────────────────────────────────────────────────

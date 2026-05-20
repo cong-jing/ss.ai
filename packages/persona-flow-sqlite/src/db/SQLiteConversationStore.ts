@@ -2,9 +2,13 @@ import type { ConversationStore, CreateConversationResult, Conversation } from "
 import { and, eq, desc } from "drizzle-orm";
 import { conversations, messages, conversationActors } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
+import type { CharacterDbRouter } from "./CharacterDbRouter.js";
 
 export class SQLiteConversationStore implements ConversationStore {
-    constructor(private readonly db: DrizzleDb) { }
+    constructor(
+        private readonly db: DrizzleDb,
+        private readonly characterDbRouter?: CharacterDbRouter,
+    ) { }
 
     async listConversations(input: { userId: string; characterId: string }): Promise<Conversation[]> {
         const rows = await this.db
@@ -53,6 +57,7 @@ export class SQLiteConversationStore implements ConversationStore {
         options: { selfDisplayName: string },
     ): Promise<CreateConversationResult> {
         const now = new Date().toISOString();
+        const conversationDb = this.getDbForCharacter(conversation.userId, conversation.characterId);
 
         await this.db.insert(conversations).values({
             id: conversation.id,
@@ -65,7 +70,7 @@ export class SQLiteConversationStore implements ConversationStore {
 
         // Auto-create: self (AI character) actor
         const selfActorId = crypto.randomUUID();
-        await this.db.insert(conversationActors).values({
+        await conversationDb.insert(conversationActors).values({
             id: selfActorId,
             conversationId: conversation.id,
             role: "self",
@@ -81,7 +86,7 @@ export class SQLiteConversationStore implements ConversationStore {
 
         // Auto-create: system actor
         const systemActorId = crypto.randomUUID();
-        await this.db.insert(conversationActors).values({
+        await conversationDb.insert(conversationActors).values({
             id: systemActorId,
             conversationId: conversation.id,
             role: "system",
@@ -99,11 +104,16 @@ export class SQLiteConversationStore implements ConversationStore {
     }
 
     async deleteConversation(input: { userId: string; conversationId: string }): Promise<void> {
+        const conversation = await this.getConversationById(input);
+        if (!conversation) {
+            return;
+        }
+        const conversationDb = this.getDbForCharacter(conversation.userId, conversation.characterId);
         // Delete messages, then actors, then the conversation record
-        await this.db.delete(messages).where(
+        await conversationDb.delete(messages).where(
             eq(messages.conversationId, input.conversationId),
         );
-        await this.db.delete(conversationActors).where(
+        await conversationDb.delete(conversationActors).where(
             eq(conversationActors.conversationId, input.conversationId),
         );
         await this.db.delete(conversations).where(and(
@@ -124,5 +134,12 @@ export class SQLiteConversationStore implements ConversationStore {
                 eq(conversations.userId, input.userId),
                 eq(conversations.id, input.conversationId),
             ));
+    }
+
+    private getDbForCharacter(userId: string, characterId: string): DrizzleDb {
+        if (!this.characterDbRouter) {
+            return this.db;
+        }
+        return this.characterDbRouter.getDbForCharacter({ userId, characterId });
     }
 }
