@@ -6,6 +6,7 @@ import { activeConversationId } from "../sidebar/viewmodels/useConversationViewM
 import { actors, selectedActorId, useActorViewModel } from "../sidebar/viewmodels/useActorViewModel";
 import { apiDryRunChat } from "../chat/chatApi";
 import { chatDraftInput } from "../chat/useChatViewModel";
+import { t } from "../../shared/i18n/i18n";
 
 const { updateActor } = useActorViewModel();
 
@@ -128,7 +129,7 @@ async function refreshPromptPreview(force = false) {
 
   if (!characterId || !conversationId || !senderActorId || !userMessageText) {
     if (force) {
-      previewError.value = "请先选择角色、对话、actor，并输入消息。";
+      previewError.value = t("inspector.error.missingContext");
       previewText.value = "";
       previewUpdatedAt.value = null;
     }
@@ -203,68 +204,68 @@ onBeforeUnmount(() => {
   <div class="inspector">
     <section class="group group--prompt">
       <button class="group-header" @click="promptPanelOpen = !promptPanelOpen">
-        <span>PromptPreviewSection</span>
+        <span>{{ t("inspector.section.promptPreview") }}</span>
         <span>{{ promptPanelOpen ? "▾" : "▸" }}</span>
       </button>
       <div v-if="promptPanelOpen" class="group-body compact">
         <label class="checkbox-row">
           <input v-model="autoPreview" type="checkbox" />
-          <span>自动预览（输入变化后每 4 秒检查刷新）</span>
+          <span>{{ t("inspector.autoPreview") }}</span>
         </label>
 
         <div class="actions">
           <button class="mini-btn" :disabled="isRefreshing" @click="refreshPromptPreview(true)">
-            {{ isRefreshing ? "刷新中..." : "立即刷新" }}
+            {{ isRefreshing ? t("inspector.refreshing") : t("inspector.refreshNow") }}
           </button>
-          <span v-if="previewUpdatedAt" class="hint">更新时间：{{ previewUpdatedAt }}</span>
+          <span v-if="previewUpdatedAt" class="hint">{{ t("inspector.updatedAt", { time: previewUpdatedAt }) }}</span>
         </div>
 
         <p v-if="previewError" class="error">{{ previewError }}</p>
-        <pre v-else class="preview">{{ previewText || "(暂无预览)" }}</pre>
+        <pre v-else class="preview">{{ previewText || t("inspector.noPreview") }}</pre>
       </div>
     </section>
 
     <section class="group group--actor">
       <button class="group-header" @click="actorPanelOpen = !actorPanelOpen">
-        <span>ActorEditorSection</span>
+        <span>{{ t("inspector.section.actorEditor") }}</span>
         <span>{{ actorPanelOpen ? "▾" : "▸" }}</span>
       </button>
       <div v-if="actorPanelOpen" class="group-body compact">
         <template v-if="showDebug">
-          <label class="field-label">Character ID</label>
-          <p class="id-text">{{ activeCharacter?.id ?? "(none)" }}</p>
+          <label class="field-label">{{ t("inspector.field.characterId") }}</label>
+          <p class="id-text">{{ activeCharacter?.id ?? t("inspector.none") }}</p>
 
-          <label class="field-label">Conversation ID</label>
-          <p class="id-text">{{ activeConversationId ?? "(none)" }}</p>
+          <label class="field-label">{{ t("inspector.field.conversationId") }}</label>
+          <p class="id-text">{{ activeConversationId ?? t("inspector.none") }}</p>
         </template>
 
-        <p v-if="!selectedActor" class="hint">左侧选择一个 actor 后可查看详情。</p>
+        <p v-if="!selectedActor" class="hint">{{ t("inspector.hint.selectActor") }}</p>
 
         <template v-else>
           <template v-if="showDebug">
-            <label class="field-label">Actor ID</label>
+            <label class="field-label">{{ t("inspector.field.actorId") }}</label>
             <p class="id-text">{{ selectedActor.id }}</p>
           </template>
-          <p class="hint">sourceType: {{ selectedActor.sourceType }}</p>
+          <p class="hint">{{ t("inspector.sourceType") }}: {{ selectedActor.sourceType }}</p>
 
           <template v-if="canEditActor">
-            <label class="field-label">名称</label>
+            <label class="field-label">{{ t("inspector.field.name") }}</label>
             <input v-model="editingName" class="input" />
 
-            <label class="field-label">description</label>
+            <label class="field-label">{{ t("inspector.field.description") }}</label>
             <textarea v-model="editingDescription" class="textarea" rows="3" />
 
-            <label class="field-label">background</label>
+            <label class="field-label">{{ t("inspector.field.background") }}</label>
             <textarea v-model="editingBackground" class="textarea" rows="3" />
 
             <div class="actions">
-              <button class="mini-btn primary" :disabled="!editingName.trim()" @click="saveActor">保存 Actor</button>
+              <button class="mini-btn primary" :disabled="!editingName.trim()" @click="saveActor">{{ t("inspector.saveActor") }}</button>
             </div>
           </template>
 
           <template v-else>
-            <p class="readonly">该 actor 不可编辑。</p>
-            <pre class="snapshot">{{ selectedActor.profileSnapshotJson || "(empty)" }}</pre>
+            <p class="readonly">{{ t("inspector.actorReadonly") }}</p>
+            <pre class="snapshot">{{ selectedActor.profileSnapshotJson || t("inspector.emptySnapshot") }}</pre>
           </template>
         </template>
       </div>

@@ -46,7 +46,15 @@ function formatModelCallPurpose(purpose: ModelCallPurpose): string {
 }
 
 function localeLabel(value: Locale): string {
-  return value === "zh-CN" ? t("settings.language.zh-CN") : t("settings.language.en-US");
+  switch (value) {
+    case "zh-CN":
+      return t("settings.language.zh-CN");
+    case "ja-JP":
+      return t("settings.language.ja-JP");
+    case "en-US":
+    default:
+      return t("settings.language.en-US");
+  }
 }
 
 function onLocaleChange(rawValue: string): void {

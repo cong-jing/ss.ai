@@ -74,7 +74,7 @@ function runAction(action: { run: () => void }) {
   <!-- Demo: modal popup -->
   <PopupWindow v-model="showDemoModal" title="Demo: Modal Popup" :modal="true" width="400px">
     <p class="demo-text">
-      这是模态弹窗。点击背景遮罩或右上角 ✕ 关闭，也可以按 <kbd>Esc</kbd>。
+      This is a modal popup. Click overlay, top-right close button, or press Esc to close.
     </p>
   </PopupWindow>
 
@@ -87,7 +87,7 @@ function runAction(action: { run: () => void }) {
     width="360px"
   >
     <p class="demo-text">
-      这是非模态可拖拽弹窗。拖拽顶部标题栏即可移动位置。
+      This is a non-modal draggable popup. Drag from the title bar to move it.
     </p>
   </PopupWindow>
 </template>
