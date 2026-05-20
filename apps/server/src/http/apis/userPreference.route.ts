@@ -1,7 +1,7 @@
 import * as UserPreferenceApi from "@ss-ai/contracts/apis/userPreference";
 import type { ErrorResponse } from "@ss-ai/contracts";
-import { AI_FUNCTIONS } from "@ss-ai/contracts";
-import { createModelClientFromConfig } from "@ss-ai/persona-flow-model-client";
+import { MODEL_CALL_PURPOSES } from "@ss-ai/contracts";
+import { DefaultModelClient } from "@ss-ai/persona-flow-model-client";
 import { registerApi } from "../registerApi.js";
 import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
 
@@ -16,13 +16,12 @@ async function listModelsForProvider(context: HttpApiContext, provider: string):
     const credential = await context.stores.providerCredential.getCredential({ userId: DEFAULT_USER_ID, provider });
     if (!credential) return [];
 
-    const client = createModelClientFromConfig({
-        provider: modelEntry.provider,
-        model: modelEntry.defaultModel || "model-for-listing",
-        apiUrl: modelEntry.apiUrl,
-        apiKey: credential.apiKeyEncrypted,
+    const client = new DefaultModelClient({
+        providerConfigs: context.config.models,
+        timeoutMs: context.config.agent.timeoutMs,
+        maxRetries: context.config.agent.maxRetries,
     });
-    const models = await client.listModels();
+    const models = await client.listModels(provider, credential.apiKeyEncrypted);
     return models.sort();
 }
 
@@ -41,7 +40,7 @@ async function getUserPreference(context: HttpApiContext): Promise<UserPreferenc
     );
 
     const functionModels: UserPreferenceApi.FunctionModelMap = {};
-    for (const fn of AI_FUNCTIONS) {
+    for (const fn of MODEL_CALL_PURPOSES) {
         const assignment = prefs?.functionModels?.[fn];
         functionModels[fn] = assignment ?? null;
     }
@@ -101,13 +100,7 @@ async function testApiKey(
     }
 
     try {
-        const client = createModelClientFromConfig({
-            provider: modelEntry.provider,
-            model: modelEntry.defaultModel || "model-for-listing",
-            apiUrl: modelEntry.apiUrl,
-            apiKey: credential.apiKeyEncrypted,
-        });
-        const models = await client.listModels();
+        const models = await listModelsForProvider(context, provider);
         return { provider, ok: true, message: `${models.length} model(s) available` };
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -119,11 +112,11 @@ async function upsertFunctionModel(
     context: HttpApiContext,
     body: UserPreferenceApi.UpsertFunctionModelRequest
 ): Promise<UserPreferenceApi.UpsertFunctionModelResponse> {
-    const fn = body?.function;
+    const fn = body?.modelCallPurpose;
     const provider = (body?.provider ?? "").trim().toLowerCase();
     const model = (body?.model ?? "").trim();
 
-    if (!fn || !(AI_FUNCTIONS as readonly string[]).includes(fn)) {
+    if (!fn || !(MODEL_CALL_PURPOSES as readonly string[]).includes(fn)) {
         throw new Error(`Invalid function: ${fn}`);
     }
     if (!provider) throw new Error("provider is required");
@@ -139,7 +132,7 @@ async function upsertFunctionModel(
 
     const prefs = await context.stores.userPreferences.getUserPreferences(DEFAULT_USER_ID);
     const functionModels: UserPreferenceApi.FunctionModelMap = {};
-    for (const f of AI_FUNCTIONS) {
+    for (const f of MODEL_CALL_PURPOSES) {
         functionModels[f] = prefs?.functionModels?.[f] ?? null;
     }
     return { functionModels };

@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import type { Character, CharacterModelConfig, PromptMode } from '@ss-ai/contracts'
-import { AI_FUNCTIONS, DEFAULT_PROMPT_MODE, type AiFunction } from '@ss-ai/contracts'
+import { MODEL_CALL_PURPOSES, DEFAULT_PROMPT_MODE, type ModelCallPurpose } from '@ss-ai/contracts'
 import {
     apiListCharacters, apiListCharacterPromptModes, apiCreateCharacter, apiUpdateCharacter,
     apiDeleteCharacter, apiSetActiveCharacter,
@@ -22,15 +22,15 @@ export const activeCharacter = computed<Character | null>(
 
 export type FnOverride = { enabled: boolean; provider: string; model: string }
 
-function emptyOverrides(): Record<AiFunction, FnOverride> {
+function emptyOverrides(): Record<ModelCallPurpose, FnOverride> {
     return Object.fromEntries(
-        AI_FUNCTIONS.map(fn => [fn, { enabled: false, provider: '', model: '' }])
-    ) as Record<AiFunction, FnOverride>
+        MODEL_CALL_PURPOSES.map(fn => [fn, { enabled: false, provider: '', model: '' }])
+    ) as Record<ModelCallPurpose, FnOverride>
 }
 
 export const editDraft = ref<{
     name: string; displayName: string; description: string; personaPrompt: string; greetingMessage: string; promptMode: PromptMode
-    modelOverrides: Record<AiFunction, FnOverride>
+    modelOverrides: Record<ModelCallPurpose, FnOverride>
 }>({ name: '', displayName: '', description: '', personaPrompt: '', greetingMessage: '', promptMode: DEFAULT_PROMPT_MODE, modelOverrides: emptyOverrides() })
 
 const savedDraftJson = ref('')
@@ -43,7 +43,7 @@ function syncDraft(): void {
         : (promptModes.value[0] ?? DEFAULT_PROMPT_MODE)
     const overrides = emptyOverrides()
     if (c?.modelConfig) {
-        for (const fn of AI_FUNCTIONS) {
+        for (const fn of MODEL_CALL_PURPOSES) {
             const cfg = c.modelConfig[fn]
             if (cfg) {
                 overrides[fn] = { enabled: true, provider: cfg.provider, model: cfg.model }
@@ -127,10 +127,10 @@ export function useCharacterViewModel() {
         isSavingCharacter.value = true
         try {
             const modelConfig: CharacterModelConfig = {}
-            for (const fn of AI_FUNCTIONS) {
-                const ov = editDraft.value.modelOverrides[fn]
+            for (const purpose of MODEL_CALL_PURPOSES) {
+                const ov = editDraft.value.modelOverrides[purpose]
                 if (ov.enabled && ov.provider && ov.model) {
-                    modelConfig[fn] = { provider: ov.provider, model: ov.model }
+                    modelConfig[purpose] = { provider: ov.provider, model: ov.model }
                 }
             }
             const updated = await apiUpdateCharacter(activeCharacterId.value, {

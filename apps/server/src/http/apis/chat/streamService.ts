@@ -48,7 +48,7 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
         conversationId,
     });
 
-    const turnService = await createChatTurnService(userId, context);
+    const turnService = await createChatTurnService(context);
 
     res.writeHead(200, {
         "Content-Type": "text/event-stream",

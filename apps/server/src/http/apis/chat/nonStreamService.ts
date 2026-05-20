@@ -18,7 +18,7 @@ export async function handleNonStreamChatRequest(context: HttpApiContext, body: 
 
     context.logger.debug("chat: request received", { userMessageLength: userMessageText.length, userId, characterId, conversationId });
 
-    const turnService = await createChatTurnService(userId, context);
+    const turnService = await createChatTurnService(context);
     const response = await turnService.chatTurn({
         userId,
         characterId,
@@ -29,7 +29,8 @@ export async function handleNonStreamChatRequest(context: HttpApiContext, body: 
         senderActorId: body?.senderActorId,
         includeAssembledMessages: body.includeAssembledMessages,
     });
-    const { requestId, model, structuredOutput } = response;
+
+    // const { requestId, model, structuredOutput } = response;
 
     // if (structuredOutput?.control.summarizeSuggested) {
     //     context.logger.debug("chat: summarize suggested (TODO)", {

@@ -1,9 +1,8 @@
 import { DEFAULT_PROMPT_MODE, PROMPT_MODES, type LlmResponseMode, type PromptMode } from "@ss-ai/contracts";
 import {
-    PersonaFlowChatTurnService,
-    PersonaFlowModelService,
+    PersonaFlowChatTurnService
 } from "@ss-ai/persona-flow";
-import { createModelClientFromConfig } from "@ss-ai/persona-flow-model-client";
+import { DefaultModelClient } from "@ss-ai/persona-flow-model-client";
 import { PromptLogger } from "../../../util/promptLog.js";
 import type { HttpApiContext } from "../apiContext.js";
 
@@ -67,45 +66,17 @@ export function resolvePromptMode(value: unknown, endpoint: string): PromptMode 
     );
 }
 
-export async function createChatModelService(userId: string, context: HttpApiContext): Promise<PersonaFlowModelService> {
+export async function createChatTurnService(context: HttpApiContext): Promise<PersonaFlowChatTurnService> {
+    //const modelService = await createChatModelService(userId, context);
     const promptLogger = new PromptLogger(context.config.promptLog);
-    const service = new PersonaFlowModelService({
-        userId,
-        userPreferencesStore: context.stores.userPreferences,
-        providerCredentialStore: context.stores.providerCredential,
-        resolveProviderConfig: (provider) => {
-            const modelEntry = context.config.models[provider];
-            if (!modelEntry) {
-                return null;
-            }
-            return {
-                provider: modelEntry.provider,
-                apiUrl: modelEntry.apiUrl,
-            };
-        },
-        createModelClient: (input) => createModelClientFromConfig(input),
-        timeoutMs: context.config.agent.timeoutMs,
-        maxRetries: context.config.agent.maxRetries,
-        onPromptLog: (entry) => promptLogger.write(entry),
-        logger: context.logger,
-    });
-
-    // try {
-    //     await service.ensureFunctionReady("chat");
-    // } catch (err: unknown) {
-    //     const message = err instanceof Error ? err.message : "Unknown error";
-    //     throw new HttpStatusError(400, message);
-    // }
-
-    return service;
-}
-
-export async function createChatTurnService(userId: string, context: HttpApiContext): Promise<PersonaFlowChatTurnService> {
-    const modelService = await createChatModelService(userId, context);
     return new PersonaFlowChatTurnService({
         stores: context.stores,
         logger: context.logger,
-        //getModelServiceForUser: (userId: string) => createChatModelService(context, userId),
-        modelService,
+        promptLogger: promptLogger,
+        modelClient: new DefaultModelClient({
+            providerConfigs: context.config.models,
+            timeoutMs: context.config.agent.timeoutMs,
+            maxRetries: context.config.agent.maxRetries,
+        }),
     });
 }

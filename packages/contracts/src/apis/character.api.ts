@@ -1,6 +1,6 @@
 import { ApiDefine } from "../apiBase.js";
 import type { PromptMode } from "../promptMode.js";
-import type { AiFunction } from "../aiFunctions.js";
+import type { ModelCallPurpose } from "../modelCallPurpose.js";
 import type { ConversationInfo } from "./conversation.api.js";
 // ── Domain type ────────────────────────────────────────────────────────────────
 
@@ -10,7 +10,7 @@ export interface CharacterFunctionModel {
 }
 
 /** Per-function model overrides. Absent key = inherit from user preference. */
-export type CharacterModelConfig = Partial<Record<AiFunction, CharacterFunctionModel>>;
+export type CharacterModelConfig = Partial<Record<ModelCallPurpose, CharacterFunctionModel>>;
 
 /**
  * HTTP API projection of a character card.

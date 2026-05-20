@@ -2,13 +2,15 @@ import type { PromptRenderMode } from "../prompt/promptRenderer.js";
 import type { PromptMode } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
 import { normalizeAssistantOutput, prepareChatTurnContext } from "./chatTurnPreparation.js";
-import { createNoopPersonaFlowLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
-import type { PersonaChatResponse, PersonaFlowModelService } from "./personaFlowModelService.js";
+import { createNoopPersonaFlowLogger, PersonaFlowPromptLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
+import { PersonaChatResponse, ModelCallExecutor } from "./modelCallExecutor.js";
+import { ModelClient } from "../index.js";
 
 export interface PersonaFlowChatTurnServiceDependencies {
     stores: AppStores;
     logger?: PersonaFlowLogger;
-    modelService: PersonaFlowModelService;
+    promptLogger: PersonaFlowPromptLogger;
+    modelClient: ModelClient;
     // getModelServiceForUser: (userId: string) => Promise<{
     //     chat: (request: {
     //         userId: string;
@@ -64,9 +66,23 @@ export interface PersonaStreamTurnRequest {
 
 export class PersonaFlowChatTurnService {
     private readonly logger: PersonaFlowLogger;
+    private readonly modelCallExecutor: ModelCallExecutor;
 
     constructor(private readonly deps: PersonaFlowChatTurnServiceDependencies) {
         this.logger = deps.logger ?? createNoopPersonaFlowLogger();
+        this.modelCallExecutor = new ModelCallExecutor({
+            //userId: deps.
+            modelClient: deps.modelClient,
+            appStores: deps.stores,
+            // modelProfileResolver: new DefaultModelProfileResolver(...),
+            // modelCredentialResolver: new StaticModelCredentialResolver(...),
+            logger: this.logger,
+            promptLogger: {
+                writePromptLog: async (log) => {
+                    throw new Error("Model call prompt logging is not implemented yet.");
+                }
+            }
+        });
     }
 
     async dryRunTurn(input: PersonaDryRunTurnRequest): Promise<{ messages: Array<{ role: "system" | "user" | "assistant"; content: string }> }> {
@@ -129,11 +145,12 @@ export class PersonaFlowChatTurnService {
             logger: this.logger,
         });
 
-        const response = await this.deps.modelService.chat({
+        const response = await this.modelCallExecutor.chat({
             userId: input.userId,
+            characterId: input.characterId,
             messages: prepared.rendered.messages,
-            mode: input.llmResponseMode,
-            functionName: "chat",
+            llmResponseMode: input.llmResponseMode,
+            modelCallPurpose: "chat.main",
         });
 
         const selfActor = prepared.promptContext.actorMap.get(prepared.selfActorId);
@@ -234,11 +251,12 @@ export class PersonaFlowChatTurnService {
         if (input.includeAssembledMessages) {
             input.onAssembledMessages?.(prepared.rendered.messages);
         }
-        const streamResponse = await this.deps.modelService.chatStream({
+        const streamResponse = await this.modelCallExecutor.chatStream({
             userId: input.userId,
+            characterId: input.characterId,
             messages: prepared.rendered.messages,
-            mode: input.llmResponseMode,
-            functionName: "chat",
+            llmResponseMode: input.llmResponseMode,
+            modelCallPurpose: "chat.main",
             onTextDelta: (rawDelta: string) => {
                 rawAccumulatedOutput += rawDelta;
                 const normalizedSoFar = normalizeAssistantOutput(rawAccumulatedOutput, normalizeNames);

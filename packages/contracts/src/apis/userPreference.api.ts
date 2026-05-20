@@ -1,5 +1,5 @@
 import { ApiDefine } from "../apiBase.js";
-import type { AiFunction } from "../aiFunctions.js";
+import type { ModelCallPurpose } from "../modelCallPurpose.js";
 
 // --- Provider info ---
 
@@ -11,7 +11,7 @@ export interface ProviderStatus {
 
 // --- Function model assignment ---
 
-export type FunctionModelMap = Partial<Record<AiFunction, { provider: string; model: string } | null>>;
+export type FunctionModelMap = Partial<Record<ModelCallPurpose, { provider: string; model: string } | null>>;
 
 // --- GET /v1/user-preference ---
 
@@ -59,7 +59,7 @@ export interface TestApiKeyResponse {
 // --- POST /v1/user-preference/function-model ---
 
 export interface UpsertFunctionModelRequest {
-    function: AiFunction;
+    modelCallPurpose: ModelCallPurpose;
     provider: string;
     model: string;
 }

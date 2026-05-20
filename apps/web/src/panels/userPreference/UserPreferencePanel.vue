@@ -6,7 +6,7 @@ import TextInput from "../../shared/ui/TextInput.vue";
 import CollapsibleSection from "../../shared/ui/CollapsibleSection.vue";
 import { useUserPreferenceViewModel } from "./useUserPreferenceViewModel";
 import { useUserProfileViewModel } from "../userProfile/useUserProfileViewModel";
-import { AI_FUNCTION_LABELS, type AiFunction } from "@ss-ai/contracts";
+import { MODEL_CALL_PURPOSES, type ModelCallPurpose } from "@ss-ai/contracts";
 
 const vm = useUserPreferenceViewModel();
 const {
@@ -32,7 +32,7 @@ function apiKeySetFor(providerName: string): boolean {
   return providers.value.find(p => p.provider === providerName)?.apiKeySet ?? false;
 }
 
-async function onFnProviderChange(fn: AiFunction, idx: number, providerName: string) {
+async function onFnProviderChange(purpose: ModelCallPurpose, idx: number, providerName: string) {
   functionModels.value[idx].provider = providerName;
   functionModels.value[idx].model = "";
   const p = providers.value.find(p => p.provider === providerName);
@@ -41,11 +41,11 @@ async function onFnProviderChange(fn: AiFunction, idx: number, providerName: str
   }
 }
 
-async function onFnModelChange(idx: number, fn: AiFunction, model: string) {
+async function onFnModelChange(idx: number, purpose: ModelCallPurpose, model: string) {
   functionModels.value[idx].model = model;
   const state = functionModels.value[idx];
   if (state.provider && state.model) {
-    await saveFunctionModel(fn, state.provider, state.model);
+    await saveFunctionModel(purpose, state.provider, state.model);
   }
 }
 
@@ -132,7 +132,7 @@ onMounted(() => {
       <!-- Section 2: Model assignment per function -->
       <CollapsibleSection title="Model Assignment">
         <div v-for="(fnState, idx) in functionModels" :key="fnState.fn" class="fn-block">
-          <div class="fn-label">{{ AI_FUNCTION_LABELS[fnState.fn] }}</div>
+          <div class="fn-label">{{ MODEL_CALL_PURPOSES[fnState.fn] }}</div>
           <div class="fn-edit">
             <select
               :value="fnState.provider"

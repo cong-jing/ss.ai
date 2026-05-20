@@ -19,16 +19,18 @@ import {
 } from "./messageTransforms.js";
 import { mistralStructuredOutputSchema } from "./structuredOutputSchema.js";
 import { withTimeout } from "./timeout.js";
+import { ModelAdapter } from "../modelAdapter.js";
 
 type MistralSDKModule = typeof import("@mistralai/mistralai");
 
 interface MistralModelClientOptions {
     apiKey: string;
     apiUrl: string;
-    model: string;
+    timeoutMs: number;
+    maxRetries?: number;
 }
 
-export class MistralModelClient implements ModelClient {
+export class MistralModelClient implements ModelAdapter {
     private clientPromise: Promise<MistralSDKClient> | null = null;
 
     constructor(private readonly options: MistralModelClientOptions) { }
@@ -56,11 +58,11 @@ export class MistralModelClient implements ModelClient {
 
         const response = await withTimeout(
             client.chat.complete({
-                model: this.options.model,
+                model: input.model,
                 messages: toSdkMessages(input),
                 responseFormat: { type: "text" },
             }),
-            input.timeoutMs,
+            this.options.timeoutMs,
             "Mistral non-structured request",
         );
 
@@ -82,11 +84,11 @@ export class MistralModelClient implements ModelClient {
 
         const stream = await withTimeout(
             client.chat.stream({
-                model: this.options.model,
+                model: input.model,
                 messages: toSdkMessages(input),
                 responseFormat: { type: "text" },
             }),
-            input.timeoutMs,
+            this.options.timeoutMs,
             "Mistral non-structured stream request",
         );
 
@@ -155,11 +157,11 @@ export class MistralModelClient implements ModelClient {
 
         const response = await withTimeout(
             client.chat.parse({
-                model: this.options.model,
+                model: input.model,
                 messages: toSdkMessages(input),
                 responseFormat: mistralStructuredOutputSchema,
             }),
-            input.timeoutMs,
+            this.options.timeoutMs,
             "Mistral structured request",
         );
 

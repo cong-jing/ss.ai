@@ -1,21 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { RenderedMessage } from "@ss-ai/persona-flow";
+import type { PersonaFlowPromptLogEntry, PersonaFlowPromptLogger, RenderedMessage } from "@ss-ai/persona-flow";
 
 export interface PromptLogConfig {
     enabled: boolean;
     filePath: string;
 }
-
-export interface PromptLogEntry {
-    timestamp: string;
-    requestId: string;
-    model: string;
-    messages: RenderedMessage[];
-    output: string;
-}
-
-export class PromptLogger {
+export class PromptLogger implements PersonaFlowPromptLogger {
     constructor(private readonly config: PromptLogConfig) {
         if (config.enabled) {
             fs.mkdirSync(path.dirname(path.resolve(config.filePath)), { recursive: true });
@@ -26,7 +17,7 @@ export class PromptLogger {
         return new PromptLogger({ enabled: false, filePath: "" });
     }
 
-    write(entry: PromptLogEntry): void {
+    async writePromptLog(entry: PersonaFlowPromptLogEntry): Promise<void> {
         if (!this.config.enabled) return;
 
         const lines: string[] = [];

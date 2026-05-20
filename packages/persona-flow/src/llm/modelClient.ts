@@ -6,6 +6,7 @@ export type GenerationMode = "non-structured" | "structured";
 export interface ModelGenerationInput {
     provider: string;
     model: string;
+    apiKey: string;
     messages: RenderedMessage[];
 }
 
@@ -53,7 +54,7 @@ export interface ModelClient {
     generateNonStructured(input: ModelGenerationInput): Promise<ModelGenerationResult>;
     generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult>;
     generateStructured(input: ModelGenerationInput): Promise<ModelStructuredResult>;
-    listModels(): Promise<string[]>;
+    listModels(provider: string, apiKey: string): Promise<string[]>;
 }
 
 export interface ModelClientFactoryInput {

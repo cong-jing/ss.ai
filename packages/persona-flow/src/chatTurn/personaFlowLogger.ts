@@ -1,3 +1,5 @@
+import { RenderedMessage } from "../prompt/promptTypes.js";
+
 export interface PersonaFlowLogger {
     debug(message: string, payload?: unknown): void;
     verbose(message: string, payload?: unknown): void;
@@ -16,4 +18,16 @@ export function createNoopPersonaFlowLogger(): PersonaFlowLogger {
         warn: NOOP,
         error: NOOP,
     };
+}
+
+export interface PersonaFlowPromptLogEntry {
+    timestamp: string;
+    requestId: string;
+    model: string;
+    messages: RenderedMessage[];
+    output: string;
+}
+
+export interface PersonaFlowPromptLogger {
+    writePromptLog: (log: PersonaFlowPromptLogEntry) => Promise<void>;
 }

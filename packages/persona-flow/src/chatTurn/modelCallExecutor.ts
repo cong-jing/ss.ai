@@ -1,29 +1,29 @@
 import type { CommonRoleplayTurnOutput } from "../structuredOutput/commonRoleplayTurnOutput.js";
 import type { RenderedMessage } from "../prompt/promptTypes.js";
-import type { UserPreferencesStore } from "../stores/user/userPreferencesStore.js";
-import type { UserProviderCredentialStore } from "../stores/user/userProviderCredentialStore.js";
 import type {
-    GenerationMode,
+    GenerationMode as LlmResponseMode,
     ModelClient,
-    ModelClientFactory,
     ModelToolCall,
     ModelUsage,
     ModelStreamResult,
 } from "../llm/modelClient.js";
-import { createNoopPersonaFlowLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
+import { createNoopPersonaFlowLogger, PersonaFlowPromptLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
+import { ModelCallPurpose } from "@ss-ai/contracts";
+import { AppStores } from "../stores/appStores.js";
 
 export interface PersonaChatRequest {
     userId: string;
+    characterId: string;
     messages: RenderedMessage[];
-    mode?: GenerationMode;
-    functionName?: string;
+    modelCallPurpose: ModelCallPurpose;
+    llmResponseMode?: LlmResponseMode;
 }
 
 export interface PersonaChatResponse {
     output: string;
     model: string;
     requestId: string;
-    mode: GenerationMode;
+    llmResponseMode: LlmResponseMode;
     structuredOutput?: CommonRoleplayTurnOutput;
     toolCalls: ModelToolCall[];
     usage?: ModelUsage;
@@ -31,85 +31,81 @@ export interface PersonaChatResponse {
     streamFinishReason?: string;
 }
 
-export interface PersonaPromptLogEntry {
-    timestamp: string;
-    requestId: string;
-    model: string;
-    messages: RenderedMessage[];
-    output: string;
-}
+
+export type ModelSelector =
+    (userId: string, characterId: string, modelCallPurpose: ModelCallPurpose) => Promise<{ provider: string; model: string } | null>;
+export type ModelCredentialResolver =
+    (userId: string, provider: string) => Promise<{ apiKeyEncrypted: string } | null>;
 
 export interface PersonaFlowModelServiceDependencies {
-    userId: string;
-    userPreferencesStore: UserPreferencesStore;
-    providerCredentialStore: UserProviderCredentialStore;
-    resolveProviderConfig: (provider: string) => { provider: string; apiUrl: string } | null;
-    createModelClient: ModelClientFactory;
-    timeoutMs: number;
-    maxRetries?: number;
-    onPromptLog?: (entry: PersonaPromptLogEntry) => void;
+    modelClient: ModelClient;
+    appStores: AppStores;
+    promptLogger: PersonaFlowPromptLogger;
     logger?: PersonaFlowLogger;
 }
 
-export class PersonaFlowModelService {
+export class ModelCallExecutor {
     private readonly logger: PersonaFlowLogger;
 
     constructor(private readonly deps: PersonaFlowModelServiceDependencies) {
         this.logger = deps.logger ?? createNoopPersonaFlowLogger();
     }
 
-    // async ensureFunctionReady(userId: string, functionName = "chat"): Promise<void> {
-    //     this.logger.debug("persona-flow/model: ensure function runtime", {
-    //         userId,
-    //         functionName,
-    //     });
-    //     await this.resolveFunctionModelRuntime(functionName);
-    // }
-
-    private async resolveFunctionModelRuntime(functionName: string): Promise<{
-        modelName: string;
-        client: ModelClient;
-    }> {
+    private async resolveProviderModelRuntime(
+        userId: string,
+        characterId: string,
+        modelCallPurpose: ModelCallPurpose): Promise<{
+            provider: string;
+            model: string;
+            apiKey: string;
+        }> {
         this.logger.verbose("persona-flow/model: resolving runtime", {
-            userId: this.deps.userId,
-            functionName,
+            userId: userId,
+            characterId: characterId,
+            modelCallPurpose,
         });
-        const prefs = await this.deps.userPreferencesStore.getUserPreferences(this.deps.userId);
-        const fnModel = prefs?.functionModels?.[functionName];
-        if (!fnModel?.provider || !fnModel?.model) {
-            throw new Error(`${this.toFunctionLabel(functionName)} model is not configured. Please set it in Settings -> Model Assignment.`);
+        const prefs = await this.deps.appStores.userPreferences.getUserPreferences(userId);
+        const { provider, model } = prefs?.functionModels?.[modelCallPurpose] ?? {};
+
+        // const fnModel = prefs?.functionModels?.[functionName];
+        // const fnModel = await this.deps.modelSelector(
+        //     this.deps.userId, this.deps.characterId, functionName as ModelCallPurpose);
+        if (!provider || !model) {
+            throw new Error(`${this.toFunctionLabel(modelCallPurpose)} model is not configured. Please set it in Settings -> Model Assignment.`);
         }
 
-        const providerConfig = this.deps.resolveProviderConfig(fnModel.provider);
-        if (!providerConfig) {
-            throw new Error(`Configured provider "${fnModel.provider}" is not available.`);
-        }
+        // const providerConfig = this.deps.resolveProviderConfig(fnModel.provider);
+        // if (!providerConfig) {
+        //     throw new Error(`Configured provider "${fnModel.provider}" is not available.`);
+        // }
 
-        const credential = await this.deps.providerCredentialStore.getCredential({
-            userId: this.deps.userId,
-            provider: fnModel.provider,
+        const credential = await this.deps.appStores.providerCredential.getCredential({
+            userId: userId,
+            provider: provider,
         });
         if (!credential) {
-            throw new Error(`API key is not set for provider: ${fnModel.provider}`);
+            throw new Error(`API key is not set for provider: ${provider}. userId: ${userId}`);
         }
 
-        const client = this.deps.createModelClient({
-            provider: providerConfig.provider,
-            model: fnModel.model,
-            apiUrl: providerConfig.apiUrl,
-            apiKey: credential.apiKeyEncrypted,
-        });
+        // const client = this.deps.createModelClient({
+        //     provider: providerConfig.provider,
+        //     model: fnModel.model,
+        //     apiUrl: providerConfig.apiUrl,
+        //     apiKey: credential.apiKeyEncrypted,
+        // });
 
         this.logger.debug("persona-flow/model: runtime resolved", {
-            userId: this.deps.userId,
-            functionName,
-            provider: fnModel.provider,
-            model: fnModel.model,
+            userId: userId,
+            characterId: characterId,
+            modelCallPurpose: modelCallPurpose,
+            provider,
+            model,
         });
 
         return {
-            modelName: fnModel.model,
-            client,
+            provider,
+            model,
+            apiKey: credential.apiKeyEncrypted,
         };
     }
 
@@ -123,7 +119,7 @@ export class PersonaFlowModelService {
     private writePromptLog(
         requestId: string,
         request: PersonaChatRequest,
-        modelName: string,
+        model: string,
         payload: {
             status: "completed" | "failed";
             outputText: string;
@@ -135,14 +131,14 @@ export class PersonaFlowModelService {
             error?: string;
         },
     ): void {
-        this.deps.onPromptLog?.({
+        this.deps.promptLogger?.writePromptLog({
             timestamp: new Date().toISOString(),
             requestId,
-            model: modelName,
+            model: model,
             messages: request.messages,
             output: JSON.stringify({
-                mode: request.mode ?? "non-structured",
-                functionName: request.functionName ?? "chat",
+                mode: request.llmResponseMode ?? "non-structured",
+                functionName: request.modelCallPurpose ?? "chat",
                 status: payload.status,
                 outputText: payload.outputText,
                 structuredOutput: payload.structuredOutput,
@@ -159,14 +155,17 @@ export class PersonaFlowModelService {
 
     async chat(request: PersonaChatRequest): Promise<PersonaChatResponse> {
         const requestId = crypto.randomUUID();
-        const mode: GenerationMode = request.mode ?? "non-structured";
-        const functionName = request.functionName ?? "chat";
-        const { modelName, client } = await this.resolveFunctionModelRuntime(functionName);
+        const llmResponseMode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
+        const { provider, model, apiKey } = await this.resolveProviderModelRuntime(
+            request.userId,
+            request.characterId,
+            request.modelCallPurpose,
+        );
 
         this.logger.verbose("persona-flow/model: chat request", {
             requestId,
-            mode,
-            functionName,
+            llmResponseMode,
+            modelCallPurpose: request.modelCallPurpose,
             messages: request.messages,
         });
 
@@ -176,10 +175,12 @@ export class PersonaFlowModelService {
         let usage: ModelUsage | undefined;
 
         try {
-            if (mode === "structured") {
-                const structuredResult = await client.generateStructured({
+            if (llmResponseMode === "structured") {
+                const structuredResult = await this.deps.modelClient.generateStructured({
+                    provider,
+                    model,
+                    apiKey,
                     messages: request.messages,
-                    timeoutMs: this.deps.timeoutMs,
                 });
                 structuredOutput = structuredResult.structuredOutput;
                 toolCalls = structuredResult.toolCalls;
@@ -188,9 +189,11 @@ export class PersonaFlowModelService {
                     ? structuredOutput.replyText
                     : "";
             } else {
-                const result = await client.generateNonStructured({
+                const result = await this.deps.modelClient.generateNonStructured({
+                    provider,
+                    model,
+                    apiKey,
                     messages: request.messages,
-                    timeoutMs: this.deps.timeoutMs,
                 });
                 output = result.output;
                 toolCalls = result.toolCalls;
@@ -200,11 +203,11 @@ export class PersonaFlowModelService {
             const errorMessage = err instanceof Error ? err.message : "Unknown error";
             this.logger.error("persona-flow/model: chat failed", {
                 requestId,
-                mode,
-                functionName,
+                llmResponseMode: llmResponseMode,
+                modelCallPurpose: request.modelCallPurpose,
                 error: errorMessage,
             });
-            this.writePromptLog(requestId, request, modelName, {
+            this.writePromptLog(requestId, request, model, {
                 status: "failed",
                 outputText: output,
                 structuredOutput,
@@ -218,22 +221,22 @@ export class PersonaFlowModelService {
         for (const toolCall of toolCalls) {
             this.logger.debug("persona-flow/model: tool call requested (TODO)", {
                 requestId,
-                functionName,
+                modelCallPurpose: request.modelCallPurpose,
                 toolCall,
             });
         }
 
         this.logger.verbose("persona-flow/model: chat completed", {
             requestId,
-            mode,
-            functionName,
+            llmResponseMode,
+            modelCallPurpose: request.modelCallPurpose,
             output,
             structuredOutput,
             toolCallCount: toolCalls.length,
             usage,
         });
 
-        this.writePromptLog(requestId, request, modelName, {
+        this.writePromptLog(requestId, request, model, {
             status: "completed",
             outputText: output,
             structuredOutput,
@@ -243,9 +246,9 @@ export class PersonaFlowModelService {
 
         return {
             output,
-            model: modelName,
+            model: model,
             requestId,
-            mode,
+            llmResponseMode: llmResponseMode,
             toolCalls,
             usage,
             ...(structuredOutput ? { structuredOutput } : {}),
@@ -254,9 +257,13 @@ export class PersonaFlowModelService {
 
     async chatStream(request: PersonaChatRequest & { onTextDelta?: (delta: string) => void }): Promise<PersonaChatResponse & ModelStreamResult> {
         const requestId = crypto.randomUUID();
-        const mode: GenerationMode = request.mode ?? "non-structured";
-        const functionName = request.functionName ?? "chat";
-        const { modelName, client } = await this.resolveFunctionModelRuntime(functionName);
+        const mode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
+        const functionName = request.modelCallPurpose ?? "chat";
+        const { provider, model, apiKey } = await this.resolveProviderModelRuntime(
+            request.userId,
+            request.characterId,
+            functionName as ModelCallPurpose,
+        );
 
         if (mode !== "non-structured") {
             this.logger.warn("persona-flow/model: chatStream called with unsupported mode", {
@@ -278,10 +285,12 @@ export class PersonaFlowModelService {
         let streamError: string | undefined;
 
         try {
-            streamResult = await client.generateNonStructuredStream(
+            streamResult = await this.deps.modelClient.generateNonStructuredStream(
                 {
+                    provider,
+                    model,
+                    apiKey,
                     messages: request.messages,
-                    timeoutMs: this.deps.timeoutMs,
                 },
                 {
                     onTextDelta: request.onTextDelta,
@@ -304,7 +313,7 @@ export class PersonaFlowModelService {
             });
             throw err;
         } finally {
-            this.writePromptLog(requestId, request, modelName, {
+            this.writePromptLog(requestId, request, model, {
                 status: streamError ? "failed" : "completed",
                 outputText: streamResult?.output ?? "",
                 toolCalls: streamResult?.toolCalls ?? [],
@@ -345,9 +354,9 @@ export class PersonaFlowModelService {
 
         return {
             output: streamResult.output,
-            model: modelName,
+            model: model,
             requestId,
-            mode,
+            llmResponseMode: mode,
             toolCalls: streamResult.toolCalls,
             usage: streamResult.usage,
             completed: streamResult.completed,

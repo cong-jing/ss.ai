@@ -13,7 +13,7 @@ import {
     type ListModelsResponse
 } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
-import type { AiFunction } from "@ss-ai/contracts";
+import type { ModelCallPurpose } from "@ss-ai/contracts";
 
 export async function apiGetUserPreference(): Promise<GetUserPreferenceResponse> {
     return callApi(ApiGetUserPreference);
@@ -31,8 +31,8 @@ export async function apiTestApiKey(provider: string): Promise<TestApiKeyRespons
     return callApi(ApiTestApiKey, { provider });
 }
 
-export async function apiUpsertFunctionModel(fn: AiFunction, provider: string, model: string): Promise<UpsertFunctionModelResponse> {
-    return callApi(ApiUpsertFunctionModel, { function: fn, provider, model });
+export async function apiUpsertFunctionModel(fn: ModelCallPurpose, provider: string, model: string): Promise<UpsertFunctionModelResponse> {
+    return callApi(ApiUpsertFunctionModel, { modelCallPurpose: fn, provider, model });
 }
 
 export async function apiListModels(provider: string): Promise<ListModelsResponse> {

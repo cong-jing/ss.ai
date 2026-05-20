@@ -8,7 +8,7 @@ import {
     apiListModels
 } from "./userPreferenceApi";
 import type { ProviderState, FunctionModelState } from "./userPreferenceTypes";
-import { AI_FUNCTIONS, type AiFunction } from "@ss-ai/contracts";
+import { MODEL_CALL_PURPOSES, type ModelCallPurpose } from "@ss-ai/contracts";
 import { useToast } from "../../shared/ui/useToast";
 
 export function useUserPreferenceViewModel() {
@@ -37,7 +37,7 @@ export function useUserPreferenceViewModel() {
 
             // Build function model state from response
             const fnStates: FunctionModelState[] = [];
-            for (const fn of AI_FUNCTIONS) {
+            for (const fn of MODEL_CALL_PURPOSES) {
                 const assignment = response.functionModels[fn];
                 if (assignment) {
                     fnStates.push({ fn, provider: assignment.provider, model: assignment.model });

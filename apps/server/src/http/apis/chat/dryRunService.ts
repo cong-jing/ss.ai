@@ -25,7 +25,7 @@ export async function handleDryRunChatRequest(context: HttpApiContext, body: Cha
         conversationId,
     });
 
-    const turnService = await createChatTurnService(userId, context);
+    const turnService = await createChatTurnService(context);
     return await turnService.dryRunTurn({
         userId,
         characterId,
