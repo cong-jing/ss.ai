@@ -28,6 +28,7 @@ import {
 import CharacterSection from "./sections/CharacterSection.vue";
 import ConversationSection from "./sections/ConversationSection.vue";
 import ActorSection from "./sections/ActorSection.vue";
+import { t } from "../../shared/i18n/i18n";
 
 const {
   load: loadCharacters,
@@ -82,7 +83,7 @@ async function handleCharacterCreate() {
 }
 
 async function handleCharacterPickerCreate() {
-  const created = await createCharacter("New Character", "", "", "", "");
+  const created = await createCharacter(t("character.defaultName"), "", "", "", "");
   showPicker.value = false;
   if (created) {
     isCharacterEditing.value = true;
@@ -127,7 +128,7 @@ async function handleConversationCreate() {
 
 async function handleConversationDelete(id: string) {
   const target = conversations.value.find(conversation => conversation.id === id);
-  const confirmed = window.confirm(`删除对话 "${target?.title ?? id}"？`);
+  const confirmed = window.confirm(t("sidebar.confirmDeleteConversation", { name: target?.title ?? id }));
   if (!confirmed) return;
 
   await deleteConversation(id);
@@ -137,7 +138,7 @@ async function handleConversationDelete(id: string) {
 async function handleConversationRename(conversationId: string, title: string | null) {
   if (!activeCharacterId.value) return;
   await updateTitle(conversationId, title);
-  toast.success("Conversation title saved");
+  toast.success(t("sidebar.toastConversationSaved"));
 }
 
 function handleActorToggleOpen() {
@@ -145,7 +146,7 @@ function handleActorToggleOpen() {
 }
 
 async function handleActorCreate() {
-  await createActor("new actor");
+  await createActor(t("sidebar.newActorDefaultName"));
 }
 
 function handleActorSelect(id: string) {
@@ -154,7 +155,7 @@ function handleActorSelect(id: string) {
 
 async function handleActorDelete(id: string) {
   const target = actors.value.find(actor => actor.id === id);
-  const confirmed = window.confirm(`删除 Actor "${target?.displayName ?? id}"？`);
+  const confirmed = window.confirm(t("sidebar.confirmDeleteActor", { name: target?.displayName ?? id }));
   if (!confirmed) return;
 
   await deleteActor(id);

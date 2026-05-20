@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { ChatMessage } from "./chatTypes";
+import { t } from "../../shared/i18n/i18n";
 
 const props = defineProps<{
   message: ChatMessage;
@@ -21,13 +22,13 @@ function handleDeleteMessage() {
 function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
   switch (sourceType) {
     case "logged_user":
-      return "logged user";
+      return t("chat.source.logged_user");
     case "local_actor":
-      return "local actor";
+      return t("chat.source.local_actor");
     case "ai_character":
-      return "ai character";
+      return t("chat.source.ai_character");
     case "system":
-      return "system";
+      return t("chat.source.system");
     default:
       return "";
   }
@@ -40,8 +41,8 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
     <div v-if="showDebug && message.id" class="message-id-row">id: {{ message.id }}</div>
     <details>
       <summary class="debug-summary">
-        <span>{{ message.structuredDecision ? 'Structured Decision' : 'Prompt Preview' }}</span>
-        <span class="debug-count">{{ message.debugMessages?.length ?? 0 }} messages</span>
+        <span>{{ message.structuredDecision ? t("chat.message.structuredDecision") : t("chat.message.promptPreview") }}</span>
+        <span class="debug-count">{{ t("chat.message.countMessages", { count: message.debugMessages?.length ?? 0 }) }}</span>
         <time v-if="message.createdAt" class="debug-time">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
       </summary>
       <div class="debug-body">
@@ -72,7 +73,7 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
           :disabled="message.deleting || !message.id"
           @click="handleDeleteMessage"
         >
-          {{ message.deleting ? 'Deleting...' : 'Delete' }}
+          {{ message.deleting ? t("chat.message.deleting") : t("common.delete") }}
         </button>
         <button
           v-if="message.role === 'assistant' && message.assembledMessages"
@@ -80,7 +81,7 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
           :class="{ active: showPrompt }"
           @click="showPrompt = !showPrompt"
         >
-          {{ showPrompt ? 'Hide Assembled Input' : 'View Assembled Input' }}
+          {{ showPrompt ? t("chat.message.hideAssembledInput") : t("chat.message.viewAssembledInput") }}
         </button>
         <time v-if="message.createdAt">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
       </div>

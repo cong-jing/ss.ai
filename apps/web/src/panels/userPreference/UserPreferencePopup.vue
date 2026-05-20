@@ -2,16 +2,17 @@
 import { ref } from 'vue'
 import PopupWindow from '../../shared/ui/PopupWindow.vue'
 import UserPreferencePanel from './UserPreferencePanel.vue'
+import { t } from "../../shared/i18n/i18n";
 
 const showSettings = ref(false)
 </script>
 
 <template>
-  <button class="settings-trigger" @click="showSettings = true" title="Settings">
-    ⚙ Settings
+  <button class="settings-trigger" @click="showSettings = true" :title="t('settings.title')">
+    ⚙ {{ t("settings.title") }}
   </button>
 
-  <PopupWindow v-model="showSettings" title="Settings" :modal="true" width="520px">
+  <PopupWindow v-model="showSettings" :title="t('settings.title')" :modal="true" width="520px">
     <UserPreferencePanel />
   </PopupWindow>
 </template>

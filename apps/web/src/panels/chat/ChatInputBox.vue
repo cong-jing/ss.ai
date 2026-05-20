@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import Button from "../../shared/ui/Button.vue";
 import { useLocalStorage } from "../../shared/ui/useLocalStorage";
+import { t } from "../../shared/i18n/i18n";
 
 const props = defineProps<{
   disabled?: boolean;
@@ -46,23 +47,23 @@ function onKeydown(event: KeyboardEvent) {
       v-model="text"
       :disabled="disabled"
       class="chat-input"
-      placeholder="Input message, Enter to send, Shift+Enter for newline"
+      :placeholder="t('chat.input.placeholder')"
       @keydown="onKeydown"
     />
     <div class="toolbar">
       <div class="toolbar-left">
         <label class="stream-toggle">
           <input type="checkbox" v-model="streamMode" :disabled="disabled" />
-          Stream
+          {{ t("chat.stream") }}
         </label>
         <label class="actor-selector">
-          <span>Send as</span>
+          <span>{{ t("chat.sendAs") }}</span>
           <select
             :disabled="disabled || !props.actors?.length"
             :value="props.selectedActorId ?? ''"
             @change="emit('update:selectedActorId', ($event.target as HTMLSelectElement).value)"
           >
-            <option v-if="!props.selectedActorId" value="" disabled>Select actor</option>
+            <option v-if="!props.selectedActorId" value="" disabled>{{ t("chat.selectActor") }}</option>
             <option v-for="actor in props.actors" :key="actor.id" :value="actor.id">
               {{ actor.displayName }}
             </option>
@@ -70,7 +71,7 @@ function onKeydown(event: KeyboardEvent) {
         </label>
       </div>
       <div class="toolbar-right">
-        <Button :disabled="disabled" @click="submit">Send</Button>
+        <Button :disabled="disabled" @click="submit">{{ t("chat.send") }}</Button>
       </div>
     </div>
   </footer>

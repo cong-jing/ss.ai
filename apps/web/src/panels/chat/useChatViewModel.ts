@@ -8,6 +8,7 @@ import { activeCharacter, activeCharacterId } from "../character/useCharacterVie
 import { actors, selectedActorId } from "../sidebar/viewmodels/useActorViewModel";
 import { useToast } from "../../shared/ui/useToast";
 import { useLocalStorage } from "../../shared/ui/useLocalStorage";
+import { t } from "../../shared/i18n/i18n";
 
 export const chatDraftInput = ref("");
 
@@ -69,7 +70,7 @@ export function useChatViewModel() {
         const conversationId = activeConversationId.value;
         const senderActorId = selectedActorId.value;
         if (!characterId || !conversationId || !senderActorId) {
-            const message = "Please select a character, conversation, and actor before sending a message.";
+            const message = t("chat.error.selectContextBeforeSend");
             error.value = message;
             toast.error(message);
             return;
@@ -205,7 +206,7 @@ export function useChatViewModel() {
         const target = messages.value.find(message => message.id === messageId);
         if (!target || target.deleting) return;
 
-        const confirmed = window.confirm("删除这条消息？");
+        const confirmed = window.confirm(t("chat.confirmDeleteMessage"));
         if (!confirmed) return;
 
         target.deleting = true;
@@ -228,7 +229,7 @@ export function useChatViewModel() {
         const conversationId = activeConversationId.value;
         const senderActorId = selectedActorId.value;
         if (!characterId || !conversationId || !senderActorId) {
-            toast.error("Please select a character, conversation, and actor before dry-run.");
+            toast.error(t("chat.error.selectContextBeforeDryRun"));
             return;
         }
 

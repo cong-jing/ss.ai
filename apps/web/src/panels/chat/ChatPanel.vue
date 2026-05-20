@@ -6,6 +6,7 @@ import ChatInputBox from "./ChatInputBox.vue";
 import ChatMessageList from "./ChatMessageList.vue";
 import { useChatViewModel } from "./useChatViewModel";
 import { useActorViewModel } from "../sidebar/viewmodels/useActorViewModel";
+import { t } from "../../shared/i18n/i18n";
 
 const vm = useChatViewModel();
 const { messages, isSending, isLoading, error, showDebug, chatDraftInput, sendMessage, clearMessages, loadHistory, removeMessage } = vm;
@@ -17,18 +18,18 @@ onMounted(() => {
 </script>
 
 <template>
-  <Panel title="Chat" class="chat-panel" padding="none">
+  <Panel :title="t('chat.title')" class="chat-panel" padding="none">
     <template #header-actions>
-      <span v-if="isSending" class="sending">Sending...</span>
+      <span v-if="isSending" class="sending">{{ t("chat.sending") }}</span>
       <button class="header-btn" :class="{ active: showDebug }" @click="showDebug = !showDebug">
-        {{ showDebug ? 'Hide Debug' : 'Show Debug' }}
+        {{ showDebug ? t("chat.hideDebug") : t("chat.showDebug") }}
       </button>
-      <Button :disabled="isSending" @click="clearMessages">Clear</Button>
+      <Button :disabled="isSending" @click="clearMessages">{{ t("common.clear") }}</Button>
     </template>
 
     <div class="chat-layout">
       <div class="chat-messages">
-        <div v-if="isLoading" class="loading-history">Loading messages...</div>
+        <div v-if="isLoading" class="loading-history">{{ t("chat.loadingMessages") }}</div>
         <ChatMessageList
           v-else
           :messages="messages"

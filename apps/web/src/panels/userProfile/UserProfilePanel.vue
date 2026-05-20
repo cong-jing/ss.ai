@@ -4,6 +4,7 @@ import Button from "../../shared/ui/Button.vue";
 import CollapsibleSection from "../../shared/ui/CollapsibleSection.vue";
 import TextInput from "../../shared/ui/TextInput.vue";
 import { useUserProfileViewModel } from "./useUserProfileViewModel";
+import { t } from "../../shared/i18n/i18n";
 
 const { userInfo, isLoadingUser, isSavingUser, loadUserInfo, saveUserInfo } = useUserProfileViewModel();
 onMounted(() => {
@@ -13,22 +14,22 @@ onMounted(() => {
 
 <template>
   <div class="user-profile-panel">
-    <CollapsibleSection title="User Profile">
+    <CollapsibleSection :title="t('settings.section.userInfo')">
       <div class="section-body">
         <div class="form-group">
-          <label>Name</label>
-          <TextInput v-model="userInfo.name" :disabled="isLoadingUser || isSavingUser" placeholder="Enter your name" />
+          <label>{{ t("settings.name") }}</label>
+          <TextInput v-model="userInfo.name" :disabled="isLoadingUser || isSavingUser" :placeholder="t('settings.placeholder.name')" />
         </div>
         <div class="form-group">
-          <label>Profile</label>
-          <textarea v-model="userInfo.bio" :disabled="isLoadingUser || isSavingUser" placeholder="Enter your profile" rows="3" class="textarea" />
+          <label>{{ t("settings.profile") }}</label>
+          <textarea v-model="userInfo.bio" :disabled="isLoadingUser || isSavingUser" :placeholder="t('settings.placeholder.profile')" rows="3" class="textarea" />
         </div>
         <div class="actions">
           <Button :disabled="isSavingUser || isLoadingUser" @click="saveUserInfo">
-            {{ isSavingUser ? 'Saving...' : 'Save' }}
+            {{ isSavingUser ? t("common.saving") : t("common.save") }}
           </Button>
         </div>
-        <p v-if="isLoadingUser" class="hint">Loading...</p>
+        <p v-if="isLoadingUser" class="hint">{{ t("common.loading") }}</p>
       </div>
     </CollapsibleSection>
   </div>

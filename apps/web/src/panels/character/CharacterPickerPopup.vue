@@ -2,6 +2,7 @@
 import PopupWindow from '../../shared/ui/PopupWindow.vue'
 import Button from '../../shared/ui/Button.vue'
 import { useCharacterViewModel } from './useCharacterViewModel'
+import { t } from "../../shared/i18n/i18n";
 
 const model = defineModel<boolean>({ required: true })
 const emit = defineEmits<{ 'new-character': [] }>()
@@ -20,10 +21,10 @@ async function onSelect(id: string) {
 </script>
 
 <template>
-  <PopupWindow v-model="model" title="Characters" :modal="true" width="360px">
+  <PopupWindow v-model="model" :title="t('characterPicker.title')" :modal="true" width="360px">
     <div class="picker-body">
-      <p v-if="isLoadingCharacters" class="hint">Loading…</p>
-      <p v-else-if="characters.length === 0" class="hint">No characters yet.</p>
+      <p v-if="isLoadingCharacters" class="hint">{{ t("characterPicker.loading") }}</p>
+      <p v-else-if="characters.length === 0" class="hint">{{ t("characterPicker.empty") }}</p>
 
       <div v-else class="character-list">
         <button
@@ -39,13 +40,13 @@ async function onSelect(id: string) {
             <div class="item-name">{{ c.name }}</div>
             <div v-if="c.description" class="item-desc">{{ c.description }}</div>
           </div>
-          <span v-if="c.id === activeCharacterId" class="item-badge">Active</span>
+          <span v-if="c.id === activeCharacterId" class="item-badge">{{ t("characterPicker.active") }}</span>
         </button>
       </div>
     </div>
 
     <template #footer>
-      <Button size="sm" @click="emit('new-character')">+ New character</Button>
+      <Button size="sm" @click="emit('new-character')">{{ t("characterPicker.newCharacter") }}</Button>
     </template>
   </PopupWindow>
 </template>

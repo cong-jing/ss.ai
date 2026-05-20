@@ -2,6 +2,7 @@
 import { nextTick, ref, watch } from 'vue'
 import type { ConversationInfo } from './conversationApi'
 import { useLocalStorage } from '../../shared/ui/useLocalStorage'
+import { t } from "../../shared/i18n/i18n";
 
 const props = defineProps<{
   conversation: ConversationInfo
@@ -70,16 +71,16 @@ function saveEdit() {
           @keydown.esc.stop.prevent="cancelEdit"
         />
         <span v-else class="conv-title" :class="{ 'conv-title--empty': !conversation.title }">
-          {{ conversation.title ?? 'new chat' }}
+          {{ conversation.title ?? t("conversation.newChat") }}
         </span>
 
         <div class="conv-actions" @click.stop>
           <template v-if="isEditing">
-            <button class="conv-edit" title="Save" @click.stop="saveEdit">保存</button>
-            <button class="conv-edit" title="Cancel" @click.stop="cancelEdit">取消</button>
+            <button class="conv-edit" :title="t('common.save')" @click.stop="saveEdit">{{ t("common.save") }}</button>
+            <button class="conv-edit" :title="t('common.cancel')" @click.stop="cancelEdit">{{ t("common.cancel") }}</button>
           </template>
           <template v-else>
-            <button class="conv-edit" title="Edit" @click.stop="startEdit">编辑</button>
+            <button class="conv-edit" :title="t('common.edit')" @click.stop="startEdit">{{ t("common.edit") }}</button>
           </template>
         </div>
       </div>
@@ -92,7 +93,7 @@ function saveEdit() {
 
     <button
       class="conv-delete"
-      title="Delete"
+      :title="t('common.delete')"
       @click.stop="emit('delete')"
     >✕</button>
   </div>

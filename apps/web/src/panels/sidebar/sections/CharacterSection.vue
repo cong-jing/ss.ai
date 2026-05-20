@@ -1,13 +1,22 @@
 <script setup lang="ts">
 import type { Character, InteractionMode } from "@ss-ai/contracts";
 import { useLocalStorage } from "../../../shared/ui/useLocalStorage";
+import { t } from "../../../shared/i18n/i18n";
 
-const interactionModeLabels: Record<InteractionMode, string> = {
-  single_character_chat: "Single Character Chat",
-  multi_character_event_log: "Multi Character Event Log",
-  dm_narrator: "DM / Narrator",
-  live_chat: "Live Chat",
-};
+function interactionModeLabel(mode: InteractionMode): string {
+  switch (mode) {
+    case "single_character_chat":
+      return t("interactionMode.single_character_chat");
+    case "multi_character_event_log":
+      return t("interactionMode.multi_character_event_log");
+    case "dm_narrator":
+      return t("interactionMode.dm_narrator");
+    case "live_chat":
+      return t("interactionMode.live_chat");
+    default:
+      return mode;
+  }
+}
 
 const props = defineProps<{
   isOpen: boolean;
@@ -43,38 +52,38 @@ const showDebug = useLocalStorage("chat.showDebug", false);
 <template>
   <section class="group group--character">
     <button class="group-header" @click="emit('character:toggle-open')">
-      <span>角色</span>
+      <span>{{ t("sidebar.character") }}</span>
       <span>{{ isOpen ? "▾" : "▸" }}</span>
     </button>
 
     <div v-if="isOpen" class="group-body compact">
       <div class="row-inline row-inline--between">
-        <button class="mini-btn" @click="emit('character:open-picker')">切换</button>
+        <button class="mini-btn" @click="emit('character:open-picker')">{{ t("sidebar.switch") }}</button>
         <template v-if="activeCharacter">
           <span class="current-name" :title="activeCharacter.name">{{ activeCharacter.name }}</span>
           <span v-if="showDebug" class="current-id" :title="activeCharacter.id">{{ activeCharacter.id }}</span>
         </template>
-        <span v-else class="hint">未选择角色</span>
+        <span v-else class="hint">{{ t("sidebar.noCharacterSelected") }}</span>
       </div>
 
       <template v-if="activeCharacter">
         <template v-if="isEditing">
-          <label class="field-label">名称</label>
+          <label class="field-label">{{ t("sidebar.field.name") }}</label>
           <input v-model="props.editDraft.name" class="input" :disabled="isSavingCharacter" />
 
-          <label class="field-label">显示名</label>
-          <input v-model="props.editDraft.displayName" class="input" :disabled="isSavingCharacter" placeholder="(可选)" />
+          <label class="field-label">{{ t("sidebar.field.displayName") }}</label>
+          <input v-model="props.editDraft.displayName" class="input" :disabled="isSavingCharacter" :placeholder="t('sidebar.optional')" />
 
-          <label class="field-label">描述</label>
+          <label class="field-label">{{ t("sidebar.field.description") }}</label>
           <textarea v-model="props.editDraft.description" class="textarea" rows="2" :disabled="isSavingCharacter" />
 
-          <label class="field-label">Persona</label>
+          <label class="field-label">{{ t("sidebar.field.persona") }}</label>
           <textarea v-model="props.editDraft.personaPrompt" class="textarea" rows="3" :disabled="isSavingCharacter" />
 
-          <label class="field-label">Prompt Mode</label>
+          <label class="field-label">{{ t("sidebar.field.interactionMode") }}</label>
           <select v-model="props.editDraft.interactionMode" class="select" :disabled="isSavingCharacter">
             <option v-for="mode in interactionModes" :key="mode" :value="mode">
-              {{ interactionModeLabels[mode] }}
+              {{ interactionModeLabel(mode) }}
             </option>
           </select>
 
@@ -84,43 +93,43 @@ const showDebug = useLocalStorage("chat.showDebug", false);
               :disabled="isSavingCharacter || !isDirty || !props.editDraft.name.trim()"
               @click="emit('character:save')"
             >
-              保存
+              {{ t("common.save") }}
             </button>
-            <button class="mini-btn" :disabled="isSavingCharacter" @click="emit('character:cancel-edit')">取消</button>
+            <button class="mini-btn" :disabled="isSavingCharacter" @click="emit('character:cancel-edit')">{{ t("common.cancel") }}</button>
           </div>
         </template>
 
         <template v-else>
           <div class="read-row">
-            <span class="field-label">名称</span>
+            <span class="field-label">{{ t("sidebar.field.name") }}</span>
             <p class="read-value">{{ activeCharacter.name }}</p>
           </div>
           <div class="read-row">
-            <span class="field-label">显示名</span>
-            <p class="read-value">{{ activeCharacter.displayName || "(未设置)" }}</p>
+            <span class="field-label">{{ t("sidebar.field.displayName") }}</span>
+            <p class="read-value">{{ activeCharacter.displayName || t("sidebar.notSet") }}</p>
           </div>
           <div class="read-row">
-            <span class="field-label">描述</span>
-            <p class="read-value multiline">{{ activeCharacter.description || "(空)" }}</p>
+            <span class="field-label">{{ t("sidebar.field.description") }}</span>
+            <p class="read-value multiline">{{ activeCharacter.description || t("sidebar.empty") }}</p>
           </div>
           <div class="read-row">
-            <span class="field-label">Persona</span>
-            <p class="read-value multiline">{{ activeCharacter.personaPrompt || "(空)" }}</p>
+            <span class="field-label">{{ t("sidebar.field.persona") }}</span>
+            <p class="read-value multiline">{{ activeCharacter.personaPrompt || t("sidebar.empty") }}</p>
           </div>
           <div class="read-row">
-            <span class="field-label">Prompt Mode</span>
-            <p class="read-value">{{ interactionModeLabels[activeCharacter.interactionMode] || activeCharacter.interactionMode }}</p>
+            <span class="field-label">{{ t("sidebar.field.interactionMode") }}</span>
+            <p class="read-value">{{ interactionModeLabel(activeCharacter.interactionMode) }}</p>
           </div>
 
           <div class="actions">
-            <button class="mini-btn primary" :disabled="isSavingCharacter" @click="emit('character:start-edit')">编辑</button>
-            <button class="mini-btn danger" :disabled="isSavingCharacter" @click="emit('character:remove')">删除</button>
+            <button class="mini-btn primary" :disabled="isSavingCharacter" @click="emit('character:start-edit')">{{ t("sidebar.action.startEdit") }}</button>
+            <button class="mini-btn danger" :disabled="isSavingCharacter" @click="emit('character:remove')">{{ t("common.delete") }}</button>
           </div>
         </template>
       </template>
 
       <template v-else>
-        <label class="field-label">新角色名称</label>
+        <label class="field-label">{{ t("sidebar.newCharacterName") }}</label>
         <input
           :value="newCharacterName"
           class="input"
@@ -128,7 +137,7 @@ const showDebug = useLocalStorage("chat.showDebug", false);
           @input="emit('character:update-new-name', ($event.target as HTMLInputElement).value)"
           @keydown.enter.prevent="emit('character:create')"
         />
-        <button class="mini-btn primary" :disabled="isSavingCharacter || !newCharacterName.trim()" @click="emit('character:create')">创建</button>
+        <button class="mini-btn primary" :disabled="isSavingCharacter || !newCharacterName.trim()" @click="emit('character:create')">{{ t("sidebar.action.create") }}</button>
       </template>
     </div>
   </section>

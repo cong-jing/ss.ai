@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ConversationInfo } from "../../conversation/conversationApi";
 import ConversationItem from "../../conversation/ConversationItem.vue";
+import { t } from "../../../shared/i18n/i18n";
 
 defineProps<{
   isOpen: boolean;
@@ -22,18 +23,18 @@ const emit = defineEmits<{
 <template>
   <section class="group group--conversation">
     <button class="group-header" @click="emit('conversation:toggle-open')">
-      <span>对话</span>
+      <span>{{ t("sidebar.conversation") }}</span>
       <span>{{ isOpen ? "▾" : "▸" }}</span>
     </button>
 
     <div v-if="isOpen" class="group-body">
       <div class="row-inline">
-        <button class="mini-btn" :disabled="isLoadingConversations || !activeCharacterId" @click="emit('conversation:create')">+ 新建</button>
-        <span v-if="isLoadingConversations" class="hint">加载中...</span>
+        <button class="mini-btn" :disabled="isLoadingConversations || !activeCharacterId" @click="emit('conversation:create')">{{ t("sidebar.newConversation") }}</button>
+        <span v-if="isLoadingConversations" class="hint">{{ t("common.loading") }}</span>
       </div>
 
-      <p v-if="!activeCharacterId" class="hint">请先选择角色。</p>
-      <p v-else-if="conversations.length === 0" class="hint">暂无对话。</p>
+      <p v-if="!activeCharacterId" class="hint">{{ t("sidebar.selectCharacterFirst") }}</p>
+      <p v-else-if="conversations.length === 0" class="hint">{{ t("sidebar.noConversations") }}</p>
 
       <ConversationItem
         v-for="conv in conversations"

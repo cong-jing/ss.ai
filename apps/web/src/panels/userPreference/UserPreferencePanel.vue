@@ -7,6 +7,8 @@ import CollapsibleSection from "../../shared/ui/CollapsibleSection.vue";
 import { useUserPreferenceViewModel } from "./useUserPreferenceViewModel";
 import { useUserProfileViewModel } from "../userProfile/useUserProfileViewModel";
 import type { ModelCallPurpose } from "@ss-ai/contracts";
+import { isSupportedLocale, locale, setLocale, t } from "../../shared/i18n/i18n";
+import { SUPPORTED_LOCALES, type Locale } from "../../shared/i18n/messages";
 
 const vm = useUserPreferenceViewModel();
 const {
@@ -33,7 +35,24 @@ function apiKeySetFor(providerName: string): boolean {
 }
 
 function formatModelCallPurpose(purpose: ModelCallPurpose): string {
-  return purpose;
+  switch (purpose) {
+    case "chat.main":
+      return "chat.main";
+    case "memory.summarize":
+      return "memory.summarize";
+    default:
+      return purpose;
+  }
+}
+
+function localeLabel(value: Locale): string {
+  return value === "zh-CN" ? t("settings.language.zh-CN") : t("settings.language.en-US");
+}
+
+function onLocaleChange(rawValue: string): void {
+  if (isSupportedLocale(rawValue)) {
+    setLocale(rawValue);
+  }
 }
 
 async function onAssignmentProviderChange(_purpose: ModelCallPurpose, idx: number, providerName: string) {
@@ -65,31 +84,48 @@ onMounted(() => {
 </script>
 
 <template>
-  <Panel title="Settings" class="user-settings-panel" :height-mode="'auto'">
+  <Panel :title="t('settings.title')" class="user-settings-panel" :height-mode="'auto'">
     <div class="settings-content">
-      <p v-if="isLoading" class="hint">Loading...</p>
+      <p v-if="isLoading" class="hint">{{ t('common.loading') }}</p>
 
-      <!-- Section 0: User Info -->
-      <CollapsibleSection title="User Info">
+      <CollapsibleSection :title="t('settings.language')">
         <div class="section-body">
           <div class="form-group">
-            <label>Name</label>
-            <TextInput v-model="userInfo.name" :disabled="isLoadingUser || isSavingUser" placeholder="Enter your name" />
+            <label>{{ t("settings.language") }}</label>
+            <select
+              class="fn-select"
+              :value="locale"
+              @change="onLocaleChange(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="value in SUPPORTED_LOCALES" :key="value" :value="value">
+                {{ localeLabel(value) }}
+              </option>
+            </select>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      <!-- Section 0: User Info -->
+      <CollapsibleSection :title="t('settings.section.userInfo')">
+        <div class="section-body">
+          <div class="form-group">
+            <label>{{ t("settings.name") }}</label>
+            <TextInput v-model="userInfo.name" :disabled="isLoadingUser || isSavingUser" :placeholder="t('settings.placeholder.name')" />
           </div>
           <div class="form-group">
-            <label>Profile</label>
-            <textarea v-model="userInfo.bio" :disabled="isLoadingUser || isSavingUser" placeholder="Enter your profile" rows="3" class="info-textarea" />
+            <label>{{ t("settings.profile") }}</label>
+            <textarea v-model="userInfo.bio" :disabled="isLoadingUser || isSavingUser" :placeholder="t('settings.placeholder.profile')" rows="3" class="info-textarea" />
           </div>
           <div class="form-actions">
             <Button :disabled="isSavingUser || isLoadingUser" @click="saveUserInfo()">
-              {{ isSavingUser ? 'Saving...' : 'Save' }}
+              {{ isSavingUser ? t("common.saving") : t("common.save") }}
             </Button>
           </div>
         </div>
       </CollapsibleSection>
 
       <!-- Section 1: API Keys -->
-      <CollapsibleSection title="API Keys">
+      <CollapsibleSection :title="t('settings.section.apiKeys')">
         <div v-for="p in providers" :key="p.provider" class="provider-block">
           <div class="provider-header">
             <span class="provider-name">{{ p.provider }}</span>
@@ -100,12 +136,12 @@ onMounted(() => {
           <!-- API key already set and not editing -->
           <template v-if="p.apiKeySet && p.apiKeyInput === null">
             <div class="key-row">
-              <span class="key-set-hint">API key is set</span>
+              <span class="key-set-hint">{{ t("settings.apiKeySet") }}</span>
               <div class="key-actions">
-                <Button size="sm" @click="startEditApiKey(p.provider)">Re-enter</Button>
-                <Button size="sm" variant="danger" :disabled="p.isSavingKey" @click="deleteApiKey(p.provider)">Clear</Button>
+                <Button size="sm" @click="startEditApiKey(p.provider)">{{ t("settings.reenter") }}</Button>
+                <Button size="sm" variant="danger" :disabled="p.isSavingKey" @click="deleteApiKey(p.provider)">{{ t("settings.clearKey") }}</Button>
                 <Button size="sm" :disabled="p.isTestingKey" @click="testApiKey(p.provider)">
-                  {{ p.isTestingKey ? 'Testing...' : 'Test' }}
+                  {{ p.isTestingKey ? t("settings.testing") : t("common.test") }}
                 </Button>
               </div>
             </div>
@@ -118,15 +154,15 @@ onMounted(() => {
               <TextInput
                 v-model="p.apiKeyInput!"
                 type="text"
-                placeholder="Enter API Key"
+                :placeholder="t('settings.enterApiKey')"
                 autocomplete="off"
                 class="key-input key-input--masked"
               />
               <div class="key-actions">
                 <Button size="sm" :disabled="p.isSavingKey || !p.apiKeyInput?.trim()" @click="saveApiKey(p.provider)">
-                  {{ p.isSavingKey ? 'Saving...' : 'Save' }}
+                  {{ p.isSavingKey ? t("common.saving") : t("common.save") }}
                 </Button>
-                <Button v-if="p.apiKeySet" size="sm" @click="cancelEditApiKey(p.provider)">Cancel</Button>
+                <Button v-if="p.apiKeySet" size="sm" @click="cancelEditApiKey(p.provider)">{{ t("common.cancel") }}</Button>
               </div>
             </div>
           </template>
@@ -134,7 +170,7 @@ onMounted(() => {
       </CollapsibleSection>
 
       <!-- Section 2: Model assignment per purpose -->
-      <CollapsibleSection title="Model Assignment">
+      <CollapsibleSection :title="t('settings.section.modelAssignment')">
         <div v-for="(assignmentState, idx) in modelAssignments" :key="assignmentState.purpose" class="fn-block">
           <div class="fn-label">{{ formatModelCallPurpose(assignmentState.purpose) }}</div>
           <div class="fn-edit">
@@ -143,12 +179,12 @@ onMounted(() => {
               class="fn-select"
               @change="onAssignmentProviderChange(assignmentState.purpose, idx, ($event.target as HTMLSelectElement).value)"
             >
-              <option value="">Select provider</option>
+              <option value="">{{ t("settings.selectProvider") }}</option>
               <option v-for="p in providers" :key="p.provider" :value="p.provider">{{ p.provider }}</option>
             </select>
 
             <template v-if="assignmentState.provider">
-              <p v-if="!apiKeySetFor(assignmentState.provider)" class="hint-inline">API key not set for this provider</p>
+              <p v-if="!apiKeySetFor(assignmentState.provider)" class="hint-inline">{{ t("settings.apiKeyMissingForProvider") }}</p>
               <template v-else>
                 <select
                   :value="assignmentState.model"
@@ -157,7 +193,7 @@ onMounted(() => {
                   @change="onAssignmentModelChange(idx, assignmentState.purpose, ($event.target as HTMLSelectElement).value)"
                 >
                   <option value="">
-                    {{ modelsForProvider(assignmentState.provider).length === 0 ? 'No models (load first)' : 'Select model' }}
+                    {{ modelsForProvider(assignmentState.provider).length === 0 ? t("settings.noModels") : t("settings.selectModel") }}
                   </option>
                   <option v-for="m in modelsForProvider(assignmentState.provider)" :key="m" :value="m">{{ m }}</option>
                 </select>
@@ -165,7 +201,7 @@ onMounted(() => {
                   v-if="modelsForProvider(assignmentState.provider).length === 0"
                   size="sm"
                   @click="loadModels(assignmentState.provider)"
-                >Load models</Button>
+                >{{ t("settings.loadModels") }}</Button>
               </template>
             </template>
           </div>

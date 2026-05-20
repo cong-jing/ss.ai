@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ConversationActor } from "../../conversation/conversationApi";
 import { useLocalStorage } from "../../../shared/ui/useLocalStorage";
+import { t } from "../../../shared/i18n/i18n";
 
 defineProps<{
   isOpen: boolean;
@@ -24,17 +25,17 @@ const showDebug = useLocalStorage("chat.showDebug", false);
 <template>
   <section class="group group--actor">
     <button class="group-header" @click="emit('actor:toggle-open')">
-      <span>Actor</span>
+      <span>{{ t("sidebar.actor") }}</span>
       <span>{{ isOpen ? "▾" : "▸" }}</span>
     </button>
 
     <div v-if="isOpen" class="group-body">
-      <p v-if="!activeConversationId" class="hint">请先选择对话。</p>
+      <p v-if="!activeConversationId" class="hint">{{ t("sidebar.selectConversationFirst") }}</p>
       <template v-else>
-        <button class="mini-btn" :disabled="isSavingActor" @click="emit('actor:create')">+ 添加 Actor</button>
+        <button class="mini-btn" :disabled="isSavingActor" @click="emit('actor:create')">{{ t("sidebar.addActor") }}</button>
 
-        <p v-if="isLoadingActors" class="hint">加载中...</p>
-        <p v-else-if="actors.length === 0" class="hint">暂无 actor。</p>
+        <p v-if="isLoadingActors" class="hint">{{ t("common.loading") }}</p>
+        <p v-else-if="actors.length === 0" class="hint">{{ t("sidebar.noActors") }}</p>
 
         <div
           v-for="actor in actors"

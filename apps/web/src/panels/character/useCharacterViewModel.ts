@@ -7,6 +7,7 @@ import {
 } from '../userProfile/userProfileApi'
 import { useToast } from '../../shared/ui/useToast'
 import { bumpContextVersion } from '../../shared/state/appState'
+import { t } from "../../shared/i18n/i18n";
 
 // ── Module-level singleton state ──────────────────────────────────────────────
 
@@ -155,7 +156,7 @@ export function useCharacterViewModel() {
     async function remove(): Promise<void> {
         if (!activeCharacterId.value) return
         const confirmDelete = window.confirm(
-            `Delete character "${activeCharacter.value?.name ?? ''}"? This cannot be undone.`,
+            t("sidebar.confirmDeleteCharacter", { name: activeCharacter.value?.name ?? "" }),
         )
         if (!confirmDelete) return
         isSavingCharacter.value = true
