@@ -6,14 +6,14 @@ import TextInput from "../../shared/ui/TextInput.vue";
 import CollapsibleSection from "../../shared/ui/CollapsibleSection.vue";
 import { useUserPreferenceViewModel } from "./useUserPreferenceViewModel";
 import { useUserProfileViewModel } from "../userProfile/useUserProfileViewModel";
-import { MODEL_CALL_PURPOSES, type ModelCallPurpose } from "@ss-ai/contracts";
+import type { ModelCallPurpose } from "@ss-ai/contracts";
 
 const vm = useUserPreferenceViewModel();
 const {
   providers,
-  functionModels,
+  modelAssignments,
   isLoading,
-  isSavingFunctionModel,
+  isSavingModelAssignment,
   loadSettings,
   startEditApiKey,
   cancelEditApiKey,
@@ -21,7 +21,7 @@ const {
   deleteApiKey,
   testApiKey,
   loadModels,
-  saveFunctionModel
+  saveModelAssignment
 } = vm;
 
 function modelsForProvider(providerName: string): string[] {
@@ -32,20 +32,24 @@ function apiKeySetFor(providerName: string): boolean {
   return providers.value.find(p => p.provider === providerName)?.apiKeySet ?? false;
 }
 
-async function onFnProviderChange(purpose: ModelCallPurpose, idx: number, providerName: string) {
-  functionModels.value[idx].provider = providerName;
-  functionModels.value[idx].model = "";
+function formatModelCallPurpose(purpose: ModelCallPurpose): string {
+  return purpose;
+}
+
+async function onAssignmentProviderChange(_purpose: ModelCallPurpose, idx: number, providerName: string) {
+  modelAssignments.value[idx].provider = providerName;
+  modelAssignments.value[idx].model = "";
   const p = providers.value.find(p => p.provider === providerName);
   if (p && p.availableModels.length === 0 && p.apiKeySet) {
     await loadModels(providerName);
   }
 }
 
-async function onFnModelChange(idx: number, purpose: ModelCallPurpose, model: string) {
-  functionModels.value[idx].model = model;
-  const state = functionModels.value[idx];
+async function onAssignmentModelChange(idx: number, purpose: ModelCallPurpose, model: string) {
+  modelAssignments.value[idx].model = model;
+  const state = modelAssignments.value[idx];
   if (state.provider && state.model) {
-    await saveFunctionModel(purpose, state.provider, state.model);
+    await saveModelAssignment(purpose, state.provider, state.model);
   }
 }
 
@@ -129,38 +133,38 @@ onMounted(() => {
         </div>
       </CollapsibleSection>
 
-      <!-- Section 2: Model assignment per function -->
+      <!-- Section 2: Model assignment per purpose -->
       <CollapsibleSection title="Model Assignment">
-        <div v-for="(fnState, idx) in functionModels" :key="fnState.fn" class="fn-block">
-          <div class="fn-label">{{ MODEL_CALL_PURPOSES[fnState.fn] }}</div>
+        <div v-for="(assignmentState, idx) in modelAssignments" :key="assignmentState.purpose" class="fn-block">
+          <div class="fn-label">{{ formatModelCallPurpose(assignmentState.purpose) }}</div>
           <div class="fn-edit">
             <select
-              :value="fnState.provider"
+              :value="assignmentState.provider"
               class="fn-select"
-              @change="onFnProviderChange(fnState.fn, idx, ($event.target as HTMLSelectElement).value)"
+              @change="onAssignmentProviderChange(assignmentState.purpose, idx, ($event.target as HTMLSelectElement).value)"
             >
               <option value="">Select provider</option>
               <option v-for="p in providers" :key="p.provider" :value="p.provider">{{ p.provider }}</option>
             </select>
 
-            <template v-if="fnState.provider">
-              <p v-if="!apiKeySetFor(fnState.provider)" class="hint-inline">API key not set for this provider</p>
+            <template v-if="assignmentState.provider">
+              <p v-if="!apiKeySetFor(assignmentState.provider)" class="hint-inline">API key not set for this provider</p>
               <template v-else>
                 <select
-                  :value="fnState.model"
+                  :value="assignmentState.model"
                   class="fn-select"
-                  :disabled="modelsForProvider(fnState.provider).length === 0 || isSavingFunctionModel"
-                  @change="onFnModelChange(idx, fnState.fn, ($event.target as HTMLSelectElement).value)"
+                  :disabled="modelsForProvider(assignmentState.provider).length === 0 || isSavingModelAssignment"
+                  @change="onAssignmentModelChange(idx, assignmentState.purpose, ($event.target as HTMLSelectElement).value)"
                 >
                   <option value="">
-                    {{ modelsForProvider(fnState.provider).length === 0 ? 'No models (load first)' : 'Select model' }}
+                    {{ modelsForProvider(assignmentState.provider).length === 0 ? 'No models (load first)' : 'Select model' }}
                   </option>
-                  <option v-for="m in modelsForProvider(fnState.provider)" :key="m" :value="m">{{ m }}</option>
+                  <option v-for="m in modelsForProvider(assignmentState.provider)" :key="m" :value="m">{{ m }}</option>
                 </select>
                 <Button
-                  v-if="modelsForProvider(fnState.provider).length === 0"
+                  v-if="modelsForProvider(assignmentState.provider).length === 0"
                   size="sm"
-                  @click="loadModels(fnState.provider)"
+                  @click="loadModels(assignmentState.provider)"
                 >Load models</Button>
               </template>
             </template>

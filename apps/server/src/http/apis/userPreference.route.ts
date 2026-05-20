@@ -21,7 +21,7 @@ async function listModelsForProvider(context: HttpApiContext, provider: string):
         timeoutMs: context.config.agent.timeoutMs,
         maxRetries: context.config.agent.maxRetries,
     });
-    const models = await client.listModels(provider, credential.apiKeyEncrypted);
+    const models = await client.listModels(provider, credential.encryptedApiKey);
     return models.sort();
 }
 
@@ -39,13 +39,13 @@ async function getUserPreference(context: HttpApiContext): Promise<UserPreferenc
         }))
     );
 
-    const functionModels: UserPreferenceApi.FunctionModelMap = {};
-    for (const fn of MODEL_CALL_PURPOSES) {
-        const assignment = prefs?.functionModels?.[fn];
-        functionModels[fn] = assignment ?? null;
+    const modelAssignments: UserPreferenceApi.UserModelAssignmentMap = {};
+    for (const purpose of MODEL_CALL_PURPOSES) {
+        const assignment = prefs?.modelAssignments?.[purpose];
+        modelAssignments[purpose] = assignment ?? null;
     }
 
-    return { providers, functionModels };
+    return { providers, modelAssignments };
 }
 
 async function upsertApiKey(
@@ -64,7 +64,7 @@ async function upsertApiKey(
     await context.stores.providerCredential.upsertCredential({
         userId: DEFAULT_USER_ID,
         provider,
-        apiKeyEncrypted: apiKey,
+        encryptedApiKey: apiKey,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
     });
@@ -108,34 +108,34 @@ async function testApiKey(
     }
 }
 
-async function upsertFunctionModel(
+async function upsertModelAssignment(
     context: HttpApiContext,
-    body: UserPreferenceApi.UpsertFunctionModelRequest
-): Promise<UserPreferenceApi.UpsertFunctionModelResponse> {
-    const fn = body?.modelCallPurpose;
+    body: UserPreferenceApi.UpsertModelAssignmentRequest
+): Promise<UserPreferenceApi.UpsertModelAssignmentResponse> {
+    const modelCallPurpose = body?.modelCallPurpose;
     const provider = (body?.provider ?? "").trim().toLowerCase();
     const model = (body?.model ?? "").trim();
 
-    if (!fn || !(MODEL_CALL_PURPOSES as readonly string[]).includes(fn)) {
-        throw new Error(`Invalid function: ${fn}`);
+    if (!modelCallPurpose || !(MODEL_CALL_PURPOSES as readonly string[]).includes(modelCallPurpose)) {
+        throw new Error(`Invalid model call purpose: ${modelCallPurpose}`);
     }
     if (!provider) throw new Error("provider is required");
     if (!model) throw new Error("model is required");
 
     const now = new Date().toISOString();
-    await context.stores.userPreferences.setFunctionModel({
+    await context.stores.userPreferences.setModelAssignment({
         userId: DEFAULT_USER_ID,
-        functionName: fn,
-        selection: { provider, model },
+        modelCallPurpose,
+        assignment: { provider, model },
         updatedAt: now,
     });
 
     const prefs = await context.stores.userPreferences.getUserPreferences(DEFAULT_USER_ID);
-    const functionModels: UserPreferenceApi.FunctionModelMap = {};
-    for (const f of MODEL_CALL_PURPOSES) {
-        functionModels[f] = prefs?.functionModels?.[f] ?? null;
+    const modelAssignments: UserPreferenceApi.UserModelAssignmentMap = {};
+    for (const purpose of MODEL_CALL_PURPOSES) {
+        modelAssignments[purpose] = prefs?.modelAssignments?.[purpose] ?? null;
     }
-    return { functionModels };
+    return { modelAssignments };
 }
 
 async function listModels(
@@ -180,9 +180,9 @@ export function registerUserPreferenceRoutes(context: HttpApiContext): void {
         handleError: (error) => handleError("testApiKey: failed", context, error)
     });
 
-    registerApi(context.app, UserPreferenceApi.ApiUpsertFunctionModel, {
-        handleRequest: (_, body) => upsertFunctionModel(context, body),
-        handleError: (error) => handleError("upsertFunctionModel: failed", context, error)
+    registerApi(context.app, UserPreferenceApi.ApiUpsertModelAssignment, {
+        handleRequest: (_, body) => upsertModelAssignment(context, body),
+        handleError: (error) => handleError("upsertModelAssignment: failed", context, error)
     });
 
     registerApi(context.app, UserPreferenceApi.ApiListModels, {

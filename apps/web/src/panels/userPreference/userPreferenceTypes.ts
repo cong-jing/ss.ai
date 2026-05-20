@@ -1,4 +1,4 @@
-import type { AiFunction } from "@ss-ai/contracts";
+import type { ModelCallPurpose } from "@ss-ai/contracts";
 
 export interface ProviderState {
     provider: string;
@@ -15,8 +15,8 @@ export interface ProviderState {
     testMessage: string;
 }
 
-export type FunctionModelState = {
-    fn: AiFunction;
+export type ModelAssignmentState = {
+    purpose: ModelCallPurpose;
     provider: string;
     model: string;
 };

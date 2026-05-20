@@ -1,5 +1,5 @@
 import { ApiDefine } from "../apiBase.js";
-import type { PromptMode } from "../promptMode.js";
+import type { InteractionMode } from "../interactionMode.js";
 
 export type LlmResponseMode = "non-structured" | "structured";
 
@@ -13,8 +13,8 @@ export interface ChatRequest {
     userMessageText: string;
     /** LLM response mode. Defaults to `structured` when omitted. */
     llmResponseMode?: LlmResponseMode;
-    /** Prompt assembly mode. Defaults to `single_character_chat` when omitted. */
-    promptMode?: PromptMode;
+    /** Interaction mode for prompt assembly. Defaults to `single_character_chat` when omitted. */
+    interactionMode?: InteractionMode;
     /** When true, the response will include assembled LLM input messages for debugging. */
     includeAssembledMessages?: boolean;
 }
@@ -64,8 +64,8 @@ export interface ChatStreamRequest {
     userMessageText: string;
     /** LLM response mode for stream endpoint. Defaults to `non-structured` when omitted. */
     llmResponseMode?: LlmResponseMode;
-    /** Prompt assembly mode. Defaults to `single_character_chat` when omitted. */
-    promptMode?: PromptMode;
+    /** Interaction mode for prompt assembly. Defaults to `single_character_chat` when omitted. */
+    interactionMode?: InteractionMode;
     /** When true, an `assembledMessages` SSE event is sent first with assembled LLM input messages. */
     includeAssembledMessages?: boolean;
 }
@@ -94,8 +94,8 @@ export interface ChatDryRunRequest {
     userMessageText: string;
     /** LLM response mode for prompt assembly. Defaults to `structured` when omitted. */
     llmResponseMode?: LlmResponseMode;
-    /** Prompt assembly mode. Defaults to `single_character_chat` when omitted. */
-    promptMode?: PromptMode;
+    /** Interaction mode for prompt assembly. Defaults to `single_character_chat` when omitted. */
+    interactionMode?: InteractionMode;
 }
 
 export interface ChatDryRunMessage {

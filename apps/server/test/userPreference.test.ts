@@ -11,7 +11,7 @@ import type {
     GetUserPreferenceResponse,
     UpsertApiKeyResponse,
     DeleteApiKeyResponse,
-    UpsertFunctionModelResponse,
+    UpsertModelAssignmentResponse,
     ListModelsResponse,
 } from "@ss-ai/contracts/apis/userPreference";
 import type { RuntimeModelEntry } from "../src/util/config.js";
@@ -39,7 +39,7 @@ describe("UserPreference API", () => {
 
     // ── GET /v1/user-preference ─────────────────────────────────────────────────
 
-    it("GET /v1/user-preference — returns provider list and empty functionModels", async () => {
+    it("GET /v1/user-preference — returns provider list and empty modelAssignments", async () => {
         const res = await app.agent.get("/v1/user-preference").expect(200);
         const data = res.body as GetUserPreferenceResponse;
 
@@ -51,9 +51,9 @@ describe("UserPreference API", () => {
         // availableModels pre-filled because MOCK_MODELS.availableModels is non-empty
         assert.deepEqual(mistral.availableModels, ["mistral-large-latest", "mistral-small-latest"]);
 
-        assert.ok(data.functionModels, "functionModels must be present");
-        assert.equal(data.functionModels.chat, null);
-        assert.equal(data.functionModels.summarize, null);
+        assert.ok(data.modelAssignments, "modelAssignments must be present");
+        assert.equal(data.modelAssignments["chat.main"], null);
+        assert.equal(data.modelAssignments["memory.summarize"], null);
     });
 
     // ── POST /v1/user-preference/api-key ────────────────────────────────────────
@@ -90,31 +90,31 @@ describe("UserPreference API", () => {
             .expect(400);
     });
 
-    // ── POST /v1/user-preference/function-model ─────────────────────────────────
+    // ── POST /v1/user-preference/model-assignment ───────────────────────────────
 
-    it("POST /v1/user-preference/function-model — assigns chat model", async () => {
+    it("POST /v1/user-preference/model-assignment — assigns chat model", async () => {
         const res = await app.agent
-            .post("/v1/user-preference/function-model")
-            .send({ function: "chat", provider: "mistral", model: "mistral-large-latest" })
+            .post("/v1/user-preference/model-assignment")
+            .send({ modelCallPurpose: "chat.main", provider: "mistral", model: "mistral-large-latest" })
             .expect(200);
-        const data = res.body as UpsertFunctionModelResponse;
-        assert.ok(data.functionModels.chat);
-        assert.equal(data.functionModels.chat!.provider, "mistral");
-        assert.equal(data.functionModels.chat!.model, "mistral-large-latest");
+        const data = res.body as UpsertModelAssignmentResponse;
+        assert.ok(data.modelAssignments["chat.main"]);
+        assert.equal(data.modelAssignments["chat.main"]!.provider, "mistral");
+        assert.equal(data.modelAssignments["chat.main"]!.model, "mistral-large-latest");
     });
 
-    it("GET /v1/user-preference — functionModels.chat persists", async () => {
+    it("GET /v1/user-preference — modelAssignments chat.main persists", async () => {
         const res = await app.agent.get("/v1/user-preference").expect(200);
         const data = res.body as GetUserPreferenceResponse;
-        assert.ok(data.functionModels.chat);
-        assert.equal(data.functionModels.chat!.provider, "mistral");
-        assert.equal(data.functionModels.chat!.model, "mistral-large-latest");
+        assert.ok(data.modelAssignments["chat.main"]);
+        assert.equal(data.modelAssignments["chat.main"]!.provider, "mistral");
+        assert.equal(data.modelAssignments["chat.main"]!.model, "mistral-large-latest");
     });
 
-    it("POST /v1/user-preference/function-model — rejects invalid function name with 400", async () => {
+    it("POST /v1/user-preference/model-assignment — rejects invalid model call purpose with 400", async () => {
         await app.agent
-            .post("/v1/user-preference/function-model")
-            .send({ function: "unknown-function", provider: "mistral", model: "mistral-large-latest" })
+            .post("/v1/user-preference/model-assignment")
+            .send({ modelCallPurpose: "unknown-function", provider: "mistral", model: "mistral-large-latest" })
             .expect(400);
     });
 

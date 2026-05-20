@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { DEFAULT_PROMPT_MODE } from "@ss-ai/contracts";
+import { DEFAULT_INTERACTION_MODE } from "@ss-ai/contracts";
 import * as schema from "./schema.js";
 
 export type SqliteDb = ReturnType<typeof Database>;
@@ -31,7 +31,7 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             greeting_message       TEXT,
             avatar_url             TEXT,
             model_config_json      TEXT NOT NULL DEFAULT '{}',
-            prompt_mode            TEXT NOT NULL DEFAULT '${DEFAULT_PROMPT_MODE}',
+            interaction_mode            TEXT NOT NULL DEFAULT '${DEFAULT_INTERACTION_MODE}',
             generation_config_json TEXT NOT NULL DEFAULT '{}',
             memory_config_json     TEXT NOT NULL DEFAULT '{}',
             language               TEXT DEFAULT 'zh-CN',
@@ -57,7 +57,7 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             user_id                 TEXT PRIMARY KEY,
             current_character_id    TEXT,
             current_conversation_id TEXT,
-            function_models_json    TEXT NOT NULL DEFAULT '{}',
+            model_assignments_json  TEXT NOT NULL DEFAULT '{}',
             created_at              TEXT NOT NULL,
             updated_at              TEXT NOT NULL
         );
@@ -65,7 +65,7 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
         CREATE TABLE IF NOT EXISTS user_provider_credentials (
             user_id           TEXT NOT NULL,
             provider          TEXT NOT NULL,
-            api_key_encrypted TEXT NOT NULL,
+            api_key_ciphertext TEXT NOT NULL,
             created_at        TEXT NOT NULL,
             updated_at        TEXT NOT NULL,
             PRIMARY KEY (user_id, provider)
@@ -130,7 +130,9 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
     // ALTER TABLE ADD COLUMN throws if the column already exists — silently ignored.
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'`); } catch { /* already exists */ }
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN language TEXT DEFAULT 'zh-CN'`); } catch { /* already exists */ }
-    try { sqlite.exec(`ALTER TABLE characters ADD COLUMN prompt_mode TEXT NOT NULL DEFAULT '${DEFAULT_PROMPT_MODE}'`); } catch { /* already exists */ }
+    try { sqlite.exec(`ALTER TABLE characters ADD COLUMN interaction_mode TEXT NOT NULL DEFAULT '${DEFAULT_INTERACTION_MODE}'`); } catch { /* already exists */ }
+    try { sqlite.exec(`ALTER TABLE user_preferences ADD COLUMN model_assignments_json TEXT NOT NULL DEFAULT '{}'`); } catch { /* already exists */ }
+    try { sqlite.exec(`ALTER TABLE user_provider_credentials ADD COLUMN api_key_ciphertext TEXT NOT NULL DEFAULT ''`); } catch { /* already exists */ }
 
     // Recreate messages table when legacy columns exist or required columns are missing.
     const messageColumns = sqlite.prepare(`PRAGMA table_info('messages')`).all() as Array<{ name: string }>;

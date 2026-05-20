@@ -243,7 +243,7 @@ class InMemoryUserPreferencesStore {
     async setCurrentCharacter(input: { userId: string; characterId: string | null; updatedAt: string }): Promise<void> {
         const prev = this.records.get(input.userId) ?? {
             userId: input.userId,
-            functionModels: {},
+            modelAssignments: {},
             createdAt: input.updatedAt,
             updatedAt: input.updatedAt,
         };
@@ -254,18 +254,18 @@ class InMemoryUserPreferencesStore {
         });
     }
 
-    async setFunctionModel(input: { userId: string; functionName: string; selection: { provider: string; model: string }; updatedAt: string }): Promise<void> {
+    async setModelAssignment(input: { userId: string; modelCallPurpose: import("@ss-ai/contracts").ModelCallPurpose; assignment: { provider: string; model: string }; updatedAt: string }): Promise<void> {
         const prev = this.records.get(input.userId) ?? {
             userId: input.userId,
-            functionModels: {},
+            modelAssignments: {},
             createdAt: input.updatedAt,
             updatedAt: input.updatedAt,
         };
         this.records.set(input.userId, {
             ...prev,
-            functionModels: {
-                ...prev.functionModels,
-                [input.functionName]: input.selection,
+            modelAssignments: {
+                ...prev.modelAssignments,
+                [input.modelCallPurpose]: input.assignment,
             },
             updatedAt: input.updatedAt,
         });

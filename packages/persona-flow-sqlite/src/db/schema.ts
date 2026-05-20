@@ -1,5 +1,5 @@
 import { sqliteTable, text, primaryKey } from "drizzle-orm/sqlite-core";
-import { DEFAULT_PROMPT_MODE } from "@ss-ai/contracts";
+import { DEFAULT_INTERACTION_MODE } from "@ss-ai/contracts";
 
 // ── conversation_actors ───────────────────────────────────────────────────────
 export const conversationActors = sqliteTable("conversation_actors", {
@@ -55,7 +55,7 @@ export const characters = sqliteTable("characters", {
     greetingMessage: text("greeting_message"),
     avatarUrl: text("avatar_url"),
     modelConfigJson: text("model_config_json").notNull().default("{}"),
-    promptMode: text("prompt_mode").notNull().default(DEFAULT_PROMPT_MODE),
+    interactionMode: text("interaction_mode").notNull().default(DEFAULT_INTERACTION_MODE),
     generationConfigJson: text("generation_config_json").notNull().default("{}"),
     memoryConfigJson: text("memory_config_json").notNull().default("{}"),
     language: text("language").default("zh-CN"),
@@ -85,7 +85,7 @@ export type NewUserProfileRow = typeof userProfiles.$inferInsert;
 export const userPreferences = sqliteTable("user_preferences", {
     userId: text("user_id").primaryKey(),
     currentCharacterId: text("current_character_id"),
-    functionModelsJson: text("function_models_json").notNull().default("{}"),
+    modelAssignmentsJson: text("model_assignments_json").notNull().default("{}"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
 });
@@ -111,7 +111,7 @@ export type NewUserCharacterStateRow = typeof userCharacterStates.$inferInsert;
 export const userProviderCredentials = sqliteTable("user_provider_credentials", {
     userId: text("user_id").notNull(),
     provider: text("provider").notNull(),
-    apiKeyEncrypted: text("api_key_encrypted").notNull(),
+    apiKeyCiphertext: text("api_key_ciphertext").notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
 }, (t) => ({

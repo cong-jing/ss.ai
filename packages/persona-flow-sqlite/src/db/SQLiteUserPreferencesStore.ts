@@ -1,13 +1,14 @@
 import { eq } from "drizzle-orm";
 import { userPreferences, type UserPreferencesRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
-import type { UserPreferences, UserPreferencesStore, ModelSelection } from "@ss-ai/persona-flow";
+import type { ModelAssignment, ModelAssignmentMap, ModelCallPurpose } from "@ss-ai/contracts";
+import type { UserPreferences, UserPreferencesStore } from "@ss-ai/persona-flow";
 
-function safeParseModels(json: string): Record<string, ModelSelection> {
+function safeParseModelAssignments(json: string): ModelAssignmentMap {
     try {
         const parsed = JSON.parse(json);
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            return parsed as Record<string, ModelSelection>;
+            return parsed as ModelAssignmentMap;
         }
     } catch { /* fall through */ }
     return {};
@@ -17,7 +18,7 @@ function rowToPreferences(row: UserPreferencesRow): UserPreferences {
     return {
         userId: row.userId,
         currentCharacterId: row.currentCharacterId ?? null,
-        functionModels: safeParseModels(row.functionModelsJson),
+        modelAssignments: safeParseModelAssignments(row.modelAssignmentsJson),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
     };
@@ -40,7 +41,7 @@ export class SQLiteUserPreferencesStore implements UserPreferencesStore {
         const row = {
             userId: preferences.userId,
             currentCharacterId: preferences.currentCharacterId ?? null,
-            functionModelsJson: JSON.stringify(preferences.functionModels),
+            modelAssignmentsJson: JSON.stringify(preferences.modelAssignments),
             createdAt: preferences.createdAt,
             updatedAt: preferences.updatedAt,
         };
@@ -52,7 +53,7 @@ export class SQLiteUserPreferencesStore implements UserPreferencesStore {
                 target: userPreferences.userId,
                 set: {
                     currentCharacterId: row.currentCharacterId,
-                    functionModelsJson: row.functionModelsJson,
+                    modelAssignmentsJson: row.modelAssignmentsJson,
                     updatedAt: row.updatedAt,
                 },
             });
@@ -66,13 +67,16 @@ export class SQLiteUserPreferencesStore implements UserPreferencesStore {
             .where(eq(userPreferences.userId, input.userId));
     }
 
-    async setFunctionModel(input: { userId: string; functionName: string; selection: ModelSelection; updatedAt: string }): Promise<void> {
+    async setModelAssignment(input: { userId: string; modelCallPurpose: ModelCallPurpose; assignment: ModelAssignment; updatedAt: string }): Promise<void> {
         await this.#ensureRow(input.userId);
         const existing = await this.getUserPreferences(input.userId);
-        const models = { ...(existing?.functionModels ?? {}), [input.functionName]: input.selection };
+        const modelAssignments: ModelAssignmentMap = {
+            ...(existing?.modelAssignments ?? {}),
+            [input.modelCallPurpose]: input.assignment,
+        };
         await this.db
             .update(userPreferences)
-            .set({ functionModelsJson: JSON.stringify(models), updatedAt: input.updatedAt })
+            .set({ modelAssignmentsJson: JSON.stringify(modelAssignments), updatedAt: input.updatedAt })
             .where(eq(userPreferences.userId, input.userId));
     }
 
@@ -81,7 +85,7 @@ export class SQLiteUserPreferencesStore implements UserPreferencesStore {
         const now = new Date().toISOString();
         await this.db
             .insert(userPreferences)
-            .values({ userId, functionModelsJson: "{}", createdAt: now, updatedAt: now })
+            .values({ userId, modelAssignmentsJson: "{}", createdAt: now, updatedAt: now })
             .onConflictDoNothing();
     }
 }

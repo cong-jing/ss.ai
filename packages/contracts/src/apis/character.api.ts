@@ -1,16 +1,11 @@
 import { ApiDefine } from "../apiBase.js";
-import type { PromptMode } from "../promptMode.js";
-import type { ModelCallPurpose } from "../modelCallPurpose.js";
+import type { InteractionMode } from "../interactionMode.js";
+import type { ModelAssignmentMap } from "../modelCallPurpose.js";
 import type { ConversationInfo } from "./conversation.api.js";
 // ── Domain type ────────────────────────────────────────────────────────────────
 
-export interface CharacterFunctionModel {
-    provider: string;
-    model: string;
-}
-
-/** Per-function model overrides. Absent key = inherit from user preference. */
-export type CharacterModelConfig = Partial<Record<ModelCallPurpose, CharacterFunctionModel>>;
+/** Per-purpose model overrides. Absent key = inherit from user preference. */
+export type CharacterModelConfig = ModelAssignmentMap;
 
 /**
  * HTTP API projection of a character card.
@@ -24,7 +19,7 @@ export interface Character {
     personaPrompt: string;
     greetingMessage: string | null;
     modelConfig: CharacterModelConfig;
-    promptMode: PromptMode;
+    interactionMode: InteractionMode;
     status: "active" | "archived";
     createdAt: string;
     updatedAt: string;
@@ -38,7 +33,7 @@ export interface CreateCharacterRequest {
     description?: string;
     personaPrompt?: string;
     greetingMessage?: string;
-    promptMode?: PromptMode;
+    interactionMode?: InteractionMode;
 }
 
 export interface UpdateCharacterRequest {
@@ -47,7 +42,7 @@ export interface UpdateCharacterRequest {
     description?: string;
     personaPrompt?: string;
     greetingMessage?: string;
-    promptMode?: PromptMode;
+    interactionMode?: InteractionMode;
     /** Full replacement of modelConfig. Absent keys inherit from user preference. */
     modelConfig?: CharacterModelConfig;
 }
@@ -58,8 +53,8 @@ export interface ListCharactersResponse {
     activeCharacterId: string | null;
 }
 
-export interface PromptModesResponse {
-    promptModes: PromptMode[];
+export interface InteractionModesResponse {
+    interactionModes: InteractionMode[];
 }
 
 // ── API endpoints ──────────────────────────────────────────────────────────────
@@ -88,8 +83,8 @@ export const ApiUpdateCharacter = new ApiDefine<UpdateCharacterRequest, Characte
  */
 export const ApiDeleteCharacter = new ApiDefine<void, void>("/v1/characters/:id", "DELETE");
 
-/** GET /v1/character-prompt-modes — list selectable prompt modes for character cards. */
-export const ApiListCharacterPromptModes = new ApiDefine<void, PromptModesResponse>("/v1/character-prompt-modes", "GET");
+/** GET /v1/character-interaction-modes — list selectable interaction modes for character cards. */
+export const ApiListCharacterInteractionModes = new ApiDefine<void, InteractionModesResponse>("/v1/character-interaction-modes", "GET");
 
 // ── Active character ───────────────────────────────────────────────────────────
 

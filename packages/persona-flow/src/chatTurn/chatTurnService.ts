@@ -1,5 +1,5 @@
 import type { PromptRenderMode } from "../prompt/promptRenderer.js";
-import type { PromptMode } from "@ss-ai/contracts";
+import type { InteractionMode } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
 import { normalizeAssistantOutput, prepareChatTurnContext } from "./chatTurnPreparation.js";
 import { createNoopPersonaFlowLogger, PersonaFlowPromptLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
@@ -11,23 +11,6 @@ export interface PersonaFlowChatTurnServiceDependencies {
     logger?: PersonaFlowLogger;
     promptLogger: PersonaFlowPromptLogger;
     modelClient: ModelClient;
-    // getModelServiceForUser: (userId: string) => Promise<{
-    //     chat: (request: {
-    //         userId: string;
-    //         messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
-    //         mode?: "non-structured" | "structured"; functionName?: string
-    //     }) => Promise<PersonaChatResponse>;
-    //     chatStream: (request: {
-    //         userId: string;
-    //         messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
-    //         mode?: "non-structured" | "structured";
-    //         functionName?: string;
-    //         onTextDelta?: (delta: string) => void;
-    //     }) => Promise<PersonaChatResponse & {
-    //         completed: boolean;
-    //         finishReason?: string;
-    //     }>;
-    // }>;
 }
 
 export interface PersonaChatTurnRequest {
@@ -36,7 +19,7 @@ export interface PersonaChatTurnRequest {
     conversationId: string;
     userMessageText: string;
     llmResponseMode: PromptRenderMode;
-    promptMode?: PromptMode;
+    interactionMode?: InteractionMode;
     senderActorId?: unknown;
     includeAssembledMessages?: boolean;
 }
@@ -47,7 +30,7 @@ export interface PersonaDryRunTurnRequest {
     conversationId: string;
     userMessageText: string;
     llmResponseMode: PromptRenderMode;
-    promptMode?: PromptMode;
+    interactionMode?: InteractionMode;
     senderActorId?: unknown;
 }
 
@@ -57,7 +40,7 @@ export interface PersonaStreamTurnRequest {
     conversationId: string;
     userMessageText: string;
     llmResponseMode: "non-structured";
-    promptMode?: PromptMode;
+    interactionMode?: InteractionMode;
     senderActorId?: unknown;
     includeAssembledMessages?: boolean;
     onAssembledMessages?: (messages: Array<{ role: "system" | "user" | "assistant"; content: string }>) => void;
@@ -71,17 +54,10 @@ export class PersonaFlowChatTurnService {
     constructor(private readonly deps: PersonaFlowChatTurnServiceDependencies) {
         this.logger = deps.logger ?? createNoopPersonaFlowLogger();
         this.modelCallExecutor = new ModelCallExecutor({
-            //userId: deps.
             modelClient: deps.modelClient,
             appStores: deps.stores,
-            // modelProfileResolver: new DefaultModelProfileResolver(...),
-            // modelCredentialResolver: new StaticModelCredentialResolver(...),
             logger: this.logger,
-            promptLogger: {
-                writePromptLog: async (log) => {
-                    throw new Error("Model call prompt logging is not implemented yet.");
-                }
-            }
+            promptLogger: deps.promptLogger,
         });
     }
 
@@ -91,7 +67,7 @@ export class PersonaFlowChatTurnService {
             characterId: input.characterId,
             conversationId: input.conversationId,
             llmResponseMode: input.llmResponseMode,
-            promptMode: input.promptMode,
+            interactionMode: input.interactionMode,
         });
 
         const prepared = await prepareChatTurnContext({
@@ -101,7 +77,7 @@ export class PersonaFlowChatTurnService {
             conversationId: input.conversationId,
             userMessageText: input.userMessageText,
             llmResponseMode: input.llmResponseMode,
-            promptMode: input.promptMode,
+            interactionMode: input.interactionMode,
             senderActorId: input.senderActorId,
             persistUserMessage: false,
             logger: this.logger,
@@ -129,7 +105,7 @@ export class PersonaFlowChatTurnService {
             characterId: input.characterId,
             conversationId: input.conversationId,
             llmResponseMode: input.llmResponseMode,
-            promptMode: input.promptMode,
+            interactionMode: input.interactionMode,
         });
 
         const prepared = await prepareChatTurnContext({
@@ -139,7 +115,7 @@ export class PersonaFlowChatTurnService {
             conversationId: input.conversationId,
             userMessageText: input.userMessageText,
             llmResponseMode: input.llmResponseMode,
-            promptMode: input.promptMode,
+            interactionMode: input.interactionMode,
             senderActorId: input.senderActorId,
             persistUserMessage: true,
             logger: this.logger,
@@ -222,7 +198,7 @@ export class PersonaFlowChatTurnService {
             characterId: input.characterId,
             conversationId: input.conversationId,
             llmResponseMode: input.llmResponseMode,
-            promptMode: input.promptMode,
+            interactionMode: input.interactionMode,
         });
 
         const prepared = await prepareChatTurnContext({
@@ -232,7 +208,7 @@ export class PersonaFlowChatTurnService {
             conversationId: input.conversationId,
             userMessageText: input.userMessageText,
             llmResponseMode: input.llmResponseMode,
-            promptMode: input.promptMode,
+            interactionMode: input.interactionMode,
             senderActorId: input.senderActorId,
             persistUserMessage: true,
             logger: this.logger,

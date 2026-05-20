@@ -1,5 +1,4 @@
 import { ModelClient, ModelGenerationInput, ModelGenerationResult, ModelStreamCallbacks, ModelStreamResult, ModelStructuredResult } from "@ss-ai/persona-flow";
-import { provide } from "vue";
 import { MistralModelClient } from "./mistral/mistralModelClient.js";
 
 export interface ProviderConfig {
@@ -23,22 +22,28 @@ export class DefaultModelClient implements ModelClient {
         this._maxRetries = configs.maxRetries ?? 0;
     }
 
+    private decryptApiKey(encryptedApiKey: string): string {
+        // Placeholder for future real decryption.
+        return encryptedApiKey;
+    }
+
     generateNonStructured(input: ModelGenerationInput): Promise<ModelGenerationResult> {
         const normalizedProvider = input.provider.toLowerCase();
-        const client = this.getModelAdapter(normalizedProvider, input.apiKey);
+        const client = this.getModelAdapter(normalizedProvider, this.decryptApiKey(input.encryptedApiKey));
         return client.generateNonStructured(input);
     }
     generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
         const normalizedProvider = input.provider.toLowerCase();
-        const client = this.getModelAdapter(normalizedProvider, input.apiKey);
+        const client = this.getModelAdapter(normalizedProvider, this.decryptApiKey(input.encryptedApiKey));
         return client.generateNonStructuredStream(input, callbacks);
     }
     generateStructured(input: ModelGenerationInput): Promise<ModelStructuredResult> {
         const normalizedProvider = input.provider.toLowerCase();
-        const client = this.getModelAdapter(normalizedProvider, input.apiKey);
+        const client = this.getModelAdapter(normalizedProvider, this.decryptApiKey(input.encryptedApiKey));
         return client.generateStructured(input);
     }
-    listModels(provider: string, apiKey: string): Promise<string[]> {
+    listModels(provider: string, encryptedApiKey: string): Promise<string[]> {
+        const apiKey = this.decryptApiKey(encryptedApiKey);
         const client = this.getModelAdapter(provider, apiKey);
         return client.listModels(provider, apiKey);
     }

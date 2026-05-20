@@ -1,13 +1,10 @@
-export type ModelSelection = {
-    provider: string;
-    model: string;
-};
+import type { ModelAssignmentMap } from "@ss-ai/contracts";
 
 export type UserPreferences = {
     userId: string;
     currentCharacterId?: string | null;
-    /** Map from function name (e.g. "chat", "summarize") to provider+model. */
-    functionModels: Record<string, ModelSelection>;
+    /** Map from model-call purpose to provider+model. */
+    modelAssignments: ModelAssignmentMap;
     createdAt: string;
     updatedAt: string;
 };

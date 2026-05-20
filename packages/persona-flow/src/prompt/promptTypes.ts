@@ -1,4 +1,4 @@
-import type { PromptMode } from "@ss-ai/contracts";
+import type { InteractionMode } from "@ss-ai/contracts";
 
 export type RenderedMessage = {
     role: "system" | "user" | "assistant";
@@ -13,5 +13,5 @@ export type PromptRenderMode = "non-structured" | "structured";
 
 export interface PromptRendererOptions {
     mode?: PromptRenderMode;
-    promptMode?: PromptMode;
+    interactionMode?: InteractionMode;
 }

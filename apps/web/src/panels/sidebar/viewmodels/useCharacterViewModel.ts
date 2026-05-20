@@ -4,6 +4,6 @@ export {
     editDraft,
     isDirty,
     isSavingCharacter,
-    promptModes,
+    interactionModes,
     useCharacterViewModel,
 } from "../../character/useCharacterViewModel";

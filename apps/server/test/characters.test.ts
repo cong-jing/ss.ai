@@ -7,7 +7,7 @@
 
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import type { Character, ListCharactersResponse, PromptModesResponse } from "@ss-ai/contracts";
+import type { Character, ListCharactersResponse, InteractionModesResponse } from "@ss-ai/contracts";
 import { createTestApp, type TestApp } from "./helpers/testServer.js";
 
 describe("Character CRUD API", () => {
@@ -46,7 +46,7 @@ describe("Character CRUD API", () => {
         assert.equal(char1.description, "A curious explorer");
         assert.equal(char1.personaPrompt, "");
         assert.equal(char1.greetingMessage, null);
-        assert.equal(char1.promptMode, "single_character_chat");
+        assert.equal(char1.interactionMode, "single_character_chat");
         assert.equal(char1.status, "active");
         assert.equal(typeof char1.createdAt, "string");
         assert.equal(typeof char1.updatedAt, "string");
@@ -60,7 +60,7 @@ describe("Character CRUD API", () => {
         char2 = res.body as Character;
         assert.equal(char2.name, "Bob");
         assert.equal(char2.description, "");
-        assert.equal(char2.promptMode, "single_character_chat");
+        assert.equal(char2.interactionMode, "single_character_chat");
     });
 
     it("POST /v1/characters — rejects empty name with 400", async () => {
@@ -93,21 +93,21 @@ describe("Character CRUD API", () => {
     it("PATCH /v1/characters/:id — updates description and personaPrompt", async () => {
         const res = await app.agent
             .patch(`/v1/characters/${char1.id}`)
-            .send({ description: "Updated description", personaPrompt: "Be curious.", promptMode: "live_chat" })
+            .send({ description: "Updated description", personaPrompt: "Be curious.", interactionMode: "live_chat" })
             .expect(200);
         const data = res.body as Character;
         assert.equal(data.name, "Alice");
         assert.equal(data.description, "Updated description");
         assert.equal(data.personaPrompt, "Be curious.");
-        assert.equal(data.promptMode, "live_chat");
+        assert.equal(data.interactionMode, "live_chat");
         assert.ok(data.updatedAt >= char1.updatedAt, "updatedAt must advance");
         char1 = data; // keep char1 in sync
     });
 
-    it("GET /v1/character-prompt-modes — returns selectable prompt modes", async () => {
-        const res = await app.agent.get("/v1/character-prompt-modes").expect(200);
-        const data = res.body as PromptModesResponse;
-        assert.deepEqual(data.promptModes, [
+    it("GET /v1/character-interaction-modes — returns selectable interaction modes", async () => {
+        const res = await app.agent.get("/v1/character-interaction-modes").expect(200);
+        const data = res.body as InteractionModesResponse;
+        assert.deepEqual(data.interactionModes, [
             "single_character_chat",
             "multi_character_event_log",
             "dm_narrator",

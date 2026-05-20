@@ -3,11 +3,19 @@ import { userProviderCredentials, type UserProviderCredentialRow } from "./schem
 import type { DrizzleDb } from "./openDatabase.js";
 import type { UserProviderCredential, UserProviderCredentialStore } from "@ss-ai/persona-flow";
 
+function encryptApiKey(apiKey: string): string {
+    return apiKey;
+}
+
+function decryptApiKey(apiKeyCiphertext: string): string {
+    return apiKeyCiphertext;
+}
+
 function rowToCredential(row: UserProviderCredentialRow): UserProviderCredential {
     return {
         userId: row.userId,
         provider: row.provider,
-        apiKeyEncrypted: row.apiKeyEncrypted,
+        encryptedApiKey: decryptApiKey(row.apiKeyCiphertext),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
     };
@@ -33,7 +41,7 @@ export class SQLiteUserProviderCredentialStore implements UserProviderCredential
         const row = {
             userId: credential.userId,
             provider: credential.provider,
-            apiKeyEncrypted: credential.apiKeyEncrypted,
+            apiKeyCiphertext: encryptApiKey(credential.encryptedApiKey),
             createdAt: credential.createdAt,
             updatedAt: credential.updatedAt,
         };
@@ -44,7 +52,7 @@ export class SQLiteUserProviderCredentialStore implements UserProviderCredential
             .onConflictDoUpdate({
                 target: [userProviderCredentials.userId, userProviderCredentials.provider],
                 set: {
-                    apiKeyEncrypted: row.apiKeyEncrypted,
+                    apiKeyCiphertext: row.apiKeyCiphertext,
                     updatedAt: row.updatedAt,
                 },
             });

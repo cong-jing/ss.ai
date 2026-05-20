@@ -1,5 +1,5 @@
 import { ApiDefine } from "../apiBase.js";
-import type { ModelCallPurpose } from "../modelCallPurpose.js";
+import type { ModelAssignment, ModelCallPurpose } from "../modelCallPurpose.js";
 
 // --- Provider info ---
 
@@ -9,15 +9,15 @@ export interface ProviderStatus {
     availableModels: string[];
 }
 
-// --- Function model assignment ---
+// --- Model assignment ---
 
-export type FunctionModelMap = Partial<Record<ModelCallPurpose, { provider: string; model: string } | null>>;
+export type UserModelAssignmentMap = Partial<Record<ModelCallPurpose, ModelAssignment | null>>;
 
 // --- GET /v1/user-preference ---
 
 export interface GetUserPreferenceResponse {
     providers: ProviderStatus[];
-    functionModels: FunctionModelMap;
+    modelAssignments: UserModelAssignmentMap;
 }
 
 // --- POST /v1/user-preference/api-key ---
@@ -56,16 +56,16 @@ export interface TestApiKeyResponse {
     message?: string;
 }
 
-// --- POST /v1/user-preference/function-model ---
+// --- POST /v1/user-preference/model-assignment ---
 
-export interface UpsertFunctionModelRequest {
+export interface UpsertModelAssignmentRequest {
     modelCallPurpose: ModelCallPurpose;
     provider: string;
     model: string;
 }
 
-export interface UpsertFunctionModelResponse {
-    functionModels: FunctionModelMap;
+export interface UpsertModelAssignmentResponse {
+    modelAssignments: UserModelAssignmentMap;
 }
 
 // --- POST /v1/user-preference/list-models ---
@@ -83,5 +83,5 @@ export const ApiGetUserPreference = new ApiDefine<void, GetUserPreferenceRespons
 export const ApiUpsertApiKey = new ApiDefine<UpsertApiKeyRequest, UpsertApiKeyResponse>("/v1/user-preference/api-key", "POST");
 export const ApiDeleteApiKey = new ApiDefine<DeleteApiKeyRequest, DeleteApiKeyResponse>("/v1/user-preference/api-key/delete", "POST");
 export const ApiTestApiKey = new ApiDefine<TestApiKeyRequest, TestApiKeyResponse>("/v1/user-preference/test-api-key", "POST");
-export const ApiUpsertFunctionModel = new ApiDefine<UpsertFunctionModelRequest, UpsertFunctionModelResponse>("/v1/user-preference/function-model", "POST");
+export const ApiUpsertModelAssignment = new ApiDefine<UpsertModelAssignmentRequest, UpsertModelAssignmentResponse>("/v1/user-preference/model-assignment", "POST");
 export const ApiListModels = new ApiDefine<ListModelsRequest, ListModelsResponse>("/v1/user-preference/list-models", "POST");

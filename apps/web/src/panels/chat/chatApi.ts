@@ -1,4 +1,4 @@
-import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMessagesResponse, type LlmResponseMode, type PromptMode } from "@ss-ai/contracts";
+import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMessagesResponse, type LlmResponseMode, type InteractionMode } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
 
 export async function apiGetMessages(conversationId: string): Promise<GetMessagesResponse> {
@@ -27,9 +27,9 @@ export async function apiSendChatMessage(
     senderActorId?: string,
     llmResponseMode: LlmResponseMode = "structured",
     includeAssembledMessages = false,
-    promptMode?: PromptMode,
+    interactionMode?: InteractionMode,
 ) {
-    return callApi(ApiChat, { characterId, conversationId, userMessageText, senderActorId, llmResponseMode, includeAssembledMessages, promptMode });
+    return callApi(ApiChat, { characterId, conversationId, userMessageText, senderActorId, llmResponseMode, includeAssembledMessages, interactionMode });
 }
 
 export async function apiDryRunChat(
@@ -38,9 +38,9 @@ export async function apiDryRunChat(
     userMessageText: string,
     senderActorId?: string,
     llmResponseMode: LlmResponseMode = "structured",
-    promptMode?: PromptMode,
+    interactionMode?: InteractionMode,
 ) {
-    return callApi(ApiChatDryRun, { characterId, conversationId, userMessageText, senderActorId, llmResponseMode, promptMode });
+    return callApi(ApiChatDryRun, { characterId, conversationId, userMessageText, senderActorId, llmResponseMode, interactionMode });
 }
 
 export async function apiStreamChatMessage(
@@ -53,12 +53,12 @@ export async function apiStreamChatMessage(
     signal?: AbortSignal,
     includeAssembledMessages = false,
     onAssembledMessages?: (messages: { role: string; content: string }[]) => void,
-    promptMode?: PromptMode
+    interactionMode?: InteractionMode
 ): Promise<{ requestId: string; model: string }> {
     const response = await fetch(ApiChatStream.apiUrl, {
         method: ApiChatStream.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ characterId, conversationId, userMessageText, senderActorId, llmResponseMode, promptMode, includeAssembledMessages }),
+        body: JSON.stringify({ characterId, conversationId, userMessageText, senderActorId, llmResponseMode, interactionMode, includeAssembledMessages }),
         signal
     });
 

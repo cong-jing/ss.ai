@@ -4,19 +4,19 @@ import {
     apiUpsertApiKey,
     apiDeleteApiKey,
     apiTestApiKey,
-    apiUpsertFunctionModel,
+    apiUpsertModelAssignment,
     apiListModels
 } from "./userPreferenceApi";
-import type { ProviderState, FunctionModelState } from "./userPreferenceTypes";
+import type { ModelAssignmentState, ProviderState } from "./userPreferenceTypes";
 import { MODEL_CALL_PURPOSES, type ModelCallPurpose } from "@ss-ai/contracts";
 import { useToast } from "../../shared/ui/useToast";
 
 export function useUserPreferenceViewModel() {
     const toast = useToast();
     const providers = ref<ProviderState[]>([]);
-    const functionModels = ref<FunctionModelState[]>([]);
+    const modelAssignments = ref<ModelAssignmentState[]>([]);
     const isLoading = ref(false);
-    const isSavingFunctionModel = ref(false);
+    const isSavingModelAssignment = ref(false);
 
     async function loadSettings(): Promise<void> {
         isLoading.value = true;
@@ -35,17 +35,16 @@ export function useUserPreferenceViewModel() {
                 testMessage: ""
             }));
 
-            // Build function model state from response
-            const fnStates: FunctionModelState[] = [];
-            for (const fn of MODEL_CALL_PURPOSES) {
-                const assignment = response.functionModels[fn];
+            const assignmentStates: ModelAssignmentState[] = [];
+            for (const purpose of MODEL_CALL_PURPOSES) {
+                const assignment = response.modelAssignments[purpose];
                 if (assignment) {
-                    fnStates.push({ fn, provider: assignment.provider, model: assignment.model });
+                    assignmentStates.push({ purpose, provider: assignment.provider, model: assignment.model });
                 } else {
-                    fnStates.push({ fn, provider: "", model: "" });
+                    assignmentStates.push({ purpose, provider: "", model: "" });
                 }
             }
-            functionModels.value = fnStates;
+            modelAssignments.value = assignmentStates;
         } catch (e) {
             toast.error(e instanceof Error ? e.message : String(e));
         } finally {
@@ -137,13 +136,13 @@ export function useUserPreferenceViewModel() {
         }
     }
 
-    async function saveFunctionModel(fn: AiFunction, providerName: string, model: string): Promise<void> {
-        isSavingFunctionModel.value = true;
+    async function saveModelAssignment(modelCallPurpose: ModelCallPurpose, providerName: string, model: string): Promise<void> {
+        isSavingModelAssignment.value = true;
         try {
-            const res = await apiUpsertFunctionModel(fn, providerName, model);
-            for (const fnFn of AI_FUNCTIONS) {
-                const assignment = res.functionModels[fnFn];
-                const state = functionModels.value.find(f => f.fn === fnFn);
+            const res = await apiUpsertModelAssignment(modelCallPurpose, providerName, model);
+            for (const purpose of MODEL_CALL_PURPOSES) {
+                const assignment = res.modelAssignments[purpose];
+                const state = modelAssignments.value.find(f => f.purpose === purpose);
                 if (state && assignment) {
                     state.provider = assignment.provider;
                     state.model = assignment.model;
@@ -152,15 +151,15 @@ export function useUserPreferenceViewModel() {
         } catch (e) {
             toast.error(e instanceof Error ? e.message : String(e));
         } finally {
-            isSavingFunctionModel.value = false;
+            isSavingModelAssignment.value = false;
         }
     }
 
     return {
         providers,
-        functionModels,
+        modelAssignments,
         isLoading,
-        isSavingFunctionModel,
+        isSavingModelAssignment,
         loadSettings,
         startEditApiKey,
         cancelEditApiKey,
@@ -168,6 +167,6 @@ export function useUserPreferenceViewModel() {
         deleteApiKey,
         testApiKey,
         loadModels,
-        saveFunctionModel
+        saveModelAssignment
     };
 }

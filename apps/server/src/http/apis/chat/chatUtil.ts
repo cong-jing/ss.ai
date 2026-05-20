@@ -1,4 +1,4 @@
-import { DEFAULT_PROMPT_MODE, PROMPT_MODES, type LlmResponseMode, type PromptMode } from "@ss-ai/contracts";
+import { DEFAULT_INTERACTION_MODE, INTERACTION_MODES, type LlmResponseMode, type InteractionMode } from "@ss-ai/contracts";
 import {
     PersonaFlowChatTurnService
 } from "@ss-ai/persona-flow";
@@ -51,18 +51,18 @@ export function resolveLlmResponseMode(value: unknown, endpoint: string, default
     throw new HttpStatusError(400, `${endpoint}: llmResponseMode must be 'structured' or 'non-structured'.`);
 }
 
-const promptModes = new Set<string>(PROMPT_MODES);
+const interactionModes = new Set<string>(INTERACTION_MODES);
 
-export function resolvePromptMode(value: unknown, endpoint: string): PromptMode {
+export function resolveInteractionMode(value: unknown, endpoint: string): InteractionMode {
     if (value === undefined || value === null || value === "") {
-        return DEFAULT_PROMPT_MODE;
+        return DEFAULT_INTERACTION_MODE;
     }
-    if (typeof value === "string" && promptModes.has(value)) {
-        return value as PromptMode;
+    if (typeof value === "string" && interactionModes.has(value)) {
+        return value as InteractionMode;
     }
     throw new HttpStatusError(
         400,
-        `${endpoint}: promptMode must be one of ${PROMPT_MODES.join(", ")}.`,
+        `${endpoint}: interactionMode must be one of ${INTERACTION_MODES.join(", ")}.`,
     );
 }
 

@@ -1,5 +1,5 @@
 
-export const PROMPT_MODES = [
+export const INTERACTION_MODES = [
     /**
      * 单角色连续对话模式。
      *
@@ -34,7 +34,7 @@ export const PROMPT_MODES = [
     "live_chat",
 ] as const;
 
-export type PromptMode = typeof PROMPT_MODES[number];
+export type InteractionMode = typeof INTERACTION_MODES[number];
 
-export const DEFAULT_PROMPT_MODE: PromptMode = "single_character_chat";
+export const DEFAULT_INTERACTION_MODE: InteractionMode = "single_character_chat";
 

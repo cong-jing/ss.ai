@@ -5,7 +5,7 @@ import {
     requireNonEmptyString,
     requireUserMessageText,
     resolveLlmResponseMode,
-    resolvePromptMode,
+    resolveInteractionMode,
 } from "./chatUtil.js";
 
 export async function handleNonStreamChatRequest(context: HttpApiContext, body: ChatRequest & { userId?: string }) {
@@ -14,7 +14,7 @@ export async function handleNonStreamChatRequest(context: HttpApiContext, body: 
     const characterId = requireNonEmptyString(body?.characterId, "characterId", "chat");
     const conversationId = requireNonEmptyString(body?.conversationId, "conversationId", "chat");
     const llmResponseMode = resolveLlmResponseMode(body?.llmResponseMode, "chat", "structured");
-    const promptMode = resolvePromptMode(body?.promptMode, "chat");
+    const interactionMode = resolveInteractionMode(body?.interactionMode, "chat");
 
     context.logger.debug("chat: request received", { userMessageLength: userMessageText.length, userId, characterId, conversationId });
 
@@ -25,7 +25,7 @@ export async function handleNonStreamChatRequest(context: HttpApiContext, body: 
         conversationId,
         userMessageText,
         llmResponseMode,
-        promptMode,
+        interactionMode,
         senderActorId: body?.senderActorId,
         includeAssembledMessages: body.includeAssembledMessages,
     });

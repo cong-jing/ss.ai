@@ -9,7 +9,7 @@ import {
   editDraft,
   isDirty,
   isSavingCharacter,
-  promptModes,
+  interactionModes,
   useCharacterViewModel,
 } from "./viewmodels/useCharacterViewModel";
 import {
@@ -191,7 +191,7 @@ watch(activeConversationId, () => {
       :is-open="characterOpen"
       :active-character="activeCharacter"
       :is-editing="isCharacterEditing"
-      :prompt-modes="promptModes"
+      :interaction-modes="interactionModes"
       :edit-draft="editDraft"
       :is-dirty="isDirty"
       :is-saving-character="isSavingCharacter"

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { Character, PromptMode } from "@ss-ai/contracts";
+import type { Character, InteractionMode } from "@ss-ai/contracts";
 import { useLocalStorage } from "../../../shared/ui/useLocalStorage";
 
-const promptModeLabels: Record<PromptMode, string> = {
+const interactionModeLabels: Record<InteractionMode, string> = {
   single_character_chat: "Single Character Chat",
   multi_character_event_log: "Multi Character Event Log",
   dm_narrator: "DM / Narrator",
@@ -13,13 +13,13 @@ const props = defineProps<{
   isOpen: boolean;
   activeCharacter: Character | null;
   isEditing: boolean;
-  promptModes: PromptMode[];
+  interactionModes: InteractionMode[];
   editDraft: {
     name: string;
     displayName: string;
     description: string;
     personaPrompt: string;
-    promptMode: PromptMode;
+    interactionMode: InteractionMode;
   };
   isDirty: boolean;
   isSavingCharacter: boolean;
@@ -72,9 +72,9 @@ const showDebug = useLocalStorage("chat.showDebug", false);
           <textarea v-model="props.editDraft.personaPrompt" class="textarea" rows="3" :disabled="isSavingCharacter" />
 
           <label class="field-label">Prompt Mode</label>
-          <select v-model="props.editDraft.promptMode" class="select" :disabled="isSavingCharacter">
-            <option v-for="mode in promptModes" :key="mode" :value="mode">
-              {{ promptModeLabels[mode] }}
+          <select v-model="props.editDraft.interactionMode" class="select" :disabled="isSavingCharacter">
+            <option v-for="mode in interactionModes" :key="mode" :value="mode">
+              {{ interactionModeLabels[mode] }}
             </option>
           </select>
 
@@ -109,7 +109,7 @@ const showDebug = useLocalStorage("chat.showDebug", false);
           </div>
           <div class="read-row">
             <span class="field-label">Prompt Mode</span>
-            <p class="read-value">{{ promptModeLabels[activeCharacter.promptMode] || activeCharacter.promptMode }}</p>
+            <p class="read-value">{{ interactionModeLabels[activeCharacter.interactionMode] || activeCharacter.interactionMode }}</p>
           </div>
 
           <div class="actions">

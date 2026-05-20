@@ -1,5 +1,5 @@
 import type { ChatStreamEvent, LlmResponseMode } from "@ss-ai/contracts";
-import type { PromptMode } from "@ss-ai/contracts";
+import type { InteractionMode } from "@ss-ai/contracts";
 import type { Request, Response } from "express";
 import { DEFAULT_USER_ID, type HttpApiContext } from "../apiContext.js";
 import {
@@ -9,7 +9,7 @@ import {
     requireNonEmptyString,
     requireUserMessageText,
     resolveLlmResponseMode,
-    resolvePromptMode,
+    resolveInteractionMode,
 } from "./chatUtil.js";
 
 export async function handleStreamChatRequest(context: HttpApiContext, req: Request, res: Response): Promise<void> {
@@ -20,13 +20,13 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
     let conversationId: string;
     let senderActorId: string | undefined;
     let llmResponseMode: LlmResponseMode;
-    let promptMode: PromptMode;
+    let interactionMode: InteractionMode;
     try {
         userMessageText = requireUserMessageText(req.body?.userMessageText, "chat/stream");
         characterId = requireNonEmptyString(req.body?.characterId, "characterId", "chat/stream");
         conversationId = requireNonEmptyString(req.body?.conversationId, "conversationId", "chat/stream");
         llmResponseMode = resolveLlmResponseMode(req.body?.llmResponseMode, "chat/stream", "non-structured");
-        promptMode = resolvePromptMode(req.body?.promptMode, "chat/stream");
+        interactionMode = resolveInteractionMode(req.body?.interactionMode, "chat/stream");
         senderActorId = typeof req.body?.senderActorId === "string"
             ? req.body.senderActorId
             : undefined;
@@ -65,7 +65,7 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
             conversationId,
             userMessageText,
             llmResponseMode,
-            promptMode,
+            interactionMode,
             senderActorId,
             includeAssembledMessages: Boolean(req.body?.includeAssembledMessages),
             onAssembledMessages: (messages) => {

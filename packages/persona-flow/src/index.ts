@@ -20,4 +20,5 @@ export * from "./prompt/modes/singleCharacterChat/buildPromptViewModel.js";
 export * from "./structuredOutput/commonRoleplayTurnOutput.js";
 export * from "./llm/modelClient.js";
 export * from "./chatTurn/chatTurnService.js";
+export * from "./chatTurn/chatTurnPreparation.js";
 export * from "./chatTurn/personaFlowLogger.js";

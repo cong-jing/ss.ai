@@ -3,13 +3,13 @@ import {
     ApiUpsertApiKey,
     ApiDeleteApiKey,
     ApiTestApiKey,
-    ApiUpsertFunctionModel,
+    ApiUpsertModelAssignment,
     ApiListModels,
     type GetUserPreferenceResponse,
     type UpsertApiKeyResponse,
     type DeleteApiKeyResponse,
     type TestApiKeyResponse,
-    type UpsertFunctionModelResponse,
+    type UpsertModelAssignmentResponse,
     type ListModelsResponse
 } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
@@ -31,8 +31,8 @@ export async function apiTestApiKey(provider: string): Promise<TestApiKeyRespons
     return callApi(ApiTestApiKey, { provider });
 }
 
-export async function apiUpsertFunctionModel(fn: ModelCallPurpose, provider: string, model: string): Promise<UpsertFunctionModelResponse> {
-    return callApi(ApiUpsertFunctionModel, { modelCallPurpose: fn, provider, model });
+export async function apiUpsertModelAssignment(modelCallPurpose: ModelCallPurpose, provider: string, model: string): Promise<UpsertModelAssignmentResponse> {
+    return callApi(ApiUpsertModelAssignment, { modelCallPurpose, provider, model });
 }
 
 export async function apiListModels(provider: string): Promise<ListModelsResponse> {

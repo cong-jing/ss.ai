@@ -1,8 +1,11 @@
 export type UserProviderCredential = {
     userId: string;
     provider: string;
-    /** Field name retained for when encryption is added later. Currently stores plaintext. */
-    apiKeyEncrypted: string;
+    /**
+     * Encrypted API key payload.
+     * Current design uses this directly as the secret blob (not an indirection id).
+     */
+    encryptedApiKey: string;
     createdAt: string;
     updatedAt: string;
 };

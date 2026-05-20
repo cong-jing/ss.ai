@@ -1,20 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type {
-    ModelClient,
-    ModelClientFactoryInput,
-    PersonaPromptLogEntry,
-    UserPreferences,
-    UserProviderCredential,
-} from "../src/index.js";
-import { PersonaFlowModelService } from "../src/index.js";
+import type { AppStores, ModelClient, PersonaFlowPromptLogEntry, UserPreferences, UserProviderCredential } from "../src/index.js";
+import { ModelCallExecutor } from "../src/chatTurn/modelCallExecutor.js";
 
 class FakePreferencesStore {
     constructor(private readonly data: UserPreferences | null) { }
     async getUserPreferences(): Promise<UserPreferences | null> { return this.data; }
     async upsertUserPreferences(): Promise<void> { }
     async setCurrentCharacter(): Promise<void> { }
-    async setFunctionModel(): Promise<void> { }
+    async setModelAssignment(): Promise<void> { }
 }
 
 class FakeCredentialStore {
@@ -25,14 +19,24 @@ class FakeCredentialStore {
     async listCredentials(): Promise<UserProviderCredential[]> { return this.credential ? [this.credential] : []; }
 }
 
-describe("persona-flow model service", () => {
-    it("selects model by function name and passes config to client factory", async () => {
+function createStores(input: {
+    preferences: UserPreferences | null;
+    credential: UserProviderCredential | null;
+}): AppStores {
+    return {
+        userPreferences: new FakePreferencesStore(input.preferences),
+        providerCredential: new FakeCredentialStore(input.credential),
+    } as unknown as AppStores;
+}
+
+describe("model call executor", () => {
+    it("selects model by model-call purpose and passes runtime to model client", async () => {
         const now = new Date().toISOString();
         const prefs: UserPreferences = {
             userId: "u1",
-            functionModels: {
-                chat: { provider: "mistral", model: "chat-model" },
-                summarize: { provider: "mistral", model: "sum-model" },
+            modelAssignments: {
+                "chat.main": { provider: "mistral", model: "chat-model" },
+                "memory.summarize": { provider: "mistral", model: "sum-model" },
             },
             createdAt: now,
             updatedAt: now,
@@ -40,87 +44,104 @@ describe("persona-flow model service", () => {
         const credential: UserProviderCredential = {
             userId: "u1",
             provider: "mistral",
-            apiKeyEncrypted: "k",
+            encryptedApiKey: "k",
             createdAt: now,
             updatedAt: now,
         };
 
-        const capturedInputs: ModelClientFactoryInput[] = [];
-        const logs: PersonaPromptLogEntry[] = [];
+        const capturedInputs: Array<{ provider: string; model: string; encryptedApiKey: string }> = [];
+        const logs: PersonaFlowPromptLogEntry[] = [];
 
         const fakeClient: ModelClient = {
-            generateNonStructured: async () => ({ output: "ok", toolCalls: [] }),
+            generateNonStructured: async (input) => {
+                capturedInputs.push(input);
+                return { output: "ok", toolCalls: [] };
+            },
             generateNonStructuredStream: async () => ({ output: "", toolCalls: [], completed: true }),
-            generateStructured: async () => ({
-                structuredOutput: {
-                    action: "reply",
-                    replyText: "structured",
-                    control: {
-                        summarizeSuggested: false,
-                        summarizeReason: "",
-                        summarizeUrgency: "none",
+            generateStructured: async (input) => {
+                capturedInputs.push(input);
+                return {
+                    structuredOutput: {
+                        action: "reply",
+                        replyText: "structured",
+                        control: {
+                            summarizeSuggested: false,
+                            summarizeReason: "",
+                            summarizeUrgency: "none",
+                        },
+                        skip: {
+                            reasonCode: "none",
+                            reason: "",
+                        },
                     },
-                    skip: {
-                        reasonCode: "none",
-                        reason: "",
-                    },
-                },
-                toolCalls: [],
-            }),
+                    toolCalls: [],
+                };
+            },
             listModels: async () => ["m1"],
         };
 
-        const service = new PersonaFlowModelService({
-            userId: "u1",
-            userPreferencesStore: new FakePreferencesStore(prefs),
-            providerCredentialStore: new FakeCredentialStore(credential),
-            resolveProviderConfig: () => ({ provider: "mistral", apiUrl: "https://example.test" }),
-            createModelClient: (input) => {
-                capturedInputs.push(input);
-                return fakeClient;
-            },
-            timeoutMs: 1000,
-            onPromptLog: (entry) => {
-                logs.push(entry);
+        const executor = new ModelCallExecutor({
+            modelClient: fakeClient,
+            appStores: createStores({ preferences: prefs, credential }),
+            promptLogger: {
+                writePromptLog: async (entry) => {
+                    logs.push(entry);
+                },
             },
         });
 
-        const response = await service.chat({
+        const response = await executor.chat({
+            userId: "u1",
+            characterId: "c1",
             messages: [{ role: "user", content: "hello" }],
-            mode: "structured",
-            functionName: "summarize",
+            llmResponseMode: "structured",
+            modelCallPurpose: "memory.summarize",
         });
 
         assert.equal(response.output, "structured");
         assert.equal(capturedInputs[0].model, "sum-model");
         assert.equal(capturedInputs[0].provider, "mistral");
+        assert.equal(capturedInputs[0].encryptedApiKey, "k");
         assert.equal(logs.length, 1);
-        assert.match(logs[0].output, /"functionName": "summarize"/);
+        assert.match(logs[0].output, /"modelCallPurpose": "memory\.summarize"/);
     });
 
-    it("returns missing model config error", async () => {
+    it("returns missing model assignment error", async () => {
         const now = new Date().toISOString();
         const prefs: UserPreferences = {
             userId: "u1",
-            functionModels: {},
+            modelAssignments: {},
             createdAt: now,
             updatedAt: now,
         };
 
-        const service = new PersonaFlowModelService({
-            userId: "u1",
-            userPreferencesStore: new FakePreferencesStore(prefs),
-            providerCredentialStore: new FakeCredentialStore(null),
-            resolveProviderConfig: () => ({ provider: "mistral", apiUrl: "https://example.test" }),
-            createModelClient: () => {
+        const fakeClient: ModelClient = {
+            generateNonStructured: async () => {
                 throw new Error("should not be called");
             },
-            timeoutMs: 1000,
+            generateNonStructuredStream: async () => {
+                throw new Error("should not be called");
+            },
+            generateStructured: async () => {
+                throw new Error("should not be called");
+            },
+            listModels: async () => [],
+        };
+
+        const executor = new ModelCallExecutor({
+            modelClient: fakeClient,
+            appStores: createStores({ preferences: prefs, credential: null }),
+            promptLogger: { writePromptLog: async () => { } },
         });
 
         await assert.rejects(
-            () => service.ensureFunctionReady("chat"),
-            /Chat model is not configured/i,
+            () => executor.chat({
+                userId: "u1",
+                characterId: "c1",
+                messages: [{ role: "user", content: "hello" }],
+                modelCallPurpose: "chat.main",
+            }),
+            /Chat\.main model is not configured/i,
         );
     });
 });

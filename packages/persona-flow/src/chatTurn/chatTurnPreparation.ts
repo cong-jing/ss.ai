@@ -1,4 +1,4 @@
-import type { PromptMode } from "@ss-ai/contracts";
+import type { InteractionMode } from "@ss-ai/contracts";
 import type { PromptContext } from "../prompt/promptContext.js";
 import { PromptContextBuilder } from "../prompt/promptContext.js";
 import type { PromptRenderMode, RenderedPrompt } from "../prompt/promptRenderer.js";
@@ -93,7 +93,7 @@ export interface PrepareChatTurnInput {
     conversationId: string;
     userMessageText: string;
     llmResponseMode: PromptRenderMode;
-    promptMode?: PromptMode;
+    interactionMode?: InteractionMode;
     senderActorId?: unknown;
     persistUserMessage?: boolean;
     logger?: PersonaFlowLogger;
@@ -116,7 +116,7 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
         characterId: input.characterId,
         conversationId: input.conversationId,
         llmResponseMode: input.llmResponseMode,
-        promptMode: input.promptMode,
+        interactionMode: input.interactionMode,
         persistUserMessage,
         hasSenderActorId: typeof input.senderActorId === "string" && input.senderActorId.trim().length > 0,
     });
@@ -218,7 +218,7 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
 
     const rendered = await promptRenderer.render(promptContext, {
         mode: input.llmResponseMode,
-        promptMode: input.promptMode,
+        interactionMode: input.interactionMode,
     });
 
     logger.verbose("persona-flow/turn: prompt rendered", {

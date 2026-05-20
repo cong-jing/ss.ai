@@ -14,11 +14,11 @@ export const promptRenderer = {
     async render(context: PromptContext, options?: PromptRendererOptions): Promise<RenderedPrompt> {
         // const mode = options?.mode ?? "non-structured";
 
-        switch (options?.promptMode) {
+        switch (options?.interactionMode) {
             case "single_character_chat":
                 return renderSingleCharacterPrompt(context, options);
             default:
-                context.logger?.warn(`Unknown prompt mode "${options?.promptMode}", falling back to "single_character_chat"`);
+                context.logger?.warn(`Unknown interaction mode "${options?.interactionMode}", falling back to "single_character_chat"`);
                 return renderSingleCharacterPrompt(context, options);
         }
 

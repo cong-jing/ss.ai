@@ -1,4 +1,5 @@
-import type { ModelSelection, UserPreferences, UserPreferencesStore } from "@ss-ai/persona-flow";
+import type { ModelAssignment, ModelCallPurpose } from "@ss-ai/contracts";
+import type { UserPreferences, UserPreferencesStore } from "@ss-ai/persona-flow";
 
 export class InMemoryUserPreferencesStore implements UserPreferencesStore {
     private readonly store = new Map<string, UserPreferences>();
@@ -16,17 +17,17 @@ export class InMemoryUserPreferencesStore implements UserPreferencesStore {
         this.store.set(input.userId, { ...p, currentCharacterId: input.characterId, updatedAt: input.updatedAt });
     }
 
-    async setFunctionModel(input: { userId: string; functionName: string; selection: ModelSelection; updatedAt: string }): Promise<void> {
+    async setModelAssignment(input: { userId: string; modelCallPurpose: ModelCallPurpose; assignment: ModelAssignment; updatedAt: string }): Promise<void> {
         const p = this.store.get(input.userId) ?? this.#defaultPrefs(input.userId);
         this.store.set(input.userId, {
             ...p,
-            functionModels: { ...p.functionModels, [input.functionName]: input.selection },
+            modelAssignments: { ...p.modelAssignments, [input.modelCallPurpose]: input.assignment },
             updatedAt: input.updatedAt,
         });
     }
 
     #defaultPrefs(userId: string): UserPreferences {
         const now = new Date().toISOString();
-        return { userId, functionModels: {}, createdAt: now, updatedAt: now };
+        return { userId, modelAssignments: {}, createdAt: now, updatedAt: now };
     }
 }

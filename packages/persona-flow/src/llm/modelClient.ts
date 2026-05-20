@@ -6,7 +6,8 @@ export type GenerationMode = "non-structured" | "structured";
 export interface ModelGenerationInput {
     provider: string;
     model: string;
-    apiKey: string;
+    /** Encrypted API key payload passed through the pipeline. */
+    encryptedApiKey: string;
     messages: RenderedMessage[];
 }
 
@@ -54,14 +55,14 @@ export interface ModelClient {
     generateNonStructured(input: ModelGenerationInput): Promise<ModelGenerationResult>;
     generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult>;
     generateStructured(input: ModelGenerationInput): Promise<ModelStructuredResult>;
-    listModels(provider: string, apiKey: string): Promise<string[]>;
+    listModels(provider: string, encryptedApiKey: string): Promise<string[]>;
 }
 
 export interface ModelClientFactoryInput {
     provider: string;
     model: string;
     apiUrl: string;
-    apiKey: string;
+    encryptedApiKey: string;
     timeoutMs: number;
     maxRetries: number;
 }

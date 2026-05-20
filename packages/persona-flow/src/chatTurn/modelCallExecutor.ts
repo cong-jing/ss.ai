@@ -35,7 +35,7 @@ export interface PersonaChatResponse {
 export type ModelSelector =
     (userId: string, characterId: string, modelCallPurpose: ModelCallPurpose) => Promise<{ provider: string; model: string } | null>;
 export type ModelCredentialResolver =
-    (userId: string, provider: string) => Promise<{ apiKeyEncrypted: string } | null>;
+    (userId: string, provider: string) => Promise<{ encryptedApiKey: string } | null>;
 
 export interface PersonaFlowModelServiceDependencies {
     modelClient: ModelClient;
@@ -57,7 +57,7 @@ export class ModelCallExecutor {
         modelCallPurpose: ModelCallPurpose): Promise<{
             provider: string;
             model: string;
-            apiKey: string;
+            encryptedApiKey: string;
         }> {
         this.logger.verbose("persona-flow/model: resolving runtime", {
             userId: userId,
@@ -65,19 +65,11 @@ export class ModelCallExecutor {
             modelCallPurpose,
         });
         const prefs = await this.deps.appStores.userPreferences.getUserPreferences(userId);
-        const { provider, model } = prefs?.functionModels?.[modelCallPurpose] ?? {};
+        const { provider, model } = prefs?.modelAssignments?.[modelCallPurpose] ?? {};
 
-        // const fnModel = prefs?.functionModels?.[functionName];
-        // const fnModel = await this.deps.modelSelector(
-        //     this.deps.userId, this.deps.characterId, functionName as ModelCallPurpose);
         if (!provider || !model) {
-            throw new Error(`${this.toFunctionLabel(modelCallPurpose)} model is not configured. Please set it in Settings -> Model Assignment.`);
+            throw new Error(`${this.toPurposeLabel(modelCallPurpose)} model is not configured. Please set it in Settings -> Model Assignment.`);
         }
-
-        // const providerConfig = this.deps.resolveProviderConfig(fnModel.provider);
-        // if (!providerConfig) {
-        //     throw new Error(`Configured provider "${fnModel.provider}" is not available.`);
-        // }
 
         const credential = await this.deps.appStores.providerCredential.getCredential({
             userId: userId,
@@ -86,13 +78,6 @@ export class ModelCallExecutor {
         if (!credential) {
             throw new Error(`API key is not set for provider: ${provider}. userId: ${userId}`);
         }
-
-        // const client = this.deps.createModelClient({
-        //     provider: providerConfig.provider,
-        //     model: fnModel.model,
-        //     apiUrl: providerConfig.apiUrl,
-        //     apiKey: credential.apiKeyEncrypted,
-        // });
 
         this.logger.debug("persona-flow/model: runtime resolved", {
             userId: userId,
@@ -105,15 +90,15 @@ export class ModelCallExecutor {
         return {
             provider,
             model,
-            apiKey: credential.apiKeyEncrypted,
+            encryptedApiKey: credential.encryptedApiKey,
         };
     }
 
-    private toFunctionLabel(functionName: string): string {
-        if (!functionName) {
-            return "Function";
+    private toPurposeLabel(modelCallPurpose: string): string {
+        if (!modelCallPurpose) {
+            return "Model call purpose";
         }
-        return functionName.charAt(0).toUpperCase() + functionName.slice(1);
+        return modelCallPurpose.charAt(0).toUpperCase() + modelCallPurpose.slice(1);
     }
 
     private writePromptLog(
@@ -138,7 +123,7 @@ export class ModelCallExecutor {
             messages: request.messages,
             output: JSON.stringify({
                 mode: request.llmResponseMode ?? "non-structured",
-                functionName: request.modelCallPurpose ?? "chat",
+                modelCallPurpose: request.modelCallPurpose ?? "chat.main",
                 status: payload.status,
                 outputText: payload.outputText,
                 structuredOutput: payload.structuredOutput,
@@ -156,7 +141,7 @@ export class ModelCallExecutor {
     async chat(request: PersonaChatRequest): Promise<PersonaChatResponse> {
         const requestId = crypto.randomUUID();
         const llmResponseMode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
-        const { provider, model, apiKey } = await this.resolveProviderModelRuntime(
+        const { provider, model, encryptedApiKey } = await this.resolveProviderModelRuntime(
             request.userId,
             request.characterId,
             request.modelCallPurpose,
@@ -179,7 +164,7 @@ export class ModelCallExecutor {
                 const structuredResult = await this.deps.modelClient.generateStructured({
                     provider,
                     model,
-                    apiKey,
+                    encryptedApiKey,
                     messages: request.messages,
                 });
                 structuredOutput = structuredResult.structuredOutput;
@@ -192,7 +177,7 @@ export class ModelCallExecutor {
                 const result = await this.deps.modelClient.generateNonStructured({
                     provider,
                     model,
-                    apiKey,
+                    encryptedApiKey,
                     messages: request.messages,
                 });
                 output = result.output;
@@ -258,18 +243,18 @@ export class ModelCallExecutor {
     async chatStream(request: PersonaChatRequest & { onTextDelta?: (delta: string) => void }): Promise<PersonaChatResponse & ModelStreamResult> {
         const requestId = crypto.randomUUID();
         const mode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
-        const functionName = request.modelCallPurpose ?? "chat";
-        const { provider, model, apiKey } = await this.resolveProviderModelRuntime(
+        const modelCallPurpose = request.modelCallPurpose ?? "chat.main";
+        const { provider, model, encryptedApiKey } = await this.resolveProviderModelRuntime(
             request.userId,
             request.characterId,
-            functionName as ModelCallPurpose,
+            modelCallPurpose as ModelCallPurpose,
         );
 
         if (mode !== "non-structured") {
             this.logger.warn("persona-flow/model: chatStream called with unsupported mode", {
                 requestId,
                 mode,
-                functionName,
+                modelCallPurpose,
             });
             throw new Error("PersonaFlow chatStream currently supports only non-structured mode.");
         }
@@ -277,7 +262,7 @@ export class ModelCallExecutor {
         this.logger.verbose("persona-flow/model: chatStream request", {
             requestId,
             mode,
-            functionName,
+            modelCallPurpose,
             messages: request.messages,
         });
 
@@ -289,7 +274,7 @@ export class ModelCallExecutor {
                 {
                     provider,
                     model,
-                    apiKey,
+                    encryptedApiKey,
                     messages: request.messages,
                 },
                 {
@@ -297,7 +282,7 @@ export class ModelCallExecutor {
                     onToolCall: (toolCall) => {
                         this.logger.debug("persona-flow/model: stream tool call requested (TODO)", {
                             requestId,
-                            functionName,
+                            modelCallPurpose,
                             toolCall,
                         });
                     },
@@ -308,7 +293,7 @@ export class ModelCallExecutor {
             this.logger.error("persona-flow/model: chatStream failed", {
                 requestId,
                 mode,
-                functionName,
+                modelCallPurpose,
                 error: streamError,
             });
             throw err;
@@ -328,7 +313,7 @@ export class ModelCallExecutor {
             this.logger.error("persona-flow/model: chatStream missing stream result", {
                 requestId,
                 mode,
-                functionName,
+                modelCallPurpose,
             });
             throw new Error("PersonaFlow chatStream ended without a stream result.");
         }
@@ -336,7 +321,7 @@ export class ModelCallExecutor {
         this.logger.verbose("persona-flow/model: chatStream completed", {
             requestId,
             mode,
-            functionName,
+            modelCallPurpose,
             outputLength: streamResult.output.length,
             toolCallCount: streamResult.toolCalls.length,
             usage: streamResult.usage,
@@ -347,7 +332,7 @@ export class ModelCallExecutor {
         if (!streamResult.completed) {
             this.logger.warn("persona-flow/model: stream ended without completion marker", {
                 requestId,
-                functionName,
+                modelCallPurpose,
                 finishReason: streamResult.finishReason,
             });
         }

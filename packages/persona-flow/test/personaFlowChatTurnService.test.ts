@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { Character, Conversation, ConversationActor, PersonaFlowModelService, UserProfile } from "../src/index.js";
+import type { Character, Conversation, ConversationActor, ModelClient, UserProfile } from "../src/index.js";
 import { PersonaFlowChatTurnService } from "../src/index.js";
 import { createTestFixture } from "./helpers/inMemoryStores.js";
 
@@ -78,6 +78,25 @@ function createBaseData() {
     return { userId, characterId, conversationId, selfActorId, userActorId, character, conversation, selfActor, userActor, profile };
 }
 
+function seedModelRuntime(fixture: ReturnType<typeof createTestFixture>, userId: string): void {
+    const now = nowIso();
+    fixture.seed.userPreferences({
+        userId,
+        modelAssignments: {
+            "chat.main": { provider: "mistral", model: "m1" },
+        },
+        createdAt: now,
+        updatedAt: now,
+    });
+    fixture.seed.providerCredential({
+        userId,
+        provider: "mistral",
+        encryptedApiKey: "test-key",
+        createdAt: now,
+        updatedAt: now,
+    });
+}
+
 describe("persona-flow chat turn service", () => {
     it("chatTurn skips assistant append when structured output action=skip", async () => {
         const fixture = createTestFixture();
@@ -87,39 +106,34 @@ describe("persona-flow chat turn service", () => {
         fixture.seed.actor(base.selfActor);
         fixture.seed.actor(base.userActor);
         fixture.seed.userProfile(base.profile);
+        seedModelRuntime(fixture, base.userId);
+
+        const modelClient: ModelClient = {
+            generateNonStructured: async () => ({ output: "", toolCalls: [] }),
+            generateNonStructuredStream: async () => ({ output: "", toolCalls: [], completed: true }),
+            generateStructured: async () => ({
+                structuredOutput: {
+                    action: "skip",
+                    replyText: "",
+                    control: {
+                        summarizeSuggested: false,
+                        summarizeReason: "",
+                        summarizeUrgency: "none",
+                    },
+                    skip: {
+                        reasonCode: "other",
+                        reason: "test",
+                    },
+                },
+                toolCalls: [],
+            }),
+            listModels: async () => [],
+        };
 
         const service = new PersonaFlowChatTurnService({
             stores: fixture.stores,
-            getModelServiceForUser: async () => ({
-                chat: async () => ({
-                    requestId: "r1",
-                    model: "m1",
-                    mode: "structured",
-                    output: "",
-                    structuredOutput: {
-                        action: "skip",
-                        replyText: "",
-                        control: {
-                            summarizeSuggested: false,
-                            summarizeReason: "",
-                            summarizeUrgency: "none",
-                        },
-                        skip: {
-                            reasonCode: "other",
-                            reason: "test",
-                        },
-                    },
-                    toolCalls: [],
-                }),
-                chatStream: async () => ({
-                    requestId: "rs",
-                    model: "m1",
-                    mode: "non-structured",
-                    output: "",
-                    toolCalls: [],
-                    completed: true,
-                }),
-            }),
+            modelClient,
+            promptLogger: { writePromptLog: async () => { } },
         });
 
         const result = await service.chatTurn({
@@ -147,34 +161,32 @@ describe("persona-flow chat turn service", () => {
         fixture.seed.actor(base.selfActor);
         fixture.seed.actor(base.userActor);
         fixture.seed.userProfile(base.profile);
+        seedModelRuntime(fixture, base.userId);
 
         const seenChunks: string[] = [];
         const seenPrompts: Array<Array<{ role: "system" | "user" | "assistant"; content: string }>> = [];
 
+        const modelClient: ModelClient = {
+            generateNonStructured: async () => ({ output: "unused", toolCalls: [] }),
+            generateNonStructuredStream: async (_input, callbacks) => {
+                callbacks?.onTextDelta?.("p1[SS]: Hello ");
+                callbacks?.onTextDelta?.("World");
+                return {
+                    output: "p1[SS]: Hello World",
+                    toolCalls: [],
+                    completed: true,
+                };
+            },
+            generateStructured: async () => {
+                throw new Error("should not be called");
+            },
+            listModels: async () => [],
+        };
+
         const service = new PersonaFlowChatTurnService({
             stores: fixture.stores,
-            getModelServiceForUser: async () => ({
-                chat: async () => ({
-                    requestId: "r1",
-                    model: "m1",
-                    mode: "structured",
-                    output: "unused",
-                    toolCalls: [],
-                }),
-                chatStream: async (request) => {
-                    request.onTextDelta?.("p1[SS]: Hello ");
-                    request.onTextDelta?.("World");
-                    return {
-                        requestId: "rs",
-                        model: "m-stream",
-                        mode: "non-structured",
-                        output: "p1[SS]: Hello World",
-                        toolCalls: [],
-                        completed: true,
-                        streamCompleted: true,
-                    } as ReturnType<PersonaFlowModelService["chatStream"]> extends Promise<infer T> ? T : never;
-                },
-            }),
+            modelClient,
+            promptLogger: { writePromptLog: async () => { } },
         });
 
         const result = await service.streamTurn({
@@ -193,7 +205,7 @@ describe("persona-flow chat turn service", () => {
             },
         });
 
-        assert.equal(result.model, "m-stream");
+        assert.equal(result.model, "m1");
         assert.equal(result.output, "Hello World");
         assert.equal(seenChunks.join(""), "Hello World");
         assert.equal(seenPrompts.length, 1);
