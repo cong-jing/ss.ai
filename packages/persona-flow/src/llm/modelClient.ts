@@ -26,7 +26,7 @@ export interface ModelUsage {
     raw?: unknown;
 }
 
-export interface ModelGenerationResult {
+export interface ModelNonStructuredResult {
     output: string;
     toolCalls: ModelToolCall[];
     usage?: ModelUsage;
@@ -52,7 +52,7 @@ export interface ModelStreamResult {
 }
 
 export interface ModelClient {
-    generateNonStructured(input: ModelGenerationInput): Promise<ModelGenerationResult>;
+    generateNonStructured(input: ModelGenerationInput): Promise<ModelNonStructuredResult>;
     generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult>;
     generateStructured(input: ModelGenerationInput): Promise<ModelStructuredResult>;
     listModels(provider: string, encryptedApiKey: string): Promise<string[]>;

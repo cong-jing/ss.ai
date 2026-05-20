@@ -1,5 +1,12 @@
-import { ModelClient, ModelGenerationInput, ModelGenerationResult, ModelStreamCallbacks, ModelStreamResult, ModelStructuredResult } from "@ss-ai/persona-flow";
+import {
+    ModelClient,
+    ModelGenerationInput,
+    ModelNonStructuredResult,
+    ModelStreamCallbacks,
+    ModelStreamResult, ModelStructuredResult
+} from "@ss-ai/persona-flow";
 import { MistralModelClient } from "./mistral/mistralModelClient.js";
+import { ModelAdapter } from "./modelAdapter.js";
 
 export interface ProviderConfig {
     provider: string;
@@ -27,34 +34,36 @@ export class DefaultModelClient implements ModelClient {
         return encryptedApiKey;
     }
 
-    generateNonStructured(input: ModelGenerationInput): Promise<ModelGenerationResult> {
+    generateNonStructured(input: ModelGenerationInput): Promise<ModelNonStructuredResult> {
         const normalizedProvider = input.provider.toLowerCase();
-        const client = this.getModelAdapter(normalizedProvider, this.decryptApiKey(input.encryptedApiKey));
+        const client = this.getModelAdapter(normalizedProvider, input.encryptedApiKey);
         return client.generateNonStructured(input);
     }
     generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
         const normalizedProvider = input.provider.toLowerCase();
-        const client = this.getModelAdapter(normalizedProvider, this.decryptApiKey(input.encryptedApiKey));
+        const client = this.getModelAdapter(normalizedProvider, input.encryptedApiKey);
         return client.generateNonStructuredStream(input, callbacks);
     }
     generateStructured(input: ModelGenerationInput): Promise<ModelStructuredResult> {
         const normalizedProvider = input.provider.toLowerCase();
-        const client = this.getModelAdapter(normalizedProvider, this.decryptApiKey(input.encryptedApiKey));
+        const client = this.getModelAdapter(normalizedProvider, input.encryptedApiKey);
         return client.generateStructured(input);
     }
     listModels(provider: string, encryptedApiKey: string): Promise<string[]> {
-        const apiKey = this.decryptApiKey(encryptedApiKey);
-        const client = this.getModelAdapter(provider, apiKey);
-        return client.listModels(provider, apiKey);
+
+        const client = this.getModelAdapter(provider, encryptedApiKey);
+        return client.listModels();
     }
 
-    private getModelAdapter(provider: string, apiKey: string): ModelClient {
+    private getModelAdapter(provider: string, encryptedApiKey: string): ModelAdapter {
+        const apiKey = this.decryptApiKey(encryptedApiKey);
+
         const normalizedProvider = provider.toLowerCase();
         const config = this.getProviderConfig(provider);
 
         if (normalizedProvider === "mistral" || normalizedProvider === "mistral.ai") {
             return new MistralModelClient({
-                apiKey: apiKey,
+                apiKey,
                 apiUrl: config.apiUrl,
                 timeoutMs: this._timeoutMs,
                 maxRetries: this._maxRetries,

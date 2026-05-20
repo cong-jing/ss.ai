@@ -1,7 +1,7 @@
 import type {
     ModelClient,
     ModelGenerationInput,
-    ModelGenerationResult,
+    ModelNonStructuredResult,
     ModelStreamCallbacks,
     ModelStreamResult,
     ModelToolCall,
@@ -53,7 +53,7 @@ export class MistralModelClient implements ModelAdapter {
     }
 
 
-    async generateNonStructured(input: ModelGenerationInput): Promise<ModelGenerationResult> {
+    async generateNonStructured(input: ModelGenerationInput): Promise<ModelNonStructuredResult> {
         const client = await this.getClient();
 
         const response = await withTimeout(
