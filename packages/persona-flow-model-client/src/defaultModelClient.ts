@@ -3,7 +3,8 @@ import {
     ModelGenerationInput,
     ModelNonStructuredResult,
     ModelStreamCallbacks,
-    ModelStreamResult, ModelStructuredResult
+    ModelStreamResult, ModelStructuredResult,
+    PersonaFlowLogger
 } from "@ss-ai/persona-flow";
 import { MistralModelClient } from "./mistral/mistralModelClient.js";
 import { ModelAdapter } from "./modelAdapter.js";
@@ -14,7 +15,7 @@ export interface ProviderConfig {
 }
 
 export class DefaultModelClient implements ModelClient {
-
+    private readonly _logger?: PersonaFlowLogger;
     private _maxRetries: number = 0;
     private _timeoutMs: number = 0;
     private _providerConfig: Record<string, ProviderConfig>;
@@ -23,10 +24,13 @@ export class DefaultModelClient implements ModelClient {
         providerConfigs: Record<string, ProviderConfig>;
         timeoutMs: number;
         maxRetries?: number;
+        logger?: PersonaFlowLogger;
     }) {
         this._providerConfig = configs.providerConfigs;
         this._timeoutMs = configs.timeoutMs;
         this._maxRetries = configs.maxRetries ?? 0;
+        this._logger = configs.logger;
+        this._logger?.info(`Initialized DefaultModelClient with providers: ${Object.keys(this._providerConfig).join(", ")}`);
     }
 
     private decryptApiKey(encryptedApiKey: string): string {
@@ -67,6 +71,7 @@ export class DefaultModelClient implements ModelClient {
                 apiUrl: config.apiUrl,
                 timeoutMs: this._timeoutMs,
                 maxRetries: this._maxRetries,
+                logger: this._logger,
             });
         }
 

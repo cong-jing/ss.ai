@@ -67,7 +67,7 @@ export function resolveInteractionMode(value: unknown, endpoint: string): Intera
 }
 
 export async function createChatTurnService(context: HttpApiContext): Promise<PersonaFlowChatTurnService> {
-    //const modelService = await createChatModelService(userId, context);
+
     const promptLogger = new PromptLogger(context.config.promptLog);
     return new PersonaFlowChatTurnService({
         stores: context.stores,
@@ -77,6 +77,7 @@ export async function createChatTurnService(context: HttpApiContext): Promise<Pe
             providerConfigs: context.config.models,
             timeoutMs: context.config.agent.timeoutMs,
             maxRetries: context.config.agent.maxRetries,
+            logger: context.logger,
         }),
     });
 }

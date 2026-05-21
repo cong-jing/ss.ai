@@ -20,6 +20,7 @@ async function listModelsForProvider(context: HttpApiContext, provider: string):
         providerConfigs: context.config.models,
         timeoutMs: context.config.agent.timeoutMs,
         maxRetries: context.config.agent.maxRetries,
+        logger: context.logger,
     });
     const models = await client.listModels(provider, credential.encryptedApiKey);
     return models.sort();
@@ -100,7 +101,13 @@ async function testApiKey(
     }
 
     try {
-        const models = await listModelsForProvider(context, provider);
+        const client = new DefaultModelClient({
+            providerConfigs: context.config.models,
+            timeoutMs: context.config.agent.timeoutMs,
+            maxRetries: context.config.agent.maxRetries,
+            logger: context.logger,
+        });
+        const models = await client.listModels(provider, credential.encryptedApiKey);
         return { provider, ok: true, message: `${models.length} model(s) available` };
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);

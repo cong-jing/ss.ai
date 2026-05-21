@@ -6,6 +6,7 @@ import type {
     ModelStreamResult,
     ModelToolCall,
     ModelUsage,
+    PersonaFlowLogger,
 } from "@ss-ai/persona-flow";
 import type { Mistral as MistralSDKClient } from "@mistralai/mistralai";
 import {
@@ -28,6 +29,7 @@ interface MistralModelClientOptions {
     apiUrl: string;
     timeoutMs: number;
     maxRetries?: number;
+    logger?: PersonaFlowLogger;
 }
 
 export class MistralModelClient implements ModelAdapter {
@@ -172,6 +174,8 @@ export class MistralModelClient implements ModelAdapter {
         const client = await this.getClient();
         const response = await client.models.list();
         const items = Array.isArray(response?.data) ? response.data : [];
+
+        this.options.logger?.debug(`Fetched ${items.length} models from Mistral`, { rawResponse: response });
 
         const names = items
             .map((item) => {

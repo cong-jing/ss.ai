@@ -62,15 +62,6 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             updated_at              TEXT NOT NULL
         );
 
-        CREATE TABLE IF NOT EXISTS user_provider_credentials (
-            user_id           TEXT NOT NULL,
-            provider          TEXT NOT NULL,
-            api_key_ciphertext TEXT NOT NULL,
-            created_at        TEXT NOT NULL,
-            updated_at        TEXT NOT NULL,
-            PRIMARY KEY (user_id, provider)
-        );
-
         CREATE TABLE IF NOT EXISTS conversations (
             id           TEXT PRIMARY KEY,
             user_id      TEXT NOT NULL,
@@ -115,6 +106,19 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             ON conversation_actors(conversation_id)
     `);
 
+    // Prototype stage: force canonical credential table schema on every boot.
+    sqlite.exec(`
+        DROP TABLE IF EXISTS user_provider_credentials;
+        CREATE TABLE user_provider_credentials (
+            user_id            TEXT NOT NULL,
+            provider           TEXT NOT NULL,
+            api_key_ciphertext TEXT NOT NULL,
+            created_at         TEXT NOT NULL,
+            updated_at         TEXT NOT NULL,
+            PRIMARY KEY (user_id, provider)
+        );
+    `);
+
     // Create the latest messages table for fresh databases.
     sqlite.exec(`
         CREATE TABLE IF NOT EXISTS messages (
@@ -132,7 +136,7 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN language TEXT DEFAULT 'zh-CN'`); } catch { /* already exists */ }
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN interaction_mode TEXT NOT NULL DEFAULT '${DEFAULT_INTERACTION_MODE}'`); } catch { /* already exists */ }
     try { sqlite.exec(`ALTER TABLE user_preferences ADD COLUMN model_assignments_json TEXT NOT NULL DEFAULT '{}'`); } catch { /* already exists */ }
-    try { sqlite.exec(`ALTER TABLE user_provider_credentials ADD COLUMN api_key_ciphertext TEXT NOT NULL DEFAULT ''`); } catch { /* already exists */ }
+    // No compatibility migration for provider credentials in prototype mode.
 
     // Recreate messages table when legacy columns exist or required columns are missing.
     const messageColumns = sqlite.prepare(`PRAGMA table_info('messages')`).all() as Array<{ name: string }>;
