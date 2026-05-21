@@ -1,21 +1,10 @@
 <script setup lang="ts">
-import type { Character, InteractionMode } from "@ss-ai/contracts";
+import { INTERACTION_MODE_I18N_KEYS, type Character, type InteractionMode } from "@ss-ai/contracts";
 import { useLocalStorage } from "../../../shared/ui/useLocalStorage";
 import { t } from "../../../shared/i18n/i18n";
 
 function interactionModeLabel(mode: InteractionMode): string {
-  switch (mode) {
-    case "single_character_chat":
-      return t("interactionMode.single_character_chat");
-    case "multi_character_event_log":
-      return t("interactionMode.multi_character_event_log");
-    case "dm_narrator":
-      return t("interactionMode.dm_narrator");
-    case "live_chat":
-      return t("interactionMode.live_chat");
-    default:
-      return mode;
-  }
+  return t(INTERACTION_MODE_I18N_KEYS[mode]);
 }
 
 const props = defineProps<{

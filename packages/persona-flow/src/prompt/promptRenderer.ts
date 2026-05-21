@@ -1,6 +1,7 @@
 import type { PromptContext } from "./promptContext.js";
 import type { PromptRendererOptions, RenderedMessage, RenderedPrompt } from "./promptTypes.js";
 import { renderPrompt as renderSingleCharacterPrompt } from "./modes/singleCharacterChat/renderPrompt.js";
+import { InteractionModeValue } from "@ss-ai/contracts";
 
 export type {
     RenderedMessage,
@@ -15,10 +16,12 @@ export const promptRenderer = {
         // const mode = options?.mode ?? "non-structured";
 
         switch (options?.interactionMode) {
-            case "single_character_chat":
+            case InteractionModeValue.singleCharacterChat:
                 return renderSingleCharacterPrompt(context, options);
             default:
-                context.logger?.warn(`Unknown interaction mode "${options?.interactionMode}", falling back to "single_character_chat"`);
+                context.logger?.warn(
+                    `Unknown interaction mode "${options?.interactionMode}", falling back to "${InteractionModeValue.singleCharacterChat}"`,
+                );
                 return renderSingleCharacterPrompt(context, options);
         }
 
