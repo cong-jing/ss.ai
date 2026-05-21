@@ -1,29 +1,10 @@
+import type { ChatStructuredOutput } from "@ss-ai/contracts";
+
 export type ChatRole = "user" | "assistant" | "system" | "debug";
 
 export interface DebugMessage {
     role: string;
     content: string;
-}
-
-export interface StructuredDecisionPayload {
-    action: "reply" | "skip";
-    replyText: string;
-    control: {
-        summarizeSuggested: boolean;
-        summarizeReason: string;
-        summarizeUrgency: "none" | "low" | "normal" | "high";
-    };
-    skip: {
-        reasonCode:
-        | "none"
-        | "not_addressed"
-        | "low_value"
-        | "rate_control"
-        | "character_busy"
-        | "waiting_for_others"
-        | "other";
-        reason: string;
-    };
 }
 
 export interface ChatMessage {
@@ -38,6 +19,6 @@ export interface ChatMessage {
     debugMessages?: DebugMessage[];
     /** Assembled LLM input messages attached when sent with includeAssembledMessages=true */
     assembledMessages?: DebugMessage[];
-    structuredDecision?: StructuredDecisionPayload;
+    structuredOutput?: ChatStructuredOutput;
     deleting?: boolean;
 }

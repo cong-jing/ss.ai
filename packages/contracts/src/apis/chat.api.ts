@@ -25,33 +25,16 @@ export interface ChatResponse {
     requestId: string;
     /** ID of the appended user message. */
     userMessageId: string;
-    /** ID of the appended assistant message. Undefined when this turn is skipped. */
+    /** ID of the appended assistant message. Undefined when no assistant message was appended. */
     assistantMessageId?: string;
-    /** Structured decision payload from non-structured/structured dual-mode pipeline. */
+    /** Structured payload returned by the chat model call. */
     structuredOutput?: ChatStructuredOutput;
     /** Assembled LLM input messages, only present when request included `includeAssembledMessages: true`. */
     assembledMessages?: ChatDryRunMessage[];
 }
 
 export interface ChatStructuredOutput {
-    action: "reply" | "skip";
     replyText: string;
-    control: {
-        summarizeSuggested: boolean;
-        summarizeReason: string;
-        summarizeUrgency: "none" | "low" | "normal" | "high";
-    };
-    skip: {
-        reasonCode:
-        | "none"
-        | "not_addressed"
-        | "low_value"
-        | "rate_control"
-        | "character_busy"
-        | "waiting_for_others"
-        | "other";
-        reason: string;
-    };
 }
 
 export interface ChatStreamRequest {

@@ -1,8 +1,6 @@
-import type { InteractionMode } from "@ss-ai/contracts";
+import type { InteractionMode, LlmResponseMode } from "@ss-ai/contracts";
 import type { PromptContext } from "../prompt/promptContext.js";
 import { PromptContextBuilder } from "../prompt/promptContext.js";
-import type { PromptRenderMode, RenderedPrompt } from "../prompt/promptRenderer.js";
-import { promptRenderer } from "../prompt/promptRenderer.js";
 import type { AppStores } from "../stores/appStores.js";
 import type { Message } from "../stores/chat/message.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
@@ -56,43 +54,13 @@ async function ensureUserActor(
     return added.id;
 }
 
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function stripRepeatedPrefix(text: string, regex: RegExp): string {
-    let output = text;
-    while (regex.test(output)) {
-        output = output.replace(regex, "");
-    }
-    return output;
-}
-
-export function normalizeAssistantOutput(output: string, names: Array<string | null | undefined>): string {
-    let normalized = output.trimStart();
-    normalized = stripRepeatedPrefix(normalized, /^p\d+\[[^\]]+\]\s*[:：]\s*/u);
-
-    const uniqueNames = Array.from(new Set(
-        names
-            .map(name => (typeof name === "string" ? name.trim() : ""))
-            .filter(Boolean),
-    ));
-
-    for (const name of uniqueNames) {
-        const escapedName = escapeRegExp(name);
-        normalized = stripRepeatedPrefix(normalized, new RegExp(`^${escapedName}\\s*[:：]\\s*`, "u"));
-    }
-
-    return normalized;
-}
-
 export interface PrepareChatTurnInput {
     stores: AppStores;
     userId: string;
     characterId: string;
     conversationId: string;
     userMessageText: string;
-    llmResponseMode: PromptRenderMode;
+    llmResponseMode: LlmResponseMode;
     interactionMode?: InteractionMode;
     senderActorId?: unknown;
     persistUserMessage?: boolean;
@@ -104,7 +72,6 @@ export interface PreparedChatTurn {
     senderActorId: string;
     userMessage: Message;
     promptContext: PromptContext;
-    rendered: RenderedPrompt;
 }
 
 export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promise<PreparedChatTurn> {
@@ -216,14 +183,9 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
         conversationActorStore: input.stores.conversationActor,
     });
 
-    const rendered = await promptRenderer.render(promptContext, {
-        mode: input.llmResponseMode,
-        interactionMode: input.interactionMode,
-    });
-
-    logger.verbose("persona-flow/turn: prompt rendered", {
+    logger.verbose("persona-flow/turn: context prepared", {
         conversationId: input.conversationId,
-        renderedMessageCount: rendered.messages.length,
+        recentMessageCount: promptContext.recentMessages.length,
     });
 
     return {
@@ -231,6 +193,5 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
         senderActorId: resolvedSenderActorId,
         userMessage,
         promptContext,
-        rendered,
     };
 }

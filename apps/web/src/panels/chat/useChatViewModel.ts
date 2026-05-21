@@ -1,5 +1,5 @@
 import { ref, watch } from "vue";
-import { DEFAULT_INTERACTION_MODE } from "@ss-ai/contracts";
+import { DEFAULT_INTERACTION_MODE, type ChatStructuredOutput } from "@ss-ai/contracts";
 import { apiDryRunChat, apiSendChatMessage, apiStreamChatMessage, apiGetMessages, apiDeleteMessage } from "./chatApi";
 import type { ChatMessage } from "./chatTypes";
 import { contextVersion } from "../../shared/state/appState";
@@ -16,38 +16,11 @@ function createId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function toStructuredDecisionDebugMessages(structuredOutput: {
-    action: "reply" | "skip";
-    replyText: string;
-    control: {
-        summarizeSuggested: boolean;
-        summarizeReason: string;
-        summarizeUrgency: "none" | "low" | "normal" | "high";
-    };
-    skip: {
-        reasonCode: "none" | "not_addressed" | "low_value" | "rate_control" | "character_busy" | "waiting_for_others" | "other";
-        reason: string;
-    };
-}): import("./chatTypes").DebugMessage[] {
+function toStructuredOutputDebugMessages(structuredOutput: ChatStructuredOutput): import("./chatTypes").DebugMessage[] {
     return [
         {
-            role: "decision",
-            content: JSON.stringify(
-                {
-                    action: structuredOutput.action,
-                    replyText: structuredOutput.replyText,
-                },
-                null,
-                2,
-            ),
-        },
-        {
-            role: "control",
-            content: JSON.stringify(structuredOutput.control, null, 2),
-        },
-        {
-            role: "skip",
-            content: JSON.stringify(structuredOutput.skip, null, 2),
+            role: "structuredOutput",
+            content: JSON.stringify(structuredOutput, null, 2),
         },
     ];
 }
@@ -161,8 +134,8 @@ export function useChatViewModel() {
                     content: "",
                     createdAt: new Date().toISOString(),
                     status: "normal",
-                    debugMessages: toStructuredDecisionDebugMessages(response.structuredOutput),
-                    structuredDecision: response.structuredOutput,
+                    debugMessages: toStructuredOutputDebugMessages(response.structuredOutput),
+                    structuredOutput: response.structuredOutput,
                 });
                 showDebug.value = true;
             }

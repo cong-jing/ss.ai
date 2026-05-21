@@ -47,7 +47,7 @@ export const enUS = {
     "chat.message.viewAssembledInput": "View Assembled Input",
     "chat.message.hideAssembledInput": "Hide Assembled Input",
     "chat.message.promptPreview": "Prompt Preview",
-    "chat.message.structuredDecision": "Structured Decision",
+    "chat.message.structuredOutput": "Structured Output",
     "chat.message.countMessages": "{count} messages",
     "chat.source.logged_user": "logged user",
     "chat.source.local_actor": "local actor",

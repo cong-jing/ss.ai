@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { AppStores, ModelClient, PersonaFlowPromptLogEntry, UserPreferences, UserProviderCredential } from "../src/index.js";
-import { ModelCallExecutor } from "../src/chatTurn/modelCallExecutor.js";
+import { ModelRuntime } from "../src/modelCall/modelRuntime.js";
 
 class FakePreferencesStore {
     constructor(private readonly data: UserPreferences | null) { }
@@ -29,7 +29,7 @@ function createStores(input: {
     } as unknown as AppStores;
 }
 
-describe("model call executor", () => {
+describe("model runtime", () => {
     it("selects model by model-call purpose and passes runtime to model client", async () => {
         const now = new Date().toISOString();
         const prefs: UserPreferences = {
@@ -62,17 +62,7 @@ describe("model call executor", () => {
                 capturedInputs.push(input);
                 return {
                     structuredOutput: {
-                        action: "reply",
                         replyText: "structured",
-                        control: {
-                            summarizeSuggested: false,
-                            summarizeReason: "",
-                            summarizeUrgency: "none",
-                        },
-                        skip: {
-                            reasonCode: "none",
-                            reason: "",
-                        },
                     },
                     toolCalls: [],
                 };
@@ -80,7 +70,7 @@ describe("model call executor", () => {
             listModels: async () => ["m1"],
         };
 
-        const executor = new ModelCallExecutor({
+        const executor = new ModelRuntime({
             modelClient: fakeClient,
             appStores: createStores({ preferences: prefs, credential }),
             promptLogger: {
@@ -128,7 +118,7 @@ describe("model call executor", () => {
             listModels: async () => [],
         };
 
-        const executor = new ModelCallExecutor({
+        const executor = new ModelRuntime({
             modelClient: fakeClient,
             appStores: createStores({ preferences: prefs, credential: null }),
             promptLogger: { writePromptLog: async () => { } },

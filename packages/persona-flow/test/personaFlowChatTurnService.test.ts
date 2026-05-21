@@ -98,7 +98,7 @@ function seedModelRuntime(fixture: ReturnType<typeof createTestFixture>, userId:
 }
 
 describe("persona-flow chat turn service", () => {
-    it("chatTurn skips assistant append when structured output action=skip", async () => {
+    it("chatTurn appends assistant reply from single-character structured output", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -113,17 +113,7 @@ describe("persona-flow chat turn service", () => {
             generateNonStructuredStream: async () => ({ output: "", toolCalls: [], completed: true }),
             generateStructured: async () => ({
                 structuredOutput: {
-                    action: "skip",
-                    replyText: "",
-                    control: {
-                        summarizeSuggested: false,
-                        summarizeReason: "",
-                        summarizeUrgency: "none",
-                    },
-                    skip: {
-                        reasonCode: "other",
-                        reason: "test",
-                    },
+                    replyText: "SS: hello back",
                 },
                 toolCalls: [],
             }),
@@ -145,12 +135,13 @@ describe("persona-flow chat turn service", () => {
             senderActorId: base.userActorId,
         });
 
-        assert.equal(result.output, "");
-        assert.equal(result.assistantMessageId, undefined);
+        assert.equal(result.output, "hello back");
+        assert.ok(result.assistantMessageId);
 
         const messages = fixture.inspect.messages(base.conversationId);
         const assistantMessages = messages.filter(message => message.senderActorId === base.selfActorId);
-        assert.equal(assistantMessages.length, 0);
+        assert.equal(assistantMessages.length, 1);
+        assert.equal(assistantMessages[0].content, "hello back");
     });
 
     it("streamTurn emits normalized chunks and persists assistant message", async () => {
@@ -168,18 +159,15 @@ describe("persona-flow chat turn service", () => {
 
         const modelClient: ModelClient = {
             generateNonStructured: async () => ({ output: "unused", toolCalls: [] }),
-            generateNonStructuredStream: async (_input, callbacks) => {
-                callbacks?.onTextDelta?.("p1[SS]: Hello ");
-                callbacks?.onTextDelta?.("World");
-                return {
-                    output: "p1[SS]: Hello World",
-                    toolCalls: [],
-                    completed: true,
-                };
-            },
-            generateStructured: async () => {
+            generateNonStructuredStream: async () => {
                 throw new Error("should not be called");
             },
+            generateStructured: async () => ({
+                structuredOutput: {
+                    replyText: "SS: Hello World",
+                },
+                toolCalls: [],
+            }),
             listModels: async () => [],
         };
 

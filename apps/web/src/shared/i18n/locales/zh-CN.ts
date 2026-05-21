@@ -49,7 +49,7 @@ export const zhCN: MessageSchema = {
     "chat.message.viewAssembledInput": "查看组装输入",
     "chat.message.hideAssembledInput": "隐藏组装输入",
     "chat.message.promptPreview": "Prompt 预览",
-    "chat.message.structuredDecision": "结构化决策",
+    "chat.message.structuredOutput": "结构化输出",
     "chat.message.countMessages": "{count} 条消息",
     "chat.source.logged_user": "登录用户",
     "chat.source.local_actor": "本地 actor",

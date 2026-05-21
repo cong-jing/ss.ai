@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { Character, Conversation, ConversationActor, UserProfile } from "../src/index.js";
 import { PersonaFlowTurnError, prepareChatTurnContext } from "../src/index.js";
 import { createTestFixture } from "./helpers/inMemoryStores.js";
+import { singleCharacterChatCall } from "../src/modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.js";
 
 function nowIso(): string {
     return new Date().toISOString();
@@ -171,9 +172,12 @@ describe("persona-flow chat turn preparation", () => {
             persistUserMessage: false,
         });
 
-        assert.equal(
-            prepared.rendered.messages.some(message => message.content.includes(assistantMessageContent)),
-            true,
-        );
+        const modelCall = await singleCharacterChatCall.prepare({
+            promptContext: prepared.promptContext,
+            llmResponseMode: "structured",
+            interactionMode: "single_character_chat",
+        });
+
+        assert.equal(modelCall.messages.some(message => message.content.includes(assistantMessageContent)), true);
     });
 });

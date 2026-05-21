@@ -1,5 +1,4 @@
 import type {
-    CommonRoleplayTurnOutput,
     ModelGenerationInput,
     ModelStructuredResult,
     ModelToolCall,
@@ -53,7 +52,7 @@ export function extractText(response: unknown): string {
     throw new Error("Mistral response did not contain text content.");
 }
 
-export function extractStructuredOutput(response: unknown): CommonRoleplayTurnOutput {
+export function extractStructuredOutput(response: unknown): unknown {
     const responseWithChoices = response as {
         choices?: Array<{
             message?: {

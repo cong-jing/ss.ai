@@ -1,4 +1,3 @@
-import type { CommonRoleplayTurnOutput } from "../structuredOutput/commonRoleplayTurnOutput.js";
 import type { RenderedMessage } from "../prompt/promptTypes.js";
 
 export type GenerationMode = "non-structured" | "structured";
@@ -33,7 +32,7 @@ export interface ModelNonStructuredResult {
 }
 
 export interface ModelStructuredResult {
-    structuredOutput: CommonRoleplayTurnOutput;
+    structuredOutput: unknown;
     toolCalls: ModelToolCall[];
     usage?: ModelUsage;
 }

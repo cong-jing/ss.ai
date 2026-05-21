@@ -1,10 +1,11 @@
-import type { PromptRenderMode } from "../prompt/promptRenderer.js";
-import type { InteractionMode } from "@ss-ai/contracts";
+import type { InteractionMode, LlmResponseMode } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
-import { normalizeAssistantOutput, prepareChatTurnContext } from "./chatTurnPreparation.js";
-import { createNoopPersonaFlowLogger, PersonaFlowPromptLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
-import { PersonaChatResponse, ModelCallExecutor } from "./modelCallExecutor.js";
-import { ModelClient } from "../index.js";
+import { prepareChatTurnContext } from "./chatTurnPreparation.js";
+import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "./personaFlowLogger.js";
+import type { ModelClient } from "../llm/modelClient.js";
+import { runModelCall } from "../modelCall/modelCall.js";
+import { resolveModelCall } from "../modelCall/modelCallRegistry.js";
+import { ModelRuntime } from "../modelCall/modelRuntime.js";
 
 export interface PersonaFlowChatTurnServiceDependencies {
     stores: AppStores;
@@ -18,7 +19,7 @@ export interface PersonaChatTurnRequest {
     characterId: string;
     conversationId: string;
     userMessageText: string;
-    llmResponseMode: PromptRenderMode;
+    llmResponseMode: LlmResponseMode;
     interactionMode?: InteractionMode;
     senderActorId?: unknown;
     includeAssembledMessages?: boolean;
@@ -29,7 +30,7 @@ export interface PersonaDryRunTurnRequest {
     characterId: string;
     conversationId: string;
     userMessageText: string;
-    llmResponseMode: PromptRenderMode;
+    llmResponseMode: LlmResponseMode;
     interactionMode?: InteractionMode;
     senderActorId?: unknown;
 }
@@ -49,11 +50,11 @@ export interface PersonaStreamTurnRequest {
 
 export class PersonaFlowChatTurnService {
     private readonly logger: PersonaFlowLogger;
-    private readonly modelCallExecutor: ModelCallExecutor;
+    private readonly modelRuntime: ModelRuntime;
 
     constructor(private readonly deps: PersonaFlowChatTurnServiceDependencies) {
         this.logger = deps.logger ?? createNoopPersonaFlowLogger();
-        this.modelCallExecutor = new ModelCallExecutor({
+        this.modelRuntime = new ModelRuntime({
             modelClient: deps.modelClient,
             appStores: deps.stores,
             logger: this.logger,
@@ -82,13 +83,22 @@ export class PersonaFlowChatTurnService {
             persistUserMessage: false,
             logger: this.logger,
         });
+        const modelCall = resolveModelCall({
+            purpose: "chat.main",
+            interactionMode: input.interactionMode,
+        });
+        const modelCallPrepared = await modelCall.prepare({
+            promptContext: prepared.promptContext,
+            llmResponseMode: input.llmResponseMode,
+            interactionMode: input.interactionMode,
+        });
 
         this.logger.verbose("persona-flow/chat-turn: dry-run prepared", {
             conversationId: input.conversationId,
-            renderedMessageCount: prepared.rendered.messages.length,
+            renderedMessageCount: modelCallPrepared.messages.length,
         });
 
-        return { messages: prepared.rendered.messages };
+        return { messages: modelCallPrepared.messages };
     }
 
     async chatTurn(input: PersonaChatTurnRequest): Promise<{
@@ -97,7 +107,7 @@ export class PersonaFlowChatTurnService {
         output: string;
         userMessageId: string;
         assistantMessageId?: string;
-        structuredOutput?: PersonaChatResponse["structuredOutput"];
+        structuredOutput?: unknown;
         assembledMessages?: Array<{ role: "system" | "user" | "assistant"; content: string }>;
     }> {
         this.logger.debug("persona-flow/chat-turn: chat requested", {
@@ -107,6 +117,14 @@ export class PersonaFlowChatTurnService {
             llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
         });
+
+        if (input.llmResponseMode !== "structured") {
+            // TODO: decide whether chat.main/singleCharacterChat should support non-structured mode.
+            this.logger.warn("persona-flow/chat-turn: non-structured chat requested; using structured model call", {
+                conversationId: input.conversationId,
+                requestedMode: input.llmResponseMode,
+            });
+        }
 
         const prepared = await prepareChatTurnContext({
             stores: this.deps.stores,
@@ -120,42 +138,38 @@ export class PersonaFlowChatTurnService {
             persistUserMessage: true,
             logger: this.logger,
         });
-
-        const response = await this.modelCallExecutor.chat({
+        const modelCall = resolveModelCall({
+            purpose: "chat.main",
+            interactionMode: input.interactionMode,
+        });
+        const callResult = await runModelCall({
+            modelCall,
+            runtime: this.modelRuntime,
             userId: input.userId,
             characterId: input.characterId,
-            messages: prepared.rendered.messages,
+            promptContext: prepared.promptContext,
             llmResponseMode: input.llmResponseMode,
-            modelCallPurpose: "chat.main",
+            interactionMode: input.interactionMode,
         });
-
-        const selfActor = prepared.promptContext.actorMap.get(prepared.selfActorId);
-        const normalizedAssistantOutput = normalizeAssistantOutput(response.output, [
-            selfActor?.displayName,
-            prepared.promptContext.character?.displayName,
-            prepared.promptContext.character?.name,
-        ]);
-
-        const shouldSkip = input.llmResponseMode === "structured" && (
-            response.structuredOutput?.action === "skip"
-            || normalizedAssistantOutput.trim().length === 0
-        );
-
-        if (shouldSkip) {
-            this.logger.debug("persona-flow/chat-turn: assistant message skipped", {
-                requestId: response.requestId,
+        if (callResult.turnResult.kind === "noReply") {
+            this.logger.debug("persona-flow/chat-turn: assistant message not appended", {
+                requestId: callResult.response.requestId,
                 conversationId: input.conversationId,
-                reason: response.structuredOutput?.action === "skip" ? "structured-skip" : "empty-output",
+                reason: callResult.turnResult.reason,
             });
             return {
-                requestId: response.requestId,
-                model: response.model,
+                requestId: callResult.response.requestId,
+                model: callResult.response.model,
                 output: "",
                 userMessageId: prepared.userMessage.id,
-                ...(response.structuredOutput ? { structuredOutput: response.structuredOutput } : {}),
-                ...(input.includeAssembledMessages ? { assembledMessages: prepared.rendered.messages } : {}),
+                structuredOutput: callResult.turnResult.structuredOutput,
+                ...(input.includeAssembledMessages ? { assembledMessages: callResult.prepared.messages } : {}),
             };
         }
+        if (callResult.turnResult.kind !== "assistantReply") {
+            throw new Error(`Unsupported turn result kind for chat.main: ${callResult.turnResult.kind}`);
+        }
+        const normalizedAssistantOutput = callResult.turnResult.text;
 
         const assistantMessageId = crypto.randomUUID();
         await this.deps.stores.chat.appendMessage({
@@ -167,19 +181,19 @@ export class PersonaFlowChatTurnService {
         });
 
         this.logger.verbose("persona-flow/chat-turn: assistant message appended", {
-            requestId: response.requestId,
+            requestId: callResult.response.requestId,
             conversationId: input.conversationId,
             assistantMessageId,
         });
 
         return {
-            requestId: response.requestId,
-            model: response.model,
+            requestId: callResult.response.requestId,
+            model: callResult.response.model,
             output: normalizedAssistantOutput,
             userMessageId: prepared.userMessage.id,
             assistantMessageId,
-            ...(response.structuredOutput ? { structuredOutput: response.structuredOutput } : {}),
-            ...(input.includeAssembledMessages ? { assembledMessages: prepared.rendered.messages } : {}),
+            structuredOutput: callResult.turnResult.structuredOutput,
+            ...(input.includeAssembledMessages ? { assembledMessages: callResult.prepared.messages } : {}),
         };
     }
 
@@ -201,6 +215,8 @@ export class PersonaFlowChatTurnService {
             interactionMode: input.interactionMode,
         });
 
+        // TODO: decide whether chat.main/singleCharacterChat supports streaming.
+        // For now stream requests use the structured model call and emit the full reply once.
         const prepared = await prepareChatTurnContext({
             stores: this.deps.stores,
             userId: input.userId,
@@ -213,51 +229,27 @@ export class PersonaFlowChatTurnService {
             persistUserMessage: true,
             logger: this.logger,
         });
-
-        const selfActor = prepared.promptContext.actorMap.get(prepared.selfActorId);
-        const normalizeNames = [
-            selfActor?.displayName,
-            prepared.promptContext.character?.displayName,
-            prepared.promptContext.character?.name,
-        ];
-
-        let rawAccumulatedOutput = "";
-        let normalizedSentLength = 0;
-
-        if (input.includeAssembledMessages) {
-            input.onAssembledMessages?.(prepared.rendered.messages);
-        }
-        const streamResponse = await this.modelCallExecutor.chatStream({
+        const modelCall = resolveModelCall({
+            purpose: "chat.main",
+            interactionMode: input.interactionMode,
+        });
+        const callResult = await runModelCall({
+            modelCall,
+            runtime: this.modelRuntime,
             userId: input.userId,
             characterId: input.characterId,
-            messages: prepared.rendered.messages,
+            promptContext: prepared.promptContext,
             llmResponseMode: input.llmResponseMode,
-            modelCallPurpose: "chat.main",
-            onTextDelta: (rawDelta: string) => {
-                rawAccumulatedOutput += rawDelta;
-                const normalizedSoFar = normalizeAssistantOutput(rawAccumulatedOutput, normalizeNames);
-                if (normalizedSoFar.length <= normalizedSentLength) {
-                    return;
-                }
-                const chunk = normalizedSoFar.slice(normalizedSentLength);
-                normalizedSentLength = normalizedSoFar.length;
-                this.logger.verbose("persona-flow/chat-turn: stream chunk emitted", {
-                    conversationId: input.conversationId,
-                    chunkLength: chunk.length,
-                });
-                input.onChunk?.(chunk);
-            },
+            interactionMode: input.interactionMode,
         });
-
-        const fullResponse = normalizeAssistantOutput(streamResponse.output, normalizeNames);
-        if (fullResponse.length > normalizedSentLength) {
-            const tail = fullResponse.slice(normalizedSentLength);
-            this.logger.verbose("persona-flow/chat-turn: stream tail emitted", {
-                conversationId: input.conversationId,
-                chunkLength: tail.length,
-            });
-            input.onChunk?.(tail);
+        if (input.includeAssembledMessages) {
+            input.onAssembledMessages?.(callResult.prepared.messages);
         }
+        if (callResult.turnResult.kind !== "assistantReply") {
+            throw new Error(`Unsupported stream turn result kind for chat.main: ${callResult.turnResult.kind}`);
+        }
+        const fullResponse = callResult.turnResult.text;
+        input.onChunk?.(fullResponse);
 
         const assistantMessageId = crypto.randomUUID();
         await this.deps.stores.chat.appendMessage({
@@ -268,31 +260,21 @@ export class PersonaFlowChatTurnService {
             createdAt: new Date().toISOString(),
         });
 
-        this.logger.verbose("persona-flow/chat-turn: stream assistant message appended", {
-            requestId: streamResponse.requestId,
+        this.logger.verbose("persona-flow/chat-turn: structured fallback assistant message appended for stream request", {
+            requestId: callResult.response.requestId,
             conversationId: input.conversationId,
             assistantMessageId,
-            streamCompleted: streamResponse.streamCompleted ?? streamResponse.completed,
-            streamFinishReason: streamResponse.streamFinishReason ?? streamResponse.finishReason,
         });
 
-        if (!(streamResponse.streamCompleted ?? streamResponse.completed)) {
-            this.logger.warn("persona-flow/chat-turn: stream ended without completion", {
-                requestId: streamResponse.requestId,
-                conversationId: input.conversationId,
-                finishReason: streamResponse.streamFinishReason ?? streamResponse.finishReason,
-            });
-        }
-
         return {
-            requestId: streamResponse.requestId,
-            model: streamResponse.model,
+            requestId: callResult.response.requestId,
+            model: callResult.response.model,
             output: fullResponse,
             userMessageId: prepared.userMessage.id,
             assistantMessageId,
-            ...(input.includeAssembledMessages ? { assembledMessages: prepared.rendered.messages } : {}),
-            streamCompleted: streamResponse.streamCompleted ?? streamResponse.completed,
-            streamFinishReason: streamResponse.streamFinishReason ?? streamResponse.finishReason,
+            ...(input.includeAssembledMessages ? { assembledMessages: callResult.prepared.messages } : {}),
+            streamCompleted: true,
         };
     }
+
 }

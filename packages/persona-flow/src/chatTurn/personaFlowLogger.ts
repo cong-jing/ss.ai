@@ -1,5 +1,4 @@
-import { info } from "node:console";
-import { RenderedMessage } from "../prompt/promptTypes.js";
+import type { RenderedMessage } from "../prompt/promptTypes.js";
 
 export interface PersonaFlowLogger {
     debug(message: string, payload?: unknown): void;

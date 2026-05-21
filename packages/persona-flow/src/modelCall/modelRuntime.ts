@@ -1,4 +1,3 @@
-import type { CommonRoleplayTurnOutput } from "../structuredOutput/commonRoleplayTurnOutput.js";
 import type { RenderedMessage } from "../prompt/promptTypes.js";
 import type {
     GenerationMode as LlmResponseMode,
@@ -7,11 +6,11 @@ import type {
     ModelUsage,
     ModelStreamResult,
 } from "../llm/modelClient.js";
-import { createNoopPersonaFlowLogger, PersonaFlowPromptLogger, type PersonaFlowLogger } from "./personaFlowLogger.js";
-import { ModelCallPurpose } from "@ss-ai/contracts";
-import { AppStores } from "../stores/appStores.js";
+import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "../chatTurn/personaFlowLogger.js";
+import type { ModelCallPurpose } from "@ss-ai/contracts";
+import type { AppStores } from "../stores/appStores.js";
 
-export interface PersonaChatRequest {
+export interface PersonaModelRequest {
     userId: string;
     characterId: string;
     messages: RenderedMessage[];
@@ -19,35 +18,37 @@ export interface PersonaChatRequest {
     llmResponseMode?: LlmResponseMode;
 }
 
-export interface PersonaChatResponse {
+export interface PersonaModelResponse {
     output: string;
     model: string;
     requestId: string;
     llmResponseMode: LlmResponseMode;
-    structuredOutput?: CommonRoleplayTurnOutput;
+    structuredOutput?: unknown;
     toolCalls: ModelToolCall[];
     usage?: ModelUsage;
     streamCompleted?: boolean;
     streamFinishReason?: string;
 }
 
-
-export type ModelSelector =
-    (userId: string, characterId: string, modelCallPurpose: ModelCallPurpose) => Promise<{ provider: string; model: string } | null>;
-export type ModelCredentialResolver =
-    (userId: string, provider: string) => Promise<{ encryptedApiKey: string } | null>;
-
-export interface PersonaFlowModelServiceDependencies {
+export interface PersonaModelRuntimeDependencies {
     modelClient: ModelClient;
     appStores: AppStores;
     promptLogger: PersonaFlowPromptLogger;
     logger?: PersonaFlowLogger;
 }
 
-export class ModelCallExecutor {
+function extractStructuredOutputText(output: unknown): string {
+    if (!output || typeof output !== "object") {
+        return "";
+    }
+    const replyText = (output as { replyText?: unknown }).replyText;
+    return typeof replyText === "string" ? replyText : "";
+}
+
+export class ModelRuntime {
     private readonly logger: PersonaFlowLogger;
 
-    constructor(private readonly deps: PersonaFlowModelServiceDependencies) {
+    constructor(private readonly deps: PersonaModelRuntimeDependencies) {
         this.logger = deps.logger ?? createNoopPersonaFlowLogger();
     }
 
@@ -103,12 +104,12 @@ export class ModelCallExecutor {
 
     private writePromptLog(
         requestId: string,
-        request: PersonaChatRequest,
+        request: PersonaModelRequest,
         model: string,
         payload: {
             status: "completed" | "failed";
             outputText: string;
-            structuredOutput?: CommonRoleplayTurnOutput;
+            structuredOutput?: unknown;
             toolCalls: ModelToolCall[];
             usage?: ModelUsage;
             streamCompleted?: boolean;
@@ -138,7 +139,7 @@ export class ModelCallExecutor {
         });
     }
 
-    async chat(request: PersonaChatRequest): Promise<PersonaChatResponse> {
+    async chat(request: PersonaModelRequest): Promise<PersonaModelResponse> {
         const requestId = crypto.randomUUID();
         const llmResponseMode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
         const { provider, model, encryptedApiKey } = await this.resolveProviderModelRuntime(
@@ -155,7 +156,7 @@ export class ModelCallExecutor {
         });
 
         let output = "";
-        let structuredOutput: CommonRoleplayTurnOutput | undefined;
+        let structuredOutput: unknown;
         let toolCalls: ModelToolCall[] = [];
         let usage: ModelUsage | undefined;
 
@@ -170,9 +171,7 @@ export class ModelCallExecutor {
                 structuredOutput = structuredResult.structuredOutput;
                 toolCalls = structuredResult.toolCalls;
                 usage = structuredResult.usage;
-                output = structuredOutput.action === "reply"
-                    ? structuredOutput.replyText
-                    : "";
+                output = extractStructuredOutputText(structuredOutput);
             } else {
                 const result = await this.deps.modelClient.generateNonStructured({
                     provider,
@@ -240,7 +239,7 @@ export class ModelCallExecutor {
         };
     }
 
-    async chatStream(request: PersonaChatRequest & { onTextDelta?: (delta: string) => void }): Promise<PersonaChatResponse & ModelStreamResult> {
+    async chatStream(request: PersonaModelRequest & { onTextDelta?: (delta: string) => void }): Promise<PersonaModelResponse & ModelStreamResult> {
         const requestId = crypto.randomUUID();
         const mode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
         const modelCallPurpose = request.modelCallPurpose ?? "chat.main";
