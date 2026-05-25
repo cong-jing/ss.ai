@@ -1,4 +1,10 @@
-import { ModelNonStructuredResult, ModelStreamCallbacks, ModelStreamResult, ModelStructuredResult } from "@ss-ai/persona-flow";
+import type {
+    ModelNonStructuredResult,
+    ModelStreamCallbacks,
+    ModelStreamResult,
+    ModelStructuredResult,
+    StructuredOutputSchema,
+} from "@ss-ai/persona-flow";
 
 
 export interface ModelAdapter {
@@ -16,6 +22,7 @@ export interface ModelAdapter {
         model: string;
         messages: unknown[];
         encryptedApiKey: string;
+        structuredOutputSchema?: StructuredOutputSchema;
     }): Promise<ModelStructuredResult>;
     listModels(): Promise<string[]>;
 }

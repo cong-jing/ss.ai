@@ -1,12 +1,13 @@
 import type { InteractionMode, LlmResponseMode, ModelCallPurpose } from "@ss-ai/contracts";
 import type { PromptContext } from "../prompt/promptContext.js";
 import type { RenderedMessage } from "../prompt/promptTypes.js";
-import type { ModelToolCall } from "../llm/modelClient.js";
+import type { ModelToolCall, StructuredOutputSchema } from "../llm/modelClient.js";
 import type { ModelRuntime, PersonaModelResponse } from "./modelRuntime.js";
 
 export type ModelCallPreparedRequest = {
     messages: RenderedMessage[];
     llmResponseMode: LlmResponseMode;
+    structuredOutputSchema?: StructuredOutputSchema;
 };
 
 export type ModelCallTurnResult =

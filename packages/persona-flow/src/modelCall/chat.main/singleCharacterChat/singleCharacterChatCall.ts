@@ -5,48 +5,19 @@ import type { PromptContext } from "../../../prompt/promptContext.js";
 import type { RenderedMessage } from "../../../prompt/promptTypes.js";
 import { renderPromptTemplate } from "../../../prompt/renderPromptTemplate.js";
 import { buildPromptViewModel } from "./promptViewModel.js";
+import {
+    parseSingleCharacterChatOutput,
+    singleCharacterChatStructuredOutputSchema,
+    type SingleCharacterChatOutput,
+} from "./singleCharacterChatOutput.js";
+
+export type { SingleCharacterChatOutput } from "./singleCharacterChatOutput.js";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const SYSTEM_TEMPLATE_PATH = resolve(
     __dir,
     "../../../../data/modelCall/chat.main/singleCharacterChat/system.zh-CN.md.hbs",
 );
-
-export type SingleCharacterChatOutput = {
-    replyText: string;
-};
-
-export type PreparedSingleCharacterChatCall = {
-    messages: RenderedMessage[];
-};
-
-async function prepareSingleCharacterChatMainCall(
-    context: PromptContext,
-): Promise<PreparedSingleCharacterChatCall> {
-    const systemPrompt = await renderSystemPrompt(context);
-    return {
-        messages: [
-            ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
-            ...buildConversationMessages(context),
-        ],
-    };
-}
-
-function parseSingleCharacterChatOutput(output: unknown): SingleCharacterChatOutput {
-    if (!output || typeof output !== "object") {
-        throw new Error("singleCharacterChat output must be an object.");
-    }
-
-    const replyText = (output as { replyText?: unknown }).replyText;
-    if (typeof replyText !== "string") {
-        throw new Error("singleCharacterChat output.replyText must be a string.");
-    }
-    if (replyText.trim().length === 0) {
-        throw new Error("singleCharacterChat output.replyText must not be empty.");
-    }
-
-    return { replyText };
-}
 
 function normalizeSingleCharacterReply(
     replyText: string,
@@ -69,14 +40,6 @@ function normalizeSingleCharacterReply(
     }
 
     return normalized;
-}
-
-async function renderSystemPrompt(context: PromptContext): Promise<string> {
-    const viewModel = buildPromptViewModel({
-        character: context.character,
-        userProfile: context.userProfile,
-    });
-    return (await renderPromptTemplate(SYSTEM_TEMPLATE_PATH, viewModel)).trim();
 }
 
 function buildConversationMessages(context: PromptContext): RenderedMessage[] {
@@ -124,10 +87,21 @@ function stripRepeatedPrefix(text: string, regex: RegExp): string {
 export const singleCharacterChatCall: ModelCall<SingleCharacterChatOutput> = {
     purpose: "chat.main",
     async run(input): Promise<ModelCallRunResult<SingleCharacterChatOutput>> {
-        const modelCall = await prepareSingleCharacterChatMainCall(input.promptContext);
+        const viewModel = buildPromptViewModel({
+            character: input.promptContext.character,
+            userProfile: input.promptContext.userProfile,
+        });
+        const systemPrompt = (await renderPromptTemplate(SYSTEM_TEMPLATE_PATH, viewModel)).trim();
+
+        const messages: RenderedMessage[] = [
+            ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
+            ...buildConversationMessages(input.promptContext),
+        ];
+
         const prepared: ModelCallPreparedRequest = {
-            messages: modelCall.messages,
+            messages,
             llmResponseMode: "structured",
+            structuredOutputSchema: singleCharacterChatStructuredOutputSchema,
         };
 
         if (input.dryRun) {
@@ -140,6 +114,7 @@ export const singleCharacterChatCall: ModelCall<SingleCharacterChatOutput> = {
             messages: prepared.messages,
             llmResponseMode: prepared.llmResponseMode,
             modelCallPurpose: this.purpose,
+            structuredOutputSchema: prepared.structuredOutputSchema,
         });
 
         const parsedOutput = parseSingleCharacterChatOutput(response.structuredOutput);

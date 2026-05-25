@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { AppStores, ModelClient, PersonaFlowPromptLogEntry, UserPreferences, UserProviderCredential } from "../src/index.js";
+import type {
+    AppStores,
+    ModelClient,
+    PersonaFlowPromptLogEntry,
+    StructuredOutputSchema,
+    UserPreferences,
+    UserProviderCredential,
+} from "../src/index.js";
 import { ModelRuntime } from "../src/modelCall/modelRuntime.js";
 
 class FakePreferencesStore {
@@ -49,8 +56,28 @@ describe("model runtime", () => {
             updatedAt: now,
         };
 
-        const capturedInputs: Array<{ provider: string; model: string; encryptedApiKey: string }> = [];
+        const capturedInputs: Array<{
+            provider: string;
+            model: string;
+            encryptedApiKey: string;
+            structuredOutputSchema?: StructuredOutputSchema;
+        }> = [];
         const logs: PersonaFlowPromptLogEntry[] = [];
+        const structuredOutputSchema: StructuredOutputSchema = {
+            type: "json_schema",
+            jsonSchema: {
+                name: "memory_summarize_output",
+                schemaDefinition: {
+                    type: "object",
+                    properties: {
+                        replyText: { type: "string" },
+                    },
+                    required: ["replyText"],
+                    additionalProperties: false,
+                },
+                strict: true,
+            },
+        };
 
         const fakeClient: ModelClient = {
             generateNonStructured: async (input) => {
@@ -86,12 +113,14 @@ describe("model runtime", () => {
             messages: [{ role: "user", content: "hello" }],
             llmResponseMode: "structured",
             modelCallPurpose: "memory.summarize",
+            structuredOutputSchema,
         });
 
         assert.equal(response.output, "structured");
         assert.equal(capturedInputs[0].model, "sum-model");
         assert.equal(capturedInputs[0].provider, "mistral");
         assert.equal(capturedInputs[0].encryptedApiKey, "k");
+        assert.equal(capturedInputs[0].structuredOutputSchema, structuredOutputSchema);
         assert.equal(logs.length, 1);
         assert.match(logs[0].output, /"modelCallPurpose": "memory\.summarize"/);
     });

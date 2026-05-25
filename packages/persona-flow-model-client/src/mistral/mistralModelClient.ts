@@ -18,7 +18,6 @@ import {
     normalizeToolCall,
     toSdkMessages,
 } from "./messageTransforms.js";
-import { mistralStructuredOutputSchema } from "./structuredOutputSchema.js";
 import { withTimeout } from "./timeout.js";
 import { ModelAdapter } from "../modelAdapter.js";
 
@@ -156,13 +155,17 @@ export class MistralModelClient implements ModelAdapter {
 
     async generateStructured(input: ModelGenerationInput) {
         const client = await this.getClient();
+        if (!input.structuredOutputSchema) {
+            throw new Error("Mistral structured request requires structuredOutputSchema.");
+        }
+        const request = {
+            model: input.model,
+            messages: toSdkMessages(input),
+            responseFormat: input.structuredOutputSchema,
+        } as Parameters<typeof client.chat.complete>[0];
 
         const response = await withTimeout(
-            client.chat.parse({
-                model: input.model,
-                messages: toSdkMessages(input),
-                responseFormat: mistralStructuredOutputSchema,
-            }),
+            client.chat.complete(request),
             this.options.timeoutMs,
             "Mistral structured request",
         );

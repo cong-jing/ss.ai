@@ -2,6 +2,7 @@ import type { RenderedMessage } from "../prompt/promptTypes.js";
 import type {
     GenerationMode as LlmResponseMode,
     ModelClient,
+    StructuredOutputSchema,
     ModelToolCall,
     ModelUsage,
     ModelStreamResult,
@@ -16,6 +17,7 @@ export interface PersonaModelRequest {
     messages: RenderedMessage[];
     modelCallPurpose: ModelCallPurpose;
     llmResponseMode?: LlmResponseMode;
+    structuredOutputSchema?: StructuredOutputSchema;
 }
 
 export interface PersonaModelResponse {
@@ -167,6 +169,7 @@ export class ModelRuntime {
                     model,
                     encryptedApiKey,
                     messages: request.messages,
+                    structuredOutputSchema: request.structuredOutputSchema,
                 });
                 structuredOutput = structuredResult.structuredOutput;
                 toolCalls = structuredResult.toolCalls;

@@ -21,6 +21,7 @@ export * from "./prompt/speakerTag.js";
 export * from "./modelCall/modelCall.js";
 export * from "./modelCall/modelCallRegistry.js";
 export * from "./modelCall/chat.main/singleCharacterChat/promptViewModel.js";
+export * from "./modelCall/chat.main/singleCharacterChat/singleCharacterChatOutput.js";
 export * from "./modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.js";
 export * from "./modelCall/modelRuntime.js";
 export * from "./llm/modelClient.js";

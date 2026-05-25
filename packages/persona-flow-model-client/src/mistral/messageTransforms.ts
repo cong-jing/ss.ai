@@ -4,7 +4,6 @@ import type {
     ModelToolCall,
     ModelUsage,
 } from "@ss-ai/persona-flow";
-import { mistralStructuredOutputSchema } from "./structuredOutputSchema.js";
 
 export function toSdkMessages(input: ModelGenerationInput) {
     return input.messages.map(m => ({
@@ -64,20 +63,16 @@ export function extractStructuredOutput(response: unknown): unknown {
 
     const message = responseWithChoices.choices?.[0]?.message;
     const parsedCandidate = message?.parsed;
-    if (parsedCandidate) {
-        const parsed = mistralStructuredOutputSchema.safeParse(parsedCandidate);
-        if (parsed.success) {
-            return parsed.data;
-        }
+    if (parsedCandidate !== undefined) {
+        return parsedCandidate;
     }
 
     const content = message?.content;
     if (typeof content === "string" && content.trim()) {
-        const parsedJson = JSON.parse(content);
-        return mistralStructuredOutputSchema.parse(parsedJson);
+        return JSON.parse(content);
     }
 
-    throw new Error("Mistral structured response did not contain parsable JSON content.");
+    throw new Error("Mistral structured response did not contain parsed or JSON content.");
 }
 
 export function extractTextDelta(content: unknown): string {
