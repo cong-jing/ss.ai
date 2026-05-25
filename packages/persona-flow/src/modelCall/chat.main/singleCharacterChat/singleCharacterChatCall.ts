@@ -1,6 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ModelCall, ModelCallPreparedRequest, ModelCallTurnResult } from "../../modelCall.js";
+import type { ModelCall, ModelCallPreparedRequest, ModelCallRunResult, ModelCallTurnResult } from "../../modelCall.js";
 import type { PromptContext } from "../../../prompt/promptContext.js";
 import type { RenderedMessage } from "../../../prompt/promptTypes.js";
 import { renderPromptTemplate } from "../../../prompt/renderPromptTemplate.js";
@@ -123,37 +123,62 @@ function stripRepeatedPrefix(text: string, regex: RegExp): string {
 
 export const singleCharacterChatCall: ModelCall<SingleCharacterChatOutput> = {
     purpose: "chat.main",
-    async prepare(input): Promise<ModelCallPreparedRequest> {
+    async run(input): Promise<ModelCallRunResult<SingleCharacterChatOutput>> {
         const modelCall = await prepareSingleCharacterChatMainCall(input.promptContext);
-
-        return {
+        const prepared: ModelCallPreparedRequest = {
             messages: modelCall.messages,
             llmResponseMode: "structured",
         };
-    },
-    parse(input): SingleCharacterChatOutput {
-        return parseSingleCharacterChatOutput(input.response.structuredOutput);
-    },
-    toTurnResult(input): ModelCallTurnResult {
-        const selfActor = Array.from(input.promptContext.actorMap.values()).find(actor => actor.role === "self");
-        const replyText = normalizeSingleCharacterReply(input.parsedOutput.replyText, [
-            selfActor?.displayName,
-            input.promptContext.character?.displayName,
-            input.promptContext.character?.name,
-        ]);
 
-        if (replyText.trim().length === 0) {
-            return {
-                kind: "noReply",
-                reason: "empty-output",
-                structuredOutput: input.parsedOutput,
-            };
+        if (input.dryRun) {
+            return { prepared };
         }
 
+        const response = await input.runtime.chat({
+            userId: input.userId,
+            characterId: input.characterId,
+            messages: prepared.messages,
+            llmResponseMode: prepared.llmResponseMode,
+            modelCallPurpose: this.purpose,
+        });
+
+        const parsedOutput = parseSingleCharacterChatOutput(response.structuredOutput);
+        const turnResult = toSingleCharacterChatTurnResult({
+            parsedOutput,
+            promptContext: input.promptContext,
+        });
+
         return {
-            kind: "assistantReply",
-            text: replyText,
-            structuredOutput: input.parsedOutput,
+            prepared,
+            response,
+            parsedOutput,
+            turnResult,
         };
     },
 };
+
+function toSingleCharacterChatTurnResult(input: {
+    parsedOutput: SingleCharacterChatOutput;
+    promptContext: PromptContext;
+}): ModelCallTurnResult {
+    const selfActor = Array.from(input.promptContext.actorMap.values()).find(actor => actor.role === "self");
+    const replyText = normalizeSingleCharacterReply(input.parsedOutput.replyText, [
+        selfActor?.displayName,
+        input.promptContext.character?.displayName,
+        input.promptContext.character?.name,
+    ]);
+
+    if (replyText.trim().length === 0) {
+        return {
+            kind: "noReply",
+            reason: "empty-output",
+            structuredOutput: input.parsedOutput,
+        };
+    }
+
+    return {
+        kind: "assistantReply",
+        text: replyText,
+        structuredOutput: input.parsedOutput,
+    };
+}

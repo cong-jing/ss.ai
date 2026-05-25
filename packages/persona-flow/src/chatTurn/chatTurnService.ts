@@ -3,7 +3,6 @@ import type { AppStores } from "../stores/appStores.js";
 import { prepareChatTurnContext } from "./chatTurnPreparation.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "./personaFlowLogger.js";
 import type { ModelClient } from "../llm/modelClient.js";
-import { runModelCall } from "../modelCall/modelCall.js";
 import { resolveModelCall } from "../modelCall/modelCallRegistry.js";
 import { ModelRuntime } from "../modelCall/modelRuntime.js";
 
@@ -87,18 +86,22 @@ export class PersonaFlowChatTurnService {
             purpose: "chat.main",
             interactionMode: input.interactionMode,
         });
-        const modelCallPrepared = await modelCall.prepare({
+        const dryRunResult = await modelCall.run({
+            runtime: this.modelRuntime,
+            userId: input.userId,
+            characterId: input.characterId,
             promptContext: prepared.promptContext,
             llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
+            dryRun: true,
         });
 
         this.logger.verbose("persona-flow/chat-turn: dry-run prepared", {
             conversationId: input.conversationId,
-            renderedMessageCount: modelCallPrepared.messages.length,
+            renderedMessageCount: dryRunResult.prepared.messages.length,
         });
 
-        return { messages: modelCallPrepared.messages };
+        return { messages: dryRunResult.prepared.messages };
     }
 
     async chatTurn(input: PersonaChatTurnRequest): Promise<{
@@ -142,8 +145,7 @@ export class PersonaFlowChatTurnService {
             purpose: "chat.main",
             interactionMode: input.interactionMode,
         });
-        const callResult = await runModelCall({
-            modelCall,
+        const callResult = await modelCall.run({
             runtime: this.modelRuntime,
             userId: input.userId,
             characterId: input.characterId,
@@ -151,6 +153,9 @@ export class PersonaFlowChatTurnService {
             llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
         });
+        if (!callResult.response || !callResult.turnResult) {
+            throw new Error("Model call must return response and turnResult for chat turn.");
+        }
         if (callResult.turnResult.kind === "noReply") {
             this.logger.debug("persona-flow/chat-turn: assistant message not appended", {
                 requestId: callResult.response.requestId,
@@ -233,8 +238,7 @@ export class PersonaFlowChatTurnService {
             purpose: "chat.main",
             interactionMode: input.interactionMode,
         });
-        const callResult = await runModelCall({
-            modelCall,
+        const callResult = await modelCall.run({
             runtime: this.modelRuntime,
             userId: input.userId,
             characterId: input.characterId,
@@ -242,6 +246,9 @@ export class PersonaFlowChatTurnService {
             llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
         });
+        if (!callResult.response || !callResult.turnResult) {
+            throw new Error("Model call must return response and turnResult for stream turn.");
+        }
         if (input.includeAssembledMessages) {
             input.onAssembledMessages?.(callResult.prepared.messages);
         }

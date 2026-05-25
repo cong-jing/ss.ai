@@ -172,12 +172,20 @@ describe("persona-flow chat turn preparation", () => {
             persistUserMessage: false,
         });
 
-        const modelCall = await singleCharacterChatCall.prepare({
+        const modelCall = await singleCharacterChatCall.run({
+            runtime: {
+                async chat() {
+                    throw new Error("chat should not be called for dryRun");
+                },
+            } as never,
+            userId: base.userId,
+            characterId: base.characterId,
             promptContext: prepared.promptContext,
             llmResponseMode: "structured",
             interactionMode: "single_character_chat",
+            dryRun: true,
         });
 
-        assert.equal(modelCall.messages.some(message => message.content.includes(assistantMessageContent)), true);
+        assert.equal(modelCall.prepared.messages.some(message => message.content.includes(assistantMessageContent)), true);
     });
 });

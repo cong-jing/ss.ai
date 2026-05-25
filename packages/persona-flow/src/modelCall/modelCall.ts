@@ -26,71 +26,24 @@ export type ModelCallTurnResult =
         structuredOutput?: unknown;
     };
 
-export interface ModelCall<TParsedOutput = unknown> {
-    purpose: ModelCallPurpose;
-    prepare(input: {
-        promptContext: PromptContext;
-        llmResponseMode: LlmResponseMode;
-        interactionMode?: InteractionMode;
-    }): Promise<ModelCallPreparedRequest>;
-    parse(input: {
-        response: PersonaModelResponse;
-        prepared: ModelCallPreparedRequest;
-        promptContext: PromptContext;
-    }): TParsedOutput;
-    toTurnResult(input: {
-        response: PersonaModelResponse;
-        parsedOutput: TParsedOutput;
-        prepared: ModelCallPreparedRequest;
-        promptContext: PromptContext;
-    }): ModelCallTurnResult;
-}
-
-export async function runModelCall<TParsedOutput>(input: {
-    modelCall: ModelCall<TParsedOutput>;
+export type ModelCallRunInput = {
     runtime: ModelRuntime;
     userId: string;
     characterId: string;
     promptContext: PromptContext;
     llmResponseMode: LlmResponseMode;
     interactionMode?: InteractionMode;
-}): Promise<{
+    dryRun?: boolean;
+};
+
+export type ModelCallRunResult<TParsedOutput = unknown> = {
     prepared: ModelCallPreparedRequest;
-    response: PersonaModelResponse;
-    parsedOutput: TParsedOutput;
-    turnResult: ModelCallTurnResult;
-}> {
-    const prepared = await input.modelCall.prepare({
-        promptContext: input.promptContext,
-        llmResponseMode: input.llmResponseMode,
-        interactionMode: input.interactionMode,
-    });
+    response?: PersonaModelResponse;
+    parsedOutput?: TParsedOutput;
+    turnResult?: ModelCallTurnResult;
+};
 
-    const response = await input.runtime.chat({
-        userId: input.userId,
-        characterId: input.characterId,
-        messages: prepared.messages,
-        llmResponseMode: prepared.llmResponseMode,
-        modelCallPurpose: input.modelCall.purpose,
-    });
-
-    const parsedOutput = input.modelCall.parse({
-        response,
-        prepared,
-        promptContext: input.promptContext,
-    });
-
-    const turnResult = input.modelCall.toTurnResult({
-        response,
-        parsedOutput,
-        prepared,
-        promptContext: input.promptContext,
-    });
-
-    return {
-        prepared,
-        response,
-        parsedOutput,
-        turnResult,
-    };
+export interface ModelCall<TParsedOutput = unknown> {
+    purpose: ModelCallPurpose;
+    run(input: ModelCallRunInput): Promise<ModelCallRunResult<TParsedOutput>>;
 }
