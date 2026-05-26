@@ -186,6 +186,6 @@ describe("persona-flow chat turn preparation", () => {
             dryRun: true,
         });
 
-        assert.equal(modelCall.prepared.messages.some(message => message.content.includes(assistantMessageContent)), true);
+        assert.equal(modelCall.llmRequestSnapshot.messages.some(message => message.content.includes(assistantMessageContent)), true);
     });
 });

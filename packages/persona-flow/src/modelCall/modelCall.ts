@@ -2,7 +2,7 @@ import type { InteractionMode, LlmResponseMode, ModelCallPurpose } from "@ss-ai/
 import type { PromptContext } from "../prompt/promptContext.js";
 import type { RenderedMessage } from "../prompt/promptTypes.js";
 import type { ModelToolCall, StructuredOutputSchema } from "../llm/modelClient.js";
-import type { ModelRuntime, PersonaModelResponse } from "./modelRuntime.js";
+import type { ModelRuntime, PersonaModelRequest, PersonaModelResponse } from "./modelRuntime.js";
 
 export type ModelCallPreparedRequest = {
     messages: RenderedMessage[];
@@ -10,21 +10,18 @@ export type ModelCallPreparedRequest = {
     structuredOutputSchema?: StructuredOutputSchema;
 };
 
-export type ModelCallTurnResult =
+export type ModelCallOutcome =
     | {
         kind: "assistantReply";
         text: string;
-        structuredOutput?: unknown;
     }
     | {
         kind: "noReply";
         reason: string;
-        structuredOutput?: unknown;
     }
     | {
         kind: "toolCalls";
         toolCalls: ModelToolCall[];
-        structuredOutput?: unknown;
     };
 
 export type ModelCallRunInput = {
@@ -37,14 +34,14 @@ export type ModelCallRunInput = {
     dryRun?: boolean;
 };
 
-export type ModelCallRunResult<TParsedOutput = unknown> = {
-    prepared: ModelCallPreparedRequest;
-    response?: PersonaModelResponse;
-    parsedOutput?: TParsedOutput;
-    turnResult?: ModelCallTurnResult;
+export type ModelCallRunResult<TParsedModelOutput = unknown> = {
+    llmRequestSnapshot: PersonaModelRequest;
+    llmResponse?: PersonaModelResponse;
+    parsedModelOutput?: TParsedModelOutput;
+    outcome?: ModelCallOutcome;
 };
 
-export interface ModelCall<TParsedOutput = unknown> {
+export interface ModelCall<TParsedModelOutput = unknown> {
     purpose: ModelCallPurpose;
-    run(input: ModelCallRunInput): Promise<ModelCallRunResult<TParsedOutput>>;
+    run(input: ModelCallRunInput): Promise<ModelCallRunResult<TParsedModelOutput>>;
 }

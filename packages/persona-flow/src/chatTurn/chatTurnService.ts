@@ -98,10 +98,10 @@ export class PersonaFlowChatTurnService {
 
         this.logger.verbose("persona-flow/chat-turn: dry-run prepared", {
             conversationId: input.conversationId,
-            renderedMessageCount: dryRunResult.prepared.messages.length,
+            renderedMessageCount: dryRunResult.llmRequestSnapshot.messages.length,
         });
 
-        return { messages: dryRunResult.prepared.messages };
+        return { messages: dryRunResult.llmRequestSnapshot.messages };
     }
 
     async chatTurn(input: PersonaChatTurnRequest): Promise<{
@@ -153,28 +153,28 @@ export class PersonaFlowChatTurnService {
             llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
         });
-        if (!callResult.response || !callResult.turnResult) {
-            throw new Error("Model call must return response and turnResult for chat turn.");
+        if (!callResult.llmResponse || !callResult.outcome) {
+            throw new Error("Model call must return llmResponse and outcome for chat turn.");
         }
-        if (callResult.turnResult.kind === "noReply") {
+        if (callResult.outcome.kind === "noReply") {
             this.logger.debug("persona-flow/chat-turn: assistant message not appended", {
-                requestId: callResult.response.requestId,
+                requestId: callResult.llmResponse.requestId,
                 conversationId: input.conversationId,
-                reason: callResult.turnResult.reason,
+                reason: callResult.outcome.reason,
             });
             return {
-                requestId: callResult.response.requestId,
-                model: callResult.response.model,
+                requestId: callResult.llmResponse.requestId,
+                model: callResult.llmResponse.model,
                 output: "",
                 userMessageId: prepared.userMessage.id,
-                structuredOutput: callResult.turnResult.structuredOutput,
-                ...(input.includeAssembledMessages ? { assembledMessages: callResult.prepared.messages } : {}),
+                structuredOutput: callResult.parsedModelOutput,
+                ...(input.includeAssembledMessages ? { assembledMessages: callResult.llmRequestSnapshot.messages } : {}),
             };
         }
-        if (callResult.turnResult.kind !== "assistantReply") {
-            throw new Error(`Unsupported turn result kind for chat.main: ${callResult.turnResult.kind}`);
+        if (callResult.outcome.kind !== "assistantReply") {
+            throw new Error(`Unsupported outcome kind for chat.main: ${callResult.outcome.kind}`);
         }
-        const normalizedAssistantOutput = callResult.turnResult.text;
+        const normalizedAssistantOutput = callResult.outcome.text;
 
         const assistantMessageId = crypto.randomUUID();
         await this.deps.stores.chat.appendMessage({
@@ -186,19 +186,19 @@ export class PersonaFlowChatTurnService {
         });
 
         this.logger.verbose("persona-flow/chat-turn: assistant message appended", {
-            requestId: callResult.response.requestId,
+            requestId: callResult.llmResponse.requestId,
             conversationId: input.conversationId,
             assistantMessageId,
         });
 
         return {
-            requestId: callResult.response.requestId,
-            model: callResult.response.model,
+            requestId: callResult.llmResponse.requestId,
+            model: callResult.llmResponse.model,
             output: normalizedAssistantOutput,
             userMessageId: prepared.userMessage.id,
             assistantMessageId,
-            structuredOutput: callResult.turnResult.structuredOutput,
-            ...(input.includeAssembledMessages ? { assembledMessages: callResult.prepared.messages } : {}),
+            structuredOutput: callResult.parsedModelOutput,
+            ...(input.includeAssembledMessages ? { assembledMessages: callResult.llmRequestSnapshot.messages } : {}),
         };
     }
 
@@ -246,16 +246,16 @@ export class PersonaFlowChatTurnService {
             llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
         });
-        if (!callResult.response || !callResult.turnResult) {
-            throw new Error("Model call must return response and turnResult for stream turn.");
+        if (!callResult.llmResponse || !callResult.outcome) {
+            throw new Error("Model call must return llmResponse and outcome for stream turn.");
         }
         if (input.includeAssembledMessages) {
-            input.onAssembledMessages?.(callResult.prepared.messages);
+            input.onAssembledMessages?.(callResult.llmRequestSnapshot.messages);
         }
-        if (callResult.turnResult.kind !== "assistantReply") {
-            throw new Error(`Unsupported stream turn result kind for chat.main: ${callResult.turnResult.kind}`);
+        if (callResult.outcome.kind !== "assistantReply") {
+            throw new Error(`Unsupported stream outcome kind for chat.main: ${callResult.outcome.kind}`);
         }
-        const fullResponse = callResult.turnResult.text;
+        const fullResponse = callResult.outcome.text;
         input.onChunk?.(fullResponse);
 
         const assistantMessageId = crypto.randomUUID();
@@ -268,18 +268,18 @@ export class PersonaFlowChatTurnService {
         });
 
         this.logger.verbose("persona-flow/chat-turn: structured fallback assistant message appended for stream request", {
-            requestId: callResult.response.requestId,
+            requestId: callResult.llmResponse.requestId,
             conversationId: input.conversationId,
             assistantMessageId,
         });
 
         return {
-            requestId: callResult.response.requestId,
-            model: callResult.response.model,
+            requestId: callResult.llmResponse.requestId,
+            model: callResult.llmResponse.model,
             output: fullResponse,
             userMessageId: prepared.userMessage.id,
             assistantMessageId,
-            ...(input.includeAssembledMessages ? { assembledMessages: callResult.prepared.messages } : {}),
+            ...(input.includeAssembledMessages ? { assembledMessages: callResult.llmRequestSnapshot.messages } : {}),
             streamCompleted: true,
         };
     }

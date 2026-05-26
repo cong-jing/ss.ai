@@ -1,6 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ModelCall, ModelCallPreparedRequest, ModelCallRunResult, ModelCallTurnResult } from "../../modelCall.js";
+import type { ModelCall, ModelCallOutcome, ModelCallPreparedRequest, ModelCallRunResult } from "../../modelCall.js";
 import type { PromptContext } from "../../../prompt/promptContext.js";
 import type { RenderedMessage } from "../../../prompt/promptTypes.js";
 import { renderPromptTemplate } from "../../../prompt/renderPromptTemplate.js";
@@ -98,46 +98,47 @@ export const singleCharacterChatCall: ModelCall<SingleCharacterChatOutput> = {
             ...buildConversationMessages(input.promptContext),
         ];
 
-        const prepared: ModelCallPreparedRequest = {
+        const preparedRequest: ModelCallPreparedRequest = {
             messages,
             llmResponseMode: "structured",
             structuredOutputSchema: singleCharacterChatStructuredOutputSchema,
         };
-
-        if (input.dryRun) {
-            return { prepared };
-        }
-
-        const response = await input.runtime.chat({
+        const llmRequest = {
             userId: input.userId,
             characterId: input.characterId,
-            messages: prepared.messages,
-            llmResponseMode: prepared.llmResponseMode,
+            messages: preparedRequest.messages,
+            llmResponseMode: preparedRequest.llmResponseMode,
             modelCallPurpose: this.purpose,
-            structuredOutputSchema: prepared.structuredOutputSchema,
-        });
+            structuredOutputSchema: preparedRequest.structuredOutputSchema,
+        };
 
-        const parsedOutput = parseSingleCharacterChatOutput(response.structuredOutput);
-        const turnResult = toSingleCharacterChatTurnResult({
-            parsedOutput,
+        if (input.dryRun) {
+            return { llmRequestSnapshot: llmRequest };
+        }
+
+        const llmResponse = await input.runtime.chat(llmRequest);
+
+        const parsedModelOutput = parseSingleCharacterChatOutput(llmResponse.structuredOutput);
+        const outcome = toSingleCharacterChatOutcome({
+            parsedModelOutput,
             promptContext: input.promptContext,
         });
 
         return {
-            prepared,
-            response,
-            parsedOutput,
-            turnResult,
+            llmRequestSnapshot: llmRequest,
+            llmResponse,
+            parsedModelOutput,
+            outcome,
         };
     },
 };
 
-function toSingleCharacterChatTurnResult(input: {
-    parsedOutput: SingleCharacterChatOutput;
+function toSingleCharacterChatOutcome(input: {
+    parsedModelOutput: SingleCharacterChatOutput;
     promptContext: PromptContext;
-}): ModelCallTurnResult {
+}): ModelCallOutcome {
     const selfActor = Array.from(input.promptContext.actorMap.values()).find(actor => actor.role === "self");
-    const replyText = normalizeSingleCharacterReply(input.parsedOutput.replyText, [
+    const replyText = normalizeSingleCharacterReply(input.parsedModelOutput.replyText, [
         selfActor?.displayName,
         input.promptContext.character?.displayName,
         input.promptContext.character?.name,
@@ -147,13 +148,11 @@ function toSingleCharacterChatTurnResult(input: {
         return {
             kind: "noReply",
             reason: "empty-output",
-            structuredOutput: input.parsedOutput,
         };
     }
 
     return {
         kind: "assistantReply",
         text: replyText,
-        structuredOutput: input.parsedOutput,
     };
 }
