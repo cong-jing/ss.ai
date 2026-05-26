@@ -12,7 +12,8 @@
     },
     "dependencies": {
         "@ss-ai/contracts": "workspace:*",
-        "handlebars": "^4.7.9"
+        "handlebars": "^4.7.9",
+        "zod": "^4.3.6"
     },
     "devDependencies": {
         "@types/node": "^25.6.2",

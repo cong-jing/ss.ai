@@ -10,6 +10,7 @@ import {
     singleCharacterChatStructuredOutputSchema,
     type SingleCharacterChatOutput,
 } from "./singleCharacterChatOutput.js";
+import { PersonaModelRequest } from "../../modelRuntime.js";
 
 export type { SingleCharacterChatOutput } from "./singleCharacterChatOutput.js";
 
@@ -98,18 +99,13 @@ export const singleCharacterChatCall: ModelCall<SingleCharacterChatOutput> = {
             ...buildConversationMessages(input.promptContext),
         ];
 
-        const preparedRequest: ModelCallPreparedRequest = {
-            messages,
-            llmResponseMode: "structured",
-            structuredOutputSchema: singleCharacterChatStructuredOutputSchema,
-        };
-        const llmRequest = {
+        const llmRequest: PersonaModelRequest = {
             userId: input.userId,
             characterId: input.characterId,
-            messages: preparedRequest.messages,
-            llmResponseMode: preparedRequest.llmResponseMode,
+            messages,
+            llmResponseMode: "structured",
             modelCallPurpose: this.purpose,
-            structuredOutputSchema: preparedRequest.structuredOutputSchema,
+            structuredOutputSchema: singleCharacterChatStructuredOutputSchema,
         };
 
         if (input.dryRun) {
