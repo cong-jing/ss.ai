@@ -6,7 +6,7 @@ This README is meant as a project map for future maintenance sessions. If you ar
 
 ## Workspace
 
-The repo uses npm workspaces, declared in the root `package.json`:
+The repo uses a pnpm workspace, declared in `pnpm-workspace.yaml`:
 
 - `packages/*`
 - `apps/*`
@@ -14,16 +14,44 @@ The repo uses npm workspaces, declared in the root `package.json`:
 Useful root scripts:
 
 ```bash
-npm install
-npm run dev:server
-npm run dev:web
-npm run dev:all
-npm run build
-npm run test
-npm run prompt:debug -- --help
+npm run setup
+pnpm install
+pnpm run dev:server
+pnpm run dev:web
+pnpm run dev:all
+pnpm run build
+pnpm run test
+pnpm run prompt:debug -- --help
 ```
 
 Current local default HTTP port is `8999` from `config.default.json`.
+
+## Install And Deploy
+
+First-time setup (installs and activates the pinned pnpm version):
+
+```bash
+npm run setup
+```
+
+After setup, use pnpm commands only:
+
+```bash
+pnpm install
+pnpm run build:server
+pnpm run deploy:server
+```
+
+Deployment output is written to `deploy/server`.
+
+Run the deployed server:
+
+```bash
+cd deploy/server
+node dist/index.js
+```
+
+If dependency declarations change in any workspace package (`dependencies`, `devDependencies`, `peerDependencies`, or workspace links), run `pnpm install` again so `pnpm-lock.yaml` and the deploy dependency graph stay in sync.
 
 ## Packages
 
@@ -172,7 +200,7 @@ Responsibilities:
 Example:
 
 ```bash
-npm run prompt:debug -- --config apps/prompt-debug-cli/examples/shishi-basic.yaml --render-only
+pnpm run prompt:debug -- --config apps/prompt-debug-cli/examples/shishi-basic.yaml --render-only
 ```
 
 ### `apps/qq-bot`
@@ -279,10 +307,10 @@ Start here when reviewing or changing behavior:
 After the current rename refactor is complete, these are the useful checks:
 
 ```bash
-npm run build
-npm run test
-npm run dev:server
-npm run dev:web
+pnpm run build
+pnpm run test
+pnpm run dev:server
+pnpm run dev:web
 ```
 
 HTTP health check:

@@ -6,7 +6,7 @@
 
 ## 工作区结构
 
-仓库使用 npm workspaces，定义在根目录 `package.json`：
+仓库使用 pnpm workspace，定义在根目录 `pnpm-workspace.yaml`：
 
 - `packages/*`
 - `apps/*`
@@ -14,16 +14,44 @@
 常用命令：
 
 ```bash
-npm install
-npm run dev:server
-npm run dev:web
-npm run dev:all
-npm run build
-npm run test
-npm run prompt:debug -- --help
+npm run setup
+pnpm install
+pnpm run dev:server
+pnpm run dev:web
+pnpm run dev:all
+pnpm run build
+pnpm run test
+pnpm run prompt:debug -- --help
 ```
 
 当前默认 HTTP 端口来自 `config.default.json`，是 `8999`。
+
+## 安装与部署
+
+首次初始化（安装并激活项目固定版本的 pnpm）：
+
+```bash
+npm run setup
+```
+
+初始化完成后，仅使用 pnpm 命令：
+
+```bash
+pnpm install
+pnpm run build:server
+pnpm run deploy:server
+```
+
+部署产物目录为 `deploy/server`。
+
+运行部署后的服务：
+
+```bash
+cd deploy/server
+node dist/index.js
+```
+
+如果你修改了任意 workspace 包的依赖声明（`dependencies`、`devDependencies`、`peerDependencies` 或 workspace 依赖关系），需要重新执行 `pnpm install`，以同步 `pnpm-lock.yaml` 与部署依赖图。
 
 ## 核心包
 
@@ -164,7 +192,7 @@ Prompt 调试 CLI。
 示例：
 
 ```bash
-npm run prompt:debug -- --config apps/prompt-debug-cli/examples/shishi-basic.yaml --render-only
+pnpm run prompt:debug -- --config apps/prompt-debug-cli/examples/shishi-basic.yaml --render-only
 ```
 
 ### `apps/qq-bot`

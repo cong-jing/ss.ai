@@ -11,7 +11,7 @@
         "build": "pnpm -r build",
         "build:server": "pnpm --filter @ss-ai/server... build",
         "build:web": "pnpm --filter @ss-ai/web... build",
-        "deploy:server": "pnpm --filter @ss-ai/server --prod deploy --legacy ./deploy/server",
+        "deploy:server": "pnpm --filter @ss-ai/server --prod deploy ./deploy/server",
         "clean": "node scripts/clean.mjs",
         "dev": "pnpm run dev:all",
         "dev:all": "concurrently --names \"server,web\" \"pnpm run dev:server\" \"pnpm run dev:web\"",
