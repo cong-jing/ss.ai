@@ -3,9 +3,26 @@
     "version": "0.1.0",
     "private": true,
     "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json"
+    },
     "exports": {
-        ".": "./src/index.ts",
-        "./apis/userPreference": "./src/apis/userPreference.api.ts",
-        "./apis/userProfile": "./src/apis/userProfile.api.ts"
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        },
+        "./apis/userPreference": {
+            "types": "./dist/apis/userPreference.api.d.ts",
+            "import": "./dist/apis/userPreference.api.js"
+        },
+        "./apis/userProfile": {
+            "types": "./dist/apis/userProfile.api.d.ts",
+            "import": "./dist/apis/userProfile.api.js"
+        }
     }
 }

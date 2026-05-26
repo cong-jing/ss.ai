@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
-import type { ErrorObject } from "ajv";
+import type { ErrorObject, ValidateFunction } from "ajv";
 import type { LogLevel } from "@ss-ai/persona-flow-logger";
 
 export interface RuntimeModelEntry {
@@ -127,12 +127,40 @@ function buildRuntimeModels(modelsRaw: RawConfig["models"]): Record<string, Runt
     return runtimeModels;
 }
 
-const projectRoot = path.resolve(process.cwd(), process.env["APP_ROOT"] ?? ".");
+function resolveProjectRoot(): string {
+    const cwdRoot = path.resolve(process.cwd(), process.env["APP_ROOT"] ?? ".");
+    const distRoot = path.join(cwdRoot, "dist");
+
+    const hasRootConfig = fs.existsSync(path.join(cwdRoot, "config.default.json"));
+    const hasRootSchema = fs.existsSync(path.join(cwdRoot, "schemas", "config.schema.json"));
+    if (hasRootConfig || hasRootSchema) {
+        return cwdRoot;
+    }
+
+    const hasDistConfig = fs.existsSync(path.join(distRoot, "config.default.json"));
+    const hasDistSchema = fs.existsSync(path.join(distRoot, "schemas", "config.schema.json"));
+    if (hasDistConfig || hasDistSchema) {
+        return distRoot;
+    }
+
+    return cwdRoot;
+}
+
+const projectRoot = resolveProjectRoot();
+
+function createSchemaValidator(configSchemaPath: string): ValidateFunction | null {
+    if (!fs.existsSync(configSchemaPath)) {
+        return null;
+    }
+
+    const configSchemaRaw = fs.readFileSync(configSchemaPath, "utf-8");
+    const configSchema = JSON.parse(configSchemaRaw) as object;
+    const ajv = new Ajv2020({ allErrors: true, strict: false, coerceTypes: true });
+    return ajv.compile(configSchema);
+}
+
 const configSchemaPath = path.join(projectRoot, "schemas", "config.schema.json");
-const configSchemaRaw = fs.readFileSync(configSchemaPath, "utf-8");
-const configSchema = JSON.parse(configSchemaRaw) as object;
-const ajv = new Ajv2020({ allErrors: true, strict: false, coerceTypes: true });
-const validateConfigWithSchema = ajv.compile(configSchema);
+const validateConfigWithSchema = createSchemaValidator(configSchemaPath);
 
 function formatSchemaIssues(errors: ErrorObject[] | null | undefined): string {
     if (!errors || errors.length === 0) {
@@ -157,6 +185,10 @@ function formatSchemaIssues(errors: ErrorObject[] | null | undefined): string {
 }
 
 function validateRawConfig(parsed: unknown, configPath: string): RawConfig {
+    if (!validateConfigWithSchema) {
+        return parsed as RawConfig;
+    }
+
     const isValid = validateConfigWithSchema(parsed);
     if (!isValid) {
         throw new Error(`Config validation failed (${configPath}): ${formatSchemaIssues(validateConfigWithSchema.errors)}`);

@@ -3,12 +3,22 @@
     "version": "0.1.0",
     "private": true,
     "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
     "scripts": {
+        "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
+        "clean": "node scripts/clean.mjs",
         "test": "tsx --test test/.run.ts",
         "typecheck": "tsc --noEmit"
     },
     "exports": {
-        ".": "./src/index.ts"
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
     },
     "dependencies": {
         "@ss-ai/contracts": "workspace:*",

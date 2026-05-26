@@ -3,18 +3,27 @@
     "version": "0.1.0",
     "private": true,
     "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
     "exports": {
-        ".": "./src/index.ts"
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
     },
     "scripts": {
+        "build": "tsc -p tsconfig.build.json",
         "test": "tsx --test test/run.ts",
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
         "@ss-ai/contracts": "workspace:*",
+        "@ss-ai/persona-flow": "workspace:*",
         "better-sqlite3": "^9.6.0",
-        "drizzle-orm": "^0.43.1",
-        "@ss-ai/persona-flow": "*"
+        "drizzle-orm": "^0.43.1"
     },
     "devDependencies": {
         "@types/better-sqlite3": "^7.6.13",
