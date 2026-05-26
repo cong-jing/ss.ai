@@ -17,7 +17,7 @@ export type { SingleCharacterChatOutput } from "./singleCharacterChatOutput.js";
 const __dir = dirname(fileURLToPath(import.meta.url));
 const SYSTEM_TEMPLATE_PATH = resolve(
     __dir,
-    "../../../../data/modelCall/chat.main/singleCharacterChat/system.zh-CN.md.hbs",
+    "./templates/system.zh-CN.md.hbs",
 );
 
 function normalizeSingleCharacterReply(
