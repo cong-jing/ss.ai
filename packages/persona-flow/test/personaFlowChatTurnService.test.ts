@@ -109,14 +109,19 @@ describe("persona-flow chat turn service", () => {
         seedModelRuntime(fixture, base.userId);
 
         const modelClient: ModelClient = {
-            generateNonStructured: async () => ({ output: "", toolCalls: [] }),
+            generate: async (input) => {
+                if (input.structuredOutputSchema) {
+                    return {
+                        structuredOutput: {
+                            replyText: "SS: hello back",
+                        },
+                        toolCalls: [],
+                    };
+                }
+
+                return { output: "", toolCalls: [] };
+            },
             generateNonStructuredStream: async () => ({ output: "", toolCalls: [], completed: true }),
-            generateStructured: async () => ({
-                structuredOutput: {
-                    replyText: "SS: hello back",
-                },
-                toolCalls: [],
-            }),
             listModels: async () => [],
         };
 
@@ -158,16 +163,21 @@ describe("persona-flow chat turn service", () => {
         const seenPrompts: Array<Array<{ role: "system" | "user" | "assistant"; content: string }>> = [];
 
         const modelClient: ModelClient = {
-            generateNonStructured: async () => ({ output: "unused", toolCalls: [] }),
+            generate: async (input) => {
+                if (input.structuredOutputSchema) {
+                    return {
+                        structuredOutput: {
+                            replyText: "SS: Hello World",
+                        },
+                        toolCalls: [],
+                    };
+                }
+
+                return { output: "unused", toolCalls: [] };
+            },
             generateNonStructuredStream: async () => {
                 throw new Error("should not be called");
             },
-            generateStructured: async () => ({
-                structuredOutput: {
-                    replyText: "SS: Hello World",
-                },
-                toolCalls: [],
-            }),
             listModels: async () => [],
         };
 

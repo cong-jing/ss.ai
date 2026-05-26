@@ -1,5 +1,6 @@
 import type {
     ModelClient,
+    ModelGenerationResult,
     ModelGenerationInput,
     ModelNonStructuredResult,
     ModelStreamCallbacks,
@@ -10,7 +11,7 @@ import type {
 } from "@ss-ai/persona-flow";
 import type { Mistral as MistralSDKClient } from "@mistralai/mistralai";
 import {
-    extractStructuredResult,
+    extractStructuredOutput,
     extractText,
     extractTextDelta,
     extractToolCallsFromMessage,
@@ -54,17 +55,18 @@ export class MistralModelClient implements ModelAdapter {
     }
 
 
-    async generateNonStructured(input: ModelGenerationInput): Promise<ModelNonStructuredResult> {
+    async generate(input: ModelGenerationInput): Promise<ModelGenerationResult> {
         const client = await this.getClient();
+        const responseFormat = input.structuredOutputSchema ?? { type: "text" };
 
         const response = await withTimeout(
             client.chat.complete({
                 model: input.model,
                 messages: toSdkMessages(input),
-                responseFormat: { type: "text" },
+                responseFormat,
             }),
             this.options.timeoutMs,
-            "Mistral non-structured request",
+            input.structuredOutputSchema ? "Mistral structured request" : "Mistral non-structured request",
         );
 
         const firstMessage = (response as {
@@ -72,6 +74,14 @@ export class MistralModelClient implements ModelAdapter {
                 message?: unknown;
             }>;
         }).choices?.[0]?.message;
+
+        if (input.structuredOutputSchema) {
+            return {
+                structuredOutput: extractStructuredOutput(response),
+                toolCalls: extractToolCallsFromMessage(firstMessage),
+                usage: extractUsage(response),
+            };
+        }
 
         return {
             output: extractText(response),
@@ -151,26 +161,6 @@ export class MistralModelClient implements ModelAdapter {
             completed,
             finishReason,
         };
-    }
-
-    async generateStructured(input: ModelGenerationInput) {
-        const client = await this.getClient();
-        if (!input.structuredOutputSchema) {
-            throw new Error("Mistral structured request requires structuredOutputSchema.");
-        }
-        const request = {
-            model: input.model,
-            messages: toSdkMessages(input),
-            responseFormat: input.structuredOutputSchema,
-        } as Parameters<typeof client.chat.complete>[0];
-
-        const response = await withTimeout(
-            client.chat.complete(request),
-            this.options.timeoutMs,
-            "Mistral structured request",
-        );
-
-        return extractStructuredResult(response);
     }
 
     async listModels(): Promise<string[]> {

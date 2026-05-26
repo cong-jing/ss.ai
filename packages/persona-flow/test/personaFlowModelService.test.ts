@@ -80,20 +80,19 @@ describe("model runtime", () => {
         };
 
         const fakeClient: ModelClient = {
-            generateNonStructured: async (input) => {
+            generate: async (input) => {
                 capturedInputs.push(input);
+                if (input.structuredOutputSchema) {
+                    return {
+                        structuredOutput: {
+                            replyText: "structured",
+                        },
+                        toolCalls: [],
+                    };
+                }
                 return { output: "ok", toolCalls: [] };
             },
             generateNonStructuredStream: async () => ({ output: "", toolCalls: [], completed: true }),
-            generateStructured: async (input) => {
-                capturedInputs.push(input);
-                return {
-                    structuredOutput: {
-                        replyText: "structured",
-                    },
-                    toolCalls: [],
-                };
-            },
             listModels: async () => ["m1"],
         };
 
@@ -135,13 +134,10 @@ describe("model runtime", () => {
         };
 
         const fakeClient: ModelClient = {
-            generateNonStructured: async () => {
+            generate: async () => {
                 throw new Error("should not be called");
             },
             generateNonStructuredStream: async () => {
-                throw new Error("should not be called");
-            },
-            generateStructured: async () => {
                 throw new Error("should not be called");
             },
             listModels: async () => [],

@@ -1,9 +1,9 @@
 import {
     ModelClient,
+    ModelGenerationResult,
     ModelGenerationInput,
-    ModelNonStructuredResult,
     ModelStreamCallbacks,
-    ModelStreamResult, ModelStructuredResult,
+    ModelStreamResult,
     PersonaFlowLogger
 } from "@ss-ai/persona-flow";
 import { MistralModelClient } from "./mistral/mistralModelClient.js";
@@ -38,20 +38,15 @@ export class DefaultModelClient implements ModelClient {
         return encryptedApiKey;
     }
 
-    generateNonStructured(input: ModelGenerationInput): Promise<ModelNonStructuredResult> {
+    generate(input: ModelGenerationInput): Promise<ModelGenerationResult> {
         const normalizedProvider = input.provider.toLowerCase();
         const client = this.getModelAdapter(normalizedProvider, input.encryptedApiKey);
-        return client.generateNonStructured(input);
+        return client.generate(input);
     }
     generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
         const normalizedProvider = input.provider.toLowerCase();
         const client = this.getModelAdapter(normalizedProvider, input.encryptedApiKey);
         return client.generateNonStructuredStream(input, callbacks);
-    }
-    generateStructured(input: ModelGenerationInput): Promise<ModelStructuredResult> {
-        const normalizedProvider = input.provider.toLowerCase();
-        const client = this.getModelAdapter(normalizedProvider, input.encryptedApiKey);
-        return client.generateStructured(input);
     }
     listModels(provider: string, encryptedApiKey: string): Promise<string[]> {
 

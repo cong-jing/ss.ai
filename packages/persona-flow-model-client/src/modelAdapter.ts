@@ -1,28 +1,14 @@
 import type {
+    ModelGenerationInput,
+    ModelGenerationResult,
     ModelNonStructuredResult,
     ModelStreamCallbacks,
     ModelStreamResult,
-    ModelStructuredResult,
-    StructuredOutputSchema,
 } from "@ss-ai/persona-flow";
 
 
 export interface ModelAdapter {
-    generateNonStructured(input: {
-        model: string;
-        messages: unknown[];
-        encryptedApiKey: string;
-    }): Promise<ModelNonStructuredResult>;
-    generateNonStructuredStream(input: {
-        model: string;
-        messages: unknown[];
-        encryptedApiKey: string;
-    }, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult>;
-    generateStructured(input: {
-        model: string;
-        messages: unknown[];
-        encryptedApiKey: string;
-        structuredOutputSchema?: StructuredOutputSchema;
-    }): Promise<ModelStructuredResult>;
+    generate(input: ModelGenerationInput): Promise<ModelGenerationResult>;
+    generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult>;
     listModels(): Promise<string[]>;
 }

@@ -163,25 +163,28 @@ export class ModelRuntime {
         let usage: ModelUsage | undefined;
 
         try {
+            const result = await this.deps.modelClient.generate({
+                provider,
+                model,
+                encryptedApiKey,
+                messages: request.messages,
+                structuredOutputSchema: llmResponseMode === "structured" ? request.structuredOutputSchema : undefined,
+            });
+
             if (llmResponseMode === "structured") {
-                const structuredResult = await this.deps.modelClient.generateStructured({
-                    provider,
-                    model,
-                    encryptedApiKey,
-                    messages: request.messages,
-                    structuredOutputSchema: request.structuredOutputSchema,
-                });
-                structuredOutput = structuredResult.structuredOutput;
-                toolCalls = structuredResult.toolCalls;
-                usage = structuredResult.usage;
+                if (!("structuredOutput" in result)) {
+                    throw new Error("Model client returned non-structured result for structured request.");
+                }
+
+                structuredOutput = result.structuredOutput;
+                toolCalls = result.toolCalls;
+                usage = result.usage;
                 output = extractStructuredOutputText(structuredOutput);
             } else {
-                const result = await this.deps.modelClient.generateNonStructured({
-                    provider,
-                    model,
-                    encryptedApiKey,
-                    messages: request.messages,
-                });
+                if (!("output" in result)) {
+                    throw new Error("Model client returned structured result for non-structured request.");
+                }
+
                 output = result.output;
                 toolCalls = result.toolCalls;
                 usage = result.usage;

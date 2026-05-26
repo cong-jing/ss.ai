@@ -1,6 +1,5 @@
 import type {
     ModelGenerationInput,
-    ModelStructuredResult,
     ModelToolCall,
     ModelUsage,
 } from "@ss-ai/persona-flow";
@@ -190,19 +189,4 @@ export function extractUsage(response: unknown): ModelUsage | undefined {
     }
 
     return normalized;
-}
-
-export function extractStructuredResult(response: unknown): ModelStructuredResult {
-    const responseWithChoices = response as {
-        choices?: Array<{
-            message?: unknown;
-        }>;
-    };
-
-    const message = responseWithChoices.choices?.[0]?.message;
-    return {
-        structuredOutput: extractStructuredOutput(response),
-        toolCalls: extractToolCallsFromMessage(message),
-        usage: extractUsage(response),
-    };
 }

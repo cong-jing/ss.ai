@@ -48,6 +48,8 @@ export interface ModelStructuredResult {
     usage?: ModelUsage;
 }
 
+export type ModelGenerationResult = ModelNonStructuredResult | ModelStructuredResult;
+
 export interface ModelStreamCallbacks {
     onTextDelta?: (delta: string) => void;
     onToolCall?: (toolCall: ModelToolCall) => void;
@@ -62,9 +64,8 @@ export interface ModelStreamResult {
 }
 
 export interface ModelClient {
-    generateNonStructured(input: ModelGenerationInput): Promise<ModelNonStructuredResult>;
+    generate(input: ModelGenerationInput): Promise<ModelGenerationResult>;
     generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult>;
-    generateStructured(input: ModelGenerationInput): Promise<ModelStructuredResult>;
     listModels(provider: string, encryptedApiKey: string): Promise<string[]>;
 }
 
