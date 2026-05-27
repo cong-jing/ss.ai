@@ -144,6 +144,7 @@ export class ModelRuntime {
     async chat(request: PersonaModelRequest): Promise<PersonaModelResponse> {
         const requestId = crypto.randomUUID();
         const llmResponseMode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
+        const isStructuredResponse = llmResponseMode === "structured";
         const { provider, model, encryptedApiKey } = await this.resolveProviderModelRuntime(
             request.userId,
             request.characterId,
@@ -168,10 +169,10 @@ export class ModelRuntime {
                 model,
                 encryptedApiKey,
                 messages: request.messages,
-                structuredOutputSchema: llmResponseMode === "structured" ? request.structuredOutputSchema : undefined,
+                structuredOutputSchema: isStructuredResponse ? request.structuredOutputSchema : undefined,
             });
 
-            if (llmResponseMode === "structured") {
+            if (isStructuredResponse) {
                 if (!("structuredOutput" in result)) {
                     throw new Error("Model client returned non-structured result for structured request.");
                 }

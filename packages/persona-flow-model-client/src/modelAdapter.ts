@@ -1,7 +1,6 @@
 import type {
     ModelGenerationInput,
     ModelGenerationResult,
-    ModelNonStructuredResult,
     ModelStreamCallbacks,
     ModelStreamResult,
 } from "@ss-ai/persona-flow";

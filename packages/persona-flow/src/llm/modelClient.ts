@@ -36,19 +36,12 @@ export interface ModelUsage {
     raw?: unknown;
 }
 
-export interface ModelNonStructuredResult {
+export interface ModelGenerationResult {
     output: string;
+    structuredOutput?: unknown;
     toolCalls: ModelToolCall[];
     usage?: ModelUsage;
 }
-
-export interface ModelStructuredResult {
-    structuredOutput: unknown;
-    toolCalls: ModelToolCall[];
-    usage?: ModelUsage;
-}
-
-export type ModelGenerationResult = ModelNonStructuredResult | ModelStructuredResult;
 
 export interface ModelStreamCallbacks {
     onTextDelta?: (delta: string) => void;

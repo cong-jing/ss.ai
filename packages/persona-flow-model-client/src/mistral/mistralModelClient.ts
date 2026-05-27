@@ -1,8 +1,6 @@
 import type {
-    ModelClient,
     ModelGenerationResult,
     ModelGenerationInput,
-    ModelNonStructuredResult,
     ModelStreamCallbacks,
     ModelStreamResult,
     ModelToolCall,
