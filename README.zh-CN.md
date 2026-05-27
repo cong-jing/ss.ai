@@ -20,11 +20,15 @@ pnpm run dev:server
 pnpm run dev:web
 pnpm run dev:all
 pnpm run build
+pnpm run deploy:server:staging
+pnpm run deploy:server:prod
+pnpm run start:server:staging
+pnpm run start:server:prod
 pnpm run test
 pnpm run prompt:debug -- --help
 ```
 
-当前默认 HTTP 端口来自 `config.default.json`，是 `8999`。
+当前默认 HTTP 端口来自 `config/config.default.json`，是 `8999`。
 
 ## 安装与部署
 
@@ -39,16 +43,47 @@ npm run setup
 ```bash
 pnpm install
 pnpm run build:server
-pnpm run deploy:server
+pnpm run deploy:server:staging
+pnpm run deploy:server:prod
 ```
 
-部署产物目录为 `deploy/server`。
+部署产物目录为 `.deploy-staging/server` 和 `.deploy-prod/server`。
+
+部署步骤会把运行时配置资源复制到部署根目录本身：
+
+- `.deploy-staging/server/config/config.default.json`
+- `.deploy-staging/server/config/config.staging.json`
+- `.deploy-staging/server/config/config.local.json.example`
+- `.deploy-staging/server/schemas/config.schema.json`
+- `.deploy-prod/server/config/config.default.json`
+- `.deploy-prod/server/config/config.prod.json`
+- `.deploy-prod/server/config/config.local.json.example`
+- `.deploy-prod/server/schemas/config.schema.json`
 
 运行部署后的服务：
 
 ```bash
-cd deploy/server
-node dist/index.js
+pnpm run start:server:staging
+pnpm run start:server:prod
+```
+
+手工启动也可以：
+
+```bash
+cd .deploy-staging/server
+pnpm start
+
+cd .deploy-prod/server
+pnpm start
+```
+
+`APP_HOME` 默认取当前工作目录。在部署布局里，这就意味着 `.deploy-staging/server` 或 `.deploy-prod/server` 本身，因此在这些目录下启动时不需要额外设置 `APP_HOME`。如果你不是在运行根目录下启动服务，请显式设置 `APP_HOME`，这样配置文件查找和配置内的相对运行路径都会以期望的运行根目录为基准。
+
+示例：
+
+```bash
+APP_HOME=/absolute/path/to/runtime-root APP_ENV=staging node /absolute/path/to/runtime-root/dist/index.js
+APP_HOME=../.. pnpm --filter @ss-ai/server start
 ```
 
 如果你修改了任意 workspace 包的依赖声明（`dependencies`、`devDependencies`、`peerDependencies` 或 workspace 依赖关系），需要重新执行 `pnpm install`，以同步 `pnpm-lock.yaml` 与部署依赖图。
@@ -143,7 +178,7 @@ Express HTTP 服务。
 
 主要职责：
 
-- 读取 `config.default.json` 和可选 `config.local.json`。
+- 读取 `config/config.default.json`、可选的 `config/config.{APP_ENV}.json` 和可选的 `config/config.local.json`。
 - 打开 SQLite 数据库：`runtimeFiles.userDataDir/app.db`。
 - 创建 SQLite stores。
 - 注册 chat、user preference、user profile、character、conversation、actor 等 API。
@@ -204,6 +239,29 @@ QQ bot 集成。
 - 接收私聊 / 群聊消息。
 - 为 QQ 会话解析或创建 server conversation。
 - 调 server chat API，按 structured decision 处理跳过回复。
+
+## 运行时配置
+
+配置加载逻辑位于 `apps/server/src/util/config.ts`。
+
+加载顺序：
+
+1. `config/config.default.json`
+2. 如果设置了 `APP_ENV` 且文件存在，则读取 `config/config.{APP_ENV}.json`
+3. 如果存在，则读取 `config/config.local.json`
+
+合并后的配置会使用 `schemas/config.schema.json` 做校验。
+
+`APP_HOME` 同时决定两件事：
+
+- 去哪里查找这些配置文件
+- `logger.logFilePath`、`runtimeFiles.tempDir`、`runtimeFiles.userDataDir`、`promptLog.filePath` 这类相对路径以谁为基准展开
+
+这些配置文件统一从 `APP_HOME/config/*` 下读取。如果省略 `APP_HOME`，服务端会使用 `process.cwd()`。
+
+`config/config.local.json` 用于本机覆盖，不提交到仓库；需要本地覆盖时，从 `config/config.local.json.example` 复制一份即可。
+
+当前已提交到仓库的环境覆盖文件是 `config/config.staging.json` 和 `config/config.prod.json`。
 
 ## 数据和 Actor 模型
 

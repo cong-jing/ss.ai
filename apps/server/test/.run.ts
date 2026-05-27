@@ -14,3 +14,4 @@ import "./userProfile.test.js";
 import "./conversations.test.js";
 import "./chat.test.js";
 import "./actors.test.js";
+import "./config.test.js";

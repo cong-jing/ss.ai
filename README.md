@@ -20,11 +20,15 @@ pnpm run dev:server
 pnpm run dev:web
 pnpm run dev:all
 pnpm run build
+pnpm run deploy:server:staging
+pnpm run deploy:server:prod
+pnpm run start:server:staging
+pnpm run start:server:prod
 pnpm run test
 pnpm run prompt:debug -- --help
 ```
 
-Current local default HTTP port is `8999` from `config.default.json`.
+Current local default HTTP port is `8999` from `config/config.default.json`.
 
 ## Install And Deploy
 
@@ -39,16 +43,47 @@ After setup, use pnpm commands only:
 ```bash
 pnpm install
 pnpm run build:server
-pnpm run deploy:server
+pnpm run deploy:server:staging
+pnpm run deploy:server:prod
 ```
 
-Deployment output is written to `deploy/server`.
+Deployment output is written to `.deploy-staging/server` and `.deploy-prod/server`.
+
+The deploy step copies runtime config assets into the deploy root itself:
+
+- `.deploy-staging/server/config/config.default.json`
+- `.deploy-staging/server/config/config.staging.json`
+- `.deploy-staging/server/config/config.local.json.example`
+- `.deploy-staging/server/schemas/config.schema.json`
+- `.deploy-prod/server/config/config.default.json`
+- `.deploy-prod/server/config/config.prod.json`
+- `.deploy-prod/server/config/config.local.json.example`
+- `.deploy-prod/server/schemas/config.schema.json`
 
 Run the deployed server:
 
 ```bash
-cd deploy/server
-node dist/index.js
+pnpm run start:server:staging
+pnpm run start:server:prod
+```
+
+Manual startup still works:
+
+```bash
+cd .deploy-staging/server
+pnpm start
+
+cd .deploy-prod/server
+pnpm start
+```
+
+`APP_HOME` defaults to the current working directory. In the deployed layout that means `.deploy-staging/server` or `.deploy-prod/server`, so starting from those directories works without setting `APP_HOME`. If you start the server from a different directory, set `APP_HOME` explicitly so config lookup and relative runtime paths resolve from the intended runtime root.
+
+Examples:
+
+```bash
+APP_HOME=/absolute/path/to/runtime-root APP_ENV=staging node /absolute/path/to/runtime-root/dist/index.js
+APP_HOME=../.. pnpm --filter @ss-ai/server start
 ```
 
 If dependency declarations change in any workspace package (`dependencies`, `devDependencies`, `peerDependencies`, or workspace links), run `pnpm install` again so `pnpm-lock.yaml` and the deploy dependency graph stay in sync.
@@ -150,7 +185,7 @@ Express HTTP server.
 
 Responsibilities:
 
-- Loads runtime config from `config.default.json` + optional `config.local.json`.
+- Loads runtime config from `config/config.default.json`, optional `config/config.{APP_ENV}.json`, and optional `config/config.local.json`.
 - Opens SQLite DB under `runtimeFiles.userDataDir/app.db`.
 - Creates `AppStores` through `createSqliteStores`.
 - Registers HTTP routes for chat, user preferences, profiles, characters, conversations, and conversation actors.
@@ -221,10 +256,17 @@ Config loading is implemented in `apps/server/src/util/config.ts`.
 
 Load order:
 
-1. `config.default.json`
-2. `config.local.json` if present
+1. `config/config.default.json`
+2. `config/config.{APP_ENV}.json` if `APP_ENV` is set and the file exists
+3. `config/config.local.json` if present
 
 The merged config is validated by `schemas/config.schema.json`.
+
+`APP_HOME` decides both where config files are discovered and how relative runtime paths such as `logger.logFilePath`, `runtimeFiles.tempDir`, `runtimeFiles.userDataDir`, and `promptLog.filePath` are resolved. Config files are read from `APP_HOME/config/*`. If `APP_HOME` is omitted, the server uses `process.cwd()`.
+
+`config/config.local.json` is intended for machine-local overrides and is not committed. `config/config.local.json.example` is the template to copy when you need local development overrides.
+
+Committed environment overlays currently live in `config/config.staging.json` and `config/config.prod.json`.
 
 Important sections:
 

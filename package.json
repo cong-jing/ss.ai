@@ -11,7 +11,8 @@
         "build": "pnpm -r build",
         "build:server": "pnpm --filter @ss-ai/server... build",
         "build:web": "pnpm --filter @ss-ai/web... build",
-        "deploy:server": "pnpm --filter @ss-ai/server --prod deploy ./deploy/server",
+        "deploy:server:staging": "node scripts/deploy-server.mjs staging ./.deploy-staging/server",
+        "deploy:server:prod": "node scripts/deploy-server.mjs prod ./.deploy-prod/server",
         "clean": "node scripts/clean.mjs",
         "dev": "pnpm run dev:all",
         "dev:all": "concurrently --names \"server,web\" \"pnpm run dev:server\" \"pnpm run dev:web\"",
@@ -19,8 +20,8 @@
         "dev:web": "pnpm --filter @ss-ai/web dev",
         "dev:qq-bot": "pnpm --filter qq-bot dev -- --config ./qq-bot.env",
         "prompt:debug": "pnpm --filter @ss-ai/prompt-debug-cli dev --",
-        "start": "pnpm run start:server",
-        "start:server": "pnpm --filter @ss-ai/server start",
+        "start:server:staging": "pnpm --dir ./.deploy-staging/server start",
+        "start:server:prod": "pnpm --dir ./.deploy-prod/server start",
         "test": "pnpm -r --if-present test"
     },
     "devDependencies": {

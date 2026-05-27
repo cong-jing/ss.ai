@@ -8,9 +8,9 @@
         "dist"
     ],
     "scripts": {
-        "dev": "APP_ROOT=../.. tsx src/index.ts",
+        "dev": "APP_HOME=../.. tsx src/index.ts",
         "build": "tsc -p tsconfig.build.json && node scripts/copy-runtime-assets.mjs",
-        "start": "APP_ROOT=../.. node dist/index.js",
+        "start": "APP_HOME=../.. node dist/index.js",
         "typecheck": "tsc --noEmit",
         "test": "tsx --test test/.run.ts"
     },

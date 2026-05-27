@@ -38,6 +38,12 @@ export interface RuntimeConfig {
     };
 }
 
+interface RuntimeConfigContext {
+    appHome?: string;
+    appEnv?: string;
+    cwd?: string;
+}
+
 interface RawModelConfig {
     provider?: string;
     apiUrl: string;
@@ -127,28 +133,22 @@ function buildRuntimeModels(modelsRaw: RawConfig["models"]): Record<string, Runt
     return runtimeModels;
 }
 
-function resolveProjectRoot(): string {
-    const cwdRoot = path.resolve(process.cwd(), process.env["APP_ROOT"] ?? ".");
-    const distRoot = path.join(cwdRoot, "dist");
-
-    const hasRootConfig = fs.existsSync(path.join(cwdRoot, "config.default.json"));
-    const hasRootSchema = fs.existsSync(path.join(cwdRoot, "schemas", "config.schema.json"));
-    if (hasRootConfig || hasRootSchema) {
-        return cwdRoot;
+function resolveAppHome(context: RuntimeConfigContext = {}): string {
+    const configuredAppHome = context.appHome ?? process.env["APP_HOME"]?.trim();
+    if (!configuredAppHome) {
+        return context.cwd ?? process.cwd();
     }
 
-    const hasDistConfig = fs.existsSync(path.join(distRoot, "config.default.json"));
-    const hasDistSchema = fs.existsSync(path.join(distRoot, "schemas", "config.schema.json"));
-    if (hasDistConfig || hasDistSchema) {
-        return distRoot;
-    }
-
-    return cwdRoot;
+    return path.resolve(context.cwd ?? process.cwd(), configuredAppHome);
 }
 
-const projectRoot = resolveProjectRoot();
+function resolveAppEnv(context: RuntimeConfigContext = {}): string | undefined {
+    const raw = context.appEnv ?? process.env["APP_ENV"]?.trim();
+    return raw ? raw : undefined;
+}
 
-function createSchemaValidator(configSchemaPath: string): ValidateFunction | null {
+function createSchemaValidator(appHome: string): ValidateFunction | null {
+    const configSchemaPath = path.join(appHome, "schemas", "config.schema.json");
     if (!fs.existsSync(configSchemaPath)) {
         return null;
     }
@@ -158,9 +158,6 @@ function createSchemaValidator(configSchemaPath: string): ValidateFunction | nul
     const ajv = new Ajv2020({ allErrors: true, strict: false, coerceTypes: true });
     return ajv.compile(configSchema);
 }
-
-const configSchemaPath = path.join(projectRoot, "schemas", "config.schema.json");
-const validateConfigWithSchema = createSchemaValidator(configSchemaPath);
 
 function formatSchemaIssues(errors: ErrorObject[] | null | undefined): string {
     if (!errors || errors.length === 0) {
@@ -184,7 +181,11 @@ function formatSchemaIssues(errors: ErrorObject[] | null | undefined): string {
     return `${details} | +${errors.length - 3} more`;
 }
 
-function validateRawConfig(parsed: unknown, configPath: string): RawConfig {
+function validateRawConfig(
+    parsed: unknown,
+    configPath: string,
+    validateConfigWithSchema: ValidateFunction | null,
+): RawConfig {
     if (!validateConfigWithSchema) {
         return parsed as RawConfig;
     }
@@ -197,9 +198,12 @@ function validateRawConfig(parsed: unknown, configPath: string): RawConfig {
     return parsed as RawConfig;
 }
 
-function readJsonConfig(configPath: string): RawConfig {
+function readJsonConfig(configPath: string): { config: RawConfig; exists: boolean } {
     if (!fs.existsSync(configPath)) {
-        return {};
+        return {
+            config: {},
+            exists: false,
+        };
     }
 
     const raw = fs.readFileSync(configPath, "utf-8");
@@ -214,7 +218,10 @@ function readJsonConfig(configPath: string): RawConfig {
         throw new Error(`Invalid config format in ${configPath}: root must be an object`);
     }
 
-    return parsed as RawConfig;
+    return {
+        config: parsed as RawConfig,
+        exists: true,
+    };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -237,28 +244,50 @@ function mergeConfig(base: RawConfig, override: RawConfig): RawConfig {
     return result as RawConfig;
 }
 
-function toAbsolutePath(input: unknown, fallbackRelativePath: string): string {
+function toAbsolutePath(appHome: string, input: unknown, fallbackRelativePath: string): string {
     if (typeof input === "string" && input.trim()) {
-        return path.resolve(projectRoot, input);
+        return path.resolve(appHome, input);
     }
 
-    return path.resolve(projectRoot, fallbackRelativePath);
+    return path.resolve(appHome, fallbackRelativePath);
 }
 
-export function loadRuntimeConfig(): RuntimeConfig {
-    const defaultConfigPath = path.join(projectRoot, "config.default.json");
-    const localConfigPath = path.join(projectRoot, "config.local.json");
+export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeConfig {
+    const appHome = resolveAppHome(context);
+    const appEnv = resolveAppEnv(context);
+    const configDir = path.join(appHome, "config");
+    const validateConfigWithSchema = createSchemaValidator(appHome);
+    const defaultConfigPath = path.join(configDir, "config.default.json");
+    const envConfigPath = appEnv ? path.join(configDir, `config.${appEnv}.json`) : undefined;
+    const localConfigPath = path.join(configDir, "config.local.json");
 
     const defaultConfig = readJsonConfig(defaultConfigPath);
+    const envConfig = envConfigPath
+        ? readJsonConfig(envConfigPath)
+        : {
+            config: {},
+            exists: false,
+        };
     const localConfig = readJsonConfig(localConfigPath);
-    const mergedConfig = mergeConfig(defaultConfig, localConfig);
-    const fileConfig = validateRawConfig(mergedConfig, `${defaultConfigPath} + ${localConfigPath}`);
+
+    let mergedConfig = mergeConfig(defaultConfig.config, envConfig.config);
+    mergedConfig = mergeConfig(mergedConfig, localConfig.config);
+
+    const configSources = [defaultConfigPath];
+    if (envConfig.exists && envConfigPath) {
+        configSources.push(envConfigPath);
+    }
+    if (localConfig.exists) {
+        configSources.push(localConfigPath);
+    }
+
+    const fileConfig = validateRawConfig(mergedConfig, configSources.join(" + "), validateConfigWithSchema);
     const models = buildRuntimeModels(fileConfig.models);
 
-    const loggerFilePath = toAbsolutePath(fileConfig.logger?.logFilePath, "app.log");
-    const tempDir = toAbsolutePath(fileConfig.runtimeFiles?.tempDir, ".runtime/temp");
-    const userDataDir = toAbsolutePath(fileConfig.runtimeFiles?.userDataDir, ".runtime/user-data");
-    const promptLogFilePath = toAbsolutePath(fileConfig.promptLog?.filePath, ".runtime/logs/prompt.log");
+    const loggerFilePath = toAbsolutePath(appHome, fileConfig.logger?.logFilePath, "app.log");
+    const tempDir = toAbsolutePath(appHome, fileConfig.runtimeFiles?.tempDir, ".runtime/temp");
+    const userDataDir = toAbsolutePath(appHome, fileConfig.runtimeFiles?.userDataDir, ".runtime/user-data");
+    const promptLogFilePath = toAbsolutePath(appHome, fileConfig.promptLog?.filePath, ".runtime/logs/prompt.log");
 
     return {
         http: {

@@ -1,10 +1,11 @@
 node_modules/
 dist/
 
-config.local.json
-config.*.local.json
+config/config.local.json
+config/config.*.local.json
 
 .runtime/
+.deploy*/
 logs/
 app.log
 .vscode

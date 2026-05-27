@@ -1,0 +1,20 @@
+{
+    "$schema": "../schemas/config.schema.json",
+    "http": {
+        "port": 9000
+    },
+    "logger": {
+        "level": "debug",
+        "logFilePath": ".runtime/staging/logs/ss-ai.log",
+        "includeSourceLocation": true,
+        "includeStackTrace": false
+    },
+    "runtimeFiles": {
+        "tempDir": ".runtime/staging/temp",
+        "userDataDir": ".runtime/staging/user-data"
+    },
+    "promptLog": {
+        "enabled": true,
+        "filePath": ".runtime/staging/logs/ss-ai.prompt.log"
+    }
+}
