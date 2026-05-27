@@ -92,7 +92,7 @@ describe("model runtime", () => {
                 }
                 return { output: "ok", toolCalls: [] };
             },
-            generateNonStructuredStream: async () => ({ output: "", toolCalls: [], completed: true }),
+            generateStream: async () => ({ output: "", toolCalls: [], completed: true }),
             listModels: async () => ["m1"],
         };
 
@@ -137,7 +137,7 @@ describe("model runtime", () => {
             generate: async () => {
                 throw new Error("should not be called");
             },
-            generateNonStructuredStream: async () => {
+            generateStream: async () => {
                 throw new Error("should not be called");
             },
             listModels: async () => [],
