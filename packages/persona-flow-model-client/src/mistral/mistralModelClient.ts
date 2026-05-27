@@ -88,7 +88,7 @@ export class MistralModelClient implements ModelAdapter {
         };
     }
 
-    async generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
+    async generateStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
         const client = await this.getClient();
 
         const stream = await withTimeout(

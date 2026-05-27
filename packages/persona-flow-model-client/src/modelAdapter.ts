@@ -8,6 +8,6 @@ import type {
 
 export interface ModelAdapter {
     generate(input: ModelGenerationInput): Promise<ModelGenerationResult>;
-    generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult>;
+    generateStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult>;
     listModels(): Promise<string[]>;
 }

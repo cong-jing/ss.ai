@@ -43,10 +43,10 @@ export class DefaultModelClient implements ModelClient {
         const client = this.getModelAdapter(normalizedProvider, input.encryptedApiKey);
         return client.generate(input);
     }
-    generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
+    generateStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
         const normalizedProvider = input.provider.toLowerCase();
         const client = this.getModelAdapter(normalizedProvider, input.encryptedApiKey);
-        return client.generateNonStructuredStream(input, callbacks);
+        return client.generateStream(input, callbacks);
     }
     listModels(provider: string, encryptedApiKey: string): Promise<string[]> {
 

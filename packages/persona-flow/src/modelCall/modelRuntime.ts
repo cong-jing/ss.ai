@@ -186,7 +186,7 @@ export class ModelRuntime {
                     throw new Error("Model client returned structured result for non-structured request.");
                 }
 
-                output = result.output;
+                output = result.output ?? "";
                 toolCalls = result.toolCalls;
                 usage = result.usage;
             }
@@ -276,7 +276,7 @@ export class ModelRuntime {
         let streamError: string | undefined;
 
         try {
-            streamResult = await this.deps.modelClient.generateNonStructuredStream(
+            streamResult = await this.deps.modelClient.generateStream(
                 {
                     provider,
                     model,
@@ -328,7 +328,7 @@ export class ModelRuntime {
             requestId,
             mode,
             modelCallPurpose,
-            outputLength: streamResult.output.length,
+            outputLength: streamResult.output?.length ?? 0,
             toolCallCount: streamResult.toolCalls.length,
             usage: streamResult.usage,
             streamCompleted: streamResult.completed,
@@ -344,7 +344,7 @@ export class ModelRuntime {
         }
 
         return {
-            output: streamResult.output,
+            output: streamResult.output ?? "",
             model: model,
             requestId,
             llmResponseMode: mode,

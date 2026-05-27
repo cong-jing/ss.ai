@@ -37,7 +37,7 @@ export interface ModelUsage {
 }
 
 export interface ModelGenerationResult {
-    output: string;
+    output?: string;
     structuredOutput?: unknown;
     toolCalls: ModelToolCall[];
     usage?: ModelUsage;
@@ -49,7 +49,7 @@ export interface ModelStreamCallbacks {
 }
 
 export interface ModelStreamResult {
-    output: string;
+    output?: string;
     toolCalls: ModelToolCall[];
     usage?: ModelUsage;
     completed: boolean;
@@ -58,14 +58,14 @@ export interface ModelStreamResult {
 
 export interface ModelClient {
     generate(input: ModelGenerationInput): Promise<ModelGenerationResult>;
-    generateNonStructuredStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult>;
+    generateStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult>;
     listModels(provider: string, encryptedApiKey: string): Promise<string[]>;
 }
 
 export interface ModelClientFactoryInput {
     provider: string;
     model: string;
-    apiUrl: string;
+    generateStream: string;
     encryptedApiKey: string;
     timeoutMs: number;
     maxRetries: number;
