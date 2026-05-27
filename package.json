@@ -8,7 +8,7 @@
     "scripts": {
         "setup": "npm install -g corepack@latest && corepack enable pnpm && corepack prepare pnpm@11.3.0 --activate && pnpm install",
         "preinstall": "node scripts/check-package-manager.mjs",
-        "build": "pnpm -r build",
+        "build": "pnpm run build:server && pnpm run build:web",
         "build:server": "pnpm --filter @ss-ai/server... build",
         "build:web": "pnpm --filter @ss-ai/web... build",
         "deploy:server:staging": "node scripts/deploy-server.mjs staging ./.deploy-staging",

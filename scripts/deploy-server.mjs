@@ -34,6 +34,12 @@ const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 runCommand(pnpmCommand, [
     "--filter",
     "@ss-ai/server",
+    "build",
+]);
+
+runCommand(pnpmCommand, [
+    "--filter",
+    "@ss-ai/server",
     "--prod",
     "--force",
     "deploy",
