@@ -20,8 +20,12 @@ pnpm run dev:server
 pnpm run dev:web
 pnpm run dev:all
 pnpm run build
+pnpm run deploy:staging
+pnpm run deploy:prod
 pnpm run deploy:server:staging
 pnpm run deploy:server:prod
+pnpm run deploy:web:staging
+pnpm run deploy:web:prod
 pnpm run start:server:staging
 pnpm run start:server:prod
 pnpm run test
@@ -43,11 +47,21 @@ After setup, use pnpm commands only:
 ```bash
 pnpm install
 pnpm run build:server
+pnpm run build:web
+pnpm run deploy:staging
+pnpm run deploy:prod
 pnpm run deploy:server:staging
 pnpm run deploy:server:prod
+pnpm run deploy:web:staging
+pnpm run deploy:web:prod
 ```
 
-Deployment output is written to `.deploy-staging/server` and `.deploy-prod/server`.
+Deployment output root is `.deploy-staging` or `.deploy-prod`.
+
+Fixed subdirectories under each deploy root:
+
+- `server`: Node.js server package and runtime config assets
+- `web`: static web assets built from `apps/web/dist`
 
 The deploy step copies runtime config assets into the deploy root itself:
 
@@ -59,6 +73,11 @@ The deploy step copies runtime config assets into the deploy root itself:
 - `.deploy-prod/server/config/config.prod.json`
 - `.deploy-prod/server/config/config.local.json.example`
 - `.deploy-prod/server/schemas/config.schema.json`
+
+Web deploy output:
+
+- `.deploy-staging/web/*`
+- `.deploy-prod/web/*`
 
 Run the deployed server:
 

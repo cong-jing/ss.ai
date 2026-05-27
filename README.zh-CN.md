@@ -20,8 +20,12 @@ pnpm run dev:server
 pnpm run dev:web
 pnpm run dev:all
 pnpm run build
+pnpm run deploy:staging
+pnpm run deploy:prod
 pnpm run deploy:server:staging
 pnpm run deploy:server:prod
+pnpm run deploy:web:staging
+pnpm run deploy:web:prod
 pnpm run start:server:staging
 pnpm run start:server:prod
 pnpm run test
@@ -43,11 +47,21 @@ npm run setup
 ```bash
 pnpm install
 pnpm run build:server
+pnpm run build:web
+pnpm run deploy:staging
+pnpm run deploy:prod
 pnpm run deploy:server:staging
 pnpm run deploy:server:prod
+pnpm run deploy:web:staging
+pnpm run deploy:web:prod
 ```
 
-部署产物目录为 `.deploy-staging/server` 和 `.deploy-prod/server`。
+部署产物的顶层目录为 `.deploy-staging` 和 `.deploy-prod`。
+
+每个顶层目录下固定有两个子目录：
+
+- `server`：Node.js 服务包和运行时配置
+- `web`：由 `apps/web/dist` 生成的静态资源
 
 部署步骤会把运行时配置资源复制到部署根目录本身：
 
@@ -59,6 +73,11 @@ pnpm run deploy:server:prod
 - `.deploy-prod/server/config/config.prod.json`
 - `.deploy-prod/server/config/config.local.json.example`
 - `.deploy-prod/server/schemas/config.schema.json`
+
+web 部署输出目录：
+
+- `.deploy-staging/web/*`
+- `.deploy-prod/web/*`
 
 运行部署后的服务：
 
