@@ -1,7 +1,7 @@
 import type { ChatStreamEvent, LlmResponseMode } from "@ss-ai/contracts";
 import type { InteractionMode } from "@ss-ai/contracts";
 import type { Request, Response } from "express";
-import { DEFAULT_USER_ID, type HttpApiContext } from "../apiContext.js";
+import { resolveRequestUserId, type HttpApiContext } from "../apiContext.js";
 import {
     createChatTurnService,
     getStatusCode,
@@ -40,7 +40,7 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
         return;
     }
 
-    const userId: string = typeof req.body?.userId === "string" ? req.body.userId : DEFAULT_USER_ID;
+    const userId = await resolveRequestUserId(req, context);
     context.logger.debug("chat/stream: request received", {
         userMessageLength: userMessageText.length,
         userId,

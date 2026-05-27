@@ -36,6 +36,13 @@ export interface RuntimeConfig {
         enabled: boolean;
         filePath: string;
     };
+    auth: {
+        mode: "default-user" | "local-password";
+        defaultUserId: string;
+        allowRegistration: boolean;
+        sessionDays: number;
+        cookieName: string;
+    };
 }
 
 interface RuntimeConfigContext {
@@ -76,6 +83,13 @@ interface RawConfig {
     promptLog?: {
         enabled?: boolean;
         filePath?: string;
+    };
+    auth?: {
+        mode?: "default-user" | "local-password";
+        defaultUserId?: string;
+        allowRegistration?: boolean;
+        sessionDays?: number;
+        cookieName?: string;
     };
 }
 
@@ -288,6 +302,13 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
     const tempDir = toAbsolutePath(appHome, fileConfig.runtimeFiles?.tempDir, ".runtime/temp");
     const userDataDir = toAbsolutePath(appHome, fileConfig.runtimeFiles?.userDataDir, ".runtime/user-data");
     const promptLogFilePath = toAbsolutePath(appHome, fileConfig.promptLog?.filePath, ".runtime/logs/prompt.log");
+    const authMode = fileConfig.auth?.mode ?? "default-user";
+    const defaultUserId = normalizeOptionalString(fileConfig.auth?.defaultUserId) ?? "default";
+    const cookieName = normalizeOptionalString(fileConfig.auth?.cookieName) ?? "ss_ai_session";
+    const sessionDaysRaw = fileConfig.auth?.sessionDays;
+    const sessionDays = Number.isFinite(sessionDaysRaw)
+        ? Math.max(1, Math.floor(sessionDaysRaw as number))
+        : 30;
 
     return {
         http: {
@@ -313,6 +334,13 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
         promptLog: {
             enabled: fileConfig.promptLog?.enabled ?? false,
             filePath: promptLogFilePath,
+        },
+        auth: {
+            mode: authMode,
+            defaultUserId,
+            allowRegistration: fileConfig.auth?.allowRegistration ?? true,
+            sessionDays,
+            cookieName,
         },
     };
 }

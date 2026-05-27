@@ -7,7 +7,7 @@ import {
 } from "@ss-ai/contracts";
 import type { ConversationActor as StoreConversationActor } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
-import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
+import { resolveRequestUserId, toErrorResponse, type HttpApiContext } from "./apiContext.js";
 
 function requireNonEmptyString(value: unknown, fieldName: string, endpoint: string): string {
     if (typeof value !== "string" || value.trim().length === 0) {
@@ -16,9 +16,9 @@ function requireNonEmptyString(value: unknown, fieldName: string, endpoint: stri
     return value;
 }
 
-async function ensureConversation(context: HttpApiContext, conversationId: string) {
+async function ensureConversation(context: HttpApiContext, userId: string, conversationId: string) {
     const conversation = await context.stores.conversation.getConversationById({
-        userId: DEFAULT_USER_ID,
+        userId,
         conversationId,
     });
     if (!conversation) {
@@ -45,8 +45,9 @@ function toActor(actor: StoreConversationActor): ConversationActor {
 export function registerConversationActorRoutes(context: HttpApiContext): void {
     registerApi(context.app, ApiListConversationActors, {
         handleRequest: async (req) => {
+            const userId = await resolveRequestUserId(req, context);
             const conversationId = req.params.id;
-            await ensureConversation(context, conversationId);
+            await ensureConversation(context, userId, conversationId);
             const actors = await context.stores.conversationActor.listConversationActors({
                 conversationId,
                 activeOnly: true,
@@ -58,8 +59,9 @@ export function registerConversationActorRoutes(context: HttpApiContext): void {
 
     registerApi(context.app, ApiCreateConversationActor, {
         handleRequest: async (req, body) => {
+            const userId = await resolveRequestUserId(req, context);
             const conversationId = req.params.id;
-            await ensureConversation(context, conversationId);
+            await ensureConversation(context, userId, conversationId);
             const displayName = requireNonEmptyString(body?.displayName, "displayName", "create actor").trim();
             const profileSnapshotJson = typeof body?.profileSnapshotJson === "string"
                 ? body.profileSnapshotJson
@@ -79,9 +81,10 @@ export function registerConversationActorRoutes(context: HttpApiContext): void {
 
     registerApi(context.app, ApiUpdateConversationActor, {
         handleRequest: async (req, body) => {
+            const userId = await resolveRequestUserId(req, context);
             const conversationId = req.params.id;
             const actorId = req.params.actorId;
-            await ensureConversation(context, conversationId);
+            await ensureConversation(context, userId, conversationId);
             const actor = await context.stores.conversationActor.getActorById(actorId);
             if (!actor || actor.conversationId !== conversationId || actor.leftAt) {
                 throw new Error(`Actor not found: ${actorId}`);
@@ -120,9 +123,10 @@ export function registerConversationActorRoutes(context: HttpApiContext): void {
 
     registerApi(context.app, ApiDeleteConversationActor, {
         handleRequest: async (req) => {
+            const userId = await resolveRequestUserId(req, context);
             const conversationId = req.params.id;
             const actorId = req.params.actorId;
-            await ensureConversation(context, conversationId);
+            await ensureConversation(context, userId, conversationId);
             const actor = await context.stores.conversationActor.getActorById(actorId);
             if (!actor || actor.conversationId !== conversationId || actor.leftAt) {
                 throw new Error(`Actor not found: ${actorId}`);

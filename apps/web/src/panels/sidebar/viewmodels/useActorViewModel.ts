@@ -8,6 +8,7 @@ import {
 } from "../../conversation/conversationApi";
 import { activeConversationId } from "./useConversationViewModel";
 import { useToast } from "../../../shared/ui/useToast";
+import { currentUserId } from "../../../auth/useAuthState";
 
 export const actors = ref<ConversationActor[]>([]);
 export const selectedActorId = ref<string | null>(null);
@@ -16,7 +17,8 @@ export const isLoadingActors = ref(false);
 export const isSavingActor = ref(false);
 
 export function isDefaultLoggedUserActor(actor: ConversationActor): boolean {
-    return actor.sourceType === "logged_user" && actor.userProfileId === "default";
+    const userId = currentUserId.value;
+    return actor.sourceType === "logged_user" && actor.userProfileId === userId;
 }
 
 function ensureSelectedActor(): void {

@@ -128,6 +128,23 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             content               TEXT NOT NULL,
             created_at            TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS app_users (
+            id            TEXT PRIMARY KEY,
+            username      TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            display_name  TEXT,
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS app_sessions (
+            id         TEXT PRIMARY KEY,
+            user_id    TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
     `);
 
     // Schema migrations.
@@ -184,6 +201,14 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
     sqlite.exec(`
         CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
             ON messages(conversation_id, created_at DESC)
+    `);
+    sqlite.exec(`
+        CREATE INDEX IF NOT EXISTS idx_app_sessions_user_id
+            ON app_sessions(user_id)
+    `);
+    sqlite.exec(`
+        CREATE INDEX IF NOT EXISTS idx_app_sessions_expires_at
+            ON app_sessions(expires_at)
     `);
 
     const db = drizzle(sqlite, { schema });

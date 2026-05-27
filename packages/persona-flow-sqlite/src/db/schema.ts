@@ -120,3 +120,28 @@ export const userProviderCredentials = sqliteTable("user_provider_credentials", 
 
 export type UserProviderCredentialRow = typeof userProviderCredentials.$inferSelect;
 export type NewUserProviderCredentialRow = typeof userProviderCredentials.$inferInsert;
+
+// ── app_users ────────────────────────────────────────────────────────────────
+export const appUsers = sqliteTable("app_users", {
+    id: text("id").primaryKey(),
+    username: text("username").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    displayName: text("display_name"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+});
+
+export type AppUserRow = typeof appUsers.$inferSelect;
+export type NewAppUserRow = typeof appUsers.$inferInsert;
+
+// ── app_sessions ─────────────────────────────────────────────────────────────
+export const appSessions = sqliteTable("app_sessions", {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull(),
+});
+
+export type AppSessionRow = typeof appSessions.$inferSelect;
+export type NewAppSessionRow = typeof appSessions.$inferInsert;

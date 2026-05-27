@@ -13,6 +13,9 @@
         "tempDir": ".runtime/staging/temp",
         "userDataDir": ".runtime/staging/user-data"
     },
+    "auth": {
+        "mode": "local-password"
+    },
     "promptLog": {
         "enabled": true,
         "filePath": ".runtime/staging/logs/ss-ai.prompt.log"

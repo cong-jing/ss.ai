@@ -1,5 +1,6 @@
 import type { ChatRequest } from "@ss-ai/contracts";
-import { DEFAULT_USER_ID, type HttpApiContext } from "../apiContext.js";
+import type { Request } from "express";
+import { resolveRequestUserId, type HttpApiContext } from "../apiContext.js";
 import {
     createChatTurnService,
     requireNonEmptyString,
@@ -8,9 +9,9 @@ import {
     resolveInteractionMode,
 } from "./chatUtil.js";
 
-export async function handleNonStreamChatRequest(context: HttpApiContext, body: ChatRequest & { userId?: string }) {
+export async function handleNonStreamChatRequest(context: HttpApiContext, req: Request, body: ChatRequest) {
     const userMessageText = requireUserMessageText(body?.userMessageText, "chat");
-    const userId = typeof body?.userId === "string" ? body.userId : DEFAULT_USER_ID;
+    const userId = await resolveRequestUserId(req, context);
     const characterId = requireNonEmptyString(body?.characterId, "characterId", "chat");
     const conversationId = requireNonEmptyString(body?.conversationId, "conversationId", "chat");
     const llmResponseMode = resolveLlmResponseMode(body?.llmResponseMode, "chat", "structured");

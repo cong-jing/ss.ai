@@ -83,6 +83,30 @@
                 }
             }
         },
+        "auth": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "mode": {
+                    "enum": [
+                        "default-user",
+                        "local-password"
+                    ]
+                },
+                "defaultUserId": {
+                    "type": "string"
+                },
+                "allowRegistration": {
+                    "type": "boolean"
+                },
+                "sessionDays": {
+                    "type": "number"
+                },
+                "cookieName": {
+                    "type": "string"
+                }
+            }
+        },
         "models": {
             "type": "object",
             "minProperties": 1,

@@ -23,6 +23,10 @@ export interface TestApp {
     cleanup: () => void;
 }
 
+interface TestAppOptions {
+    auth?: RuntimeConfig["auth"];
+}
+
 /**
  * Creates a test Express app backed by an in-memory CharacterStore and a
  * temporary directory for file-based stores (userSettings, userInfo).
@@ -33,7 +37,7 @@ export interface TestApp {
  * @param models  Optional provider map — inject mock entries for tests that
  *                exercise userSettings routes.
  */
-export function createTestApp(models: Record<string, RuntimeModelEntry> = {}): TestApp {
+export function createTestApp(models: Record<string, RuntimeModelEntry> = {}, options: TestAppOptions = {}): TestApp {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ss-ai-test-"));
 
     setGlobalLogger(Logger.noop());
@@ -54,7 +58,17 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}): T
         models,
         agent: { timeoutMs: 30000, maxRetries: 2 },
         promptLog: { enabled: false, filePath: "" },
+        auth: {
+            mode: "default-user",
+            defaultUserId: "default",
+            allowRegistration: true,
+            sessionDays: 30,
+            cookieName: "ss_ai_session",
+        },
     };
+    if (options.auth) {
+        config.auth = options.auth;
+    }
 
     const conversationActor = new InMemoryConversationActorStore();
     const stores: AppStores = {

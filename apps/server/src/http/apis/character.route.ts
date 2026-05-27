@@ -18,7 +18,7 @@ import {
 } from "@ss-ai/contracts";
 import type { Character as PFCharacter, Conversation } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
-import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
+import { resolveRequestUserId, toErrorResponse, type HttpApiContext } from "./apiContext.js";
 
 // ── Projections ────────────────────────────────────────────────────────────────
 
@@ -61,9 +61,10 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
     const store = context.stores.character;
     // GET /v1/characters
     registerApi(context.app, ApiListCharacters, {
-        handleRequest: async (): Promise<ListCharactersResponse> => {
-            const list = await store.listCharacters({ userId: DEFAULT_USER_ID, status: "active" });
-            const prefs = await context.stores.userPreferences.getUserPreferences(DEFAULT_USER_ID);
+        handleRequest: async (req): Promise<ListCharactersResponse> => {
+            const userId = await resolveRequestUserId(req, context);
+            const list = await store.listCharacters({ userId, status: "active" });
+            const prefs = await context.stores.userPreferences.getUserPreferences(userId);
             return {
                 characters: list.map(toContractCharacter),
                 activeCharacterId: prefs?.currentCharacterId ?? null,
@@ -73,13 +74,14 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
 
     // POST /v1/characters
     registerApi(context.app, ApiCreateCharacter, {
-        handleRequest: async (_, body: CreateCharacterRequest) => {
+        handleRequest: async (req, body: CreateCharacterRequest) => {
+            const userId = await resolveRequestUserId(req, context);
             const name = typeof body?.name === "string" ? body.name.trim() : "";
             if (!name) throw new Error("name is required");
             const now = new Date().toISOString();
             const character: PFCharacter = {
                 id: crypto.randomUUID(),
-                userId: DEFAULT_USER_ID,
+                userId,
                 name,
                 displayName: typeof body.displayName === "string" ? body.displayName.trim() || null : null,
                 description: typeof body.description === "string" ? body.description.trim() || null : null,
@@ -100,22 +102,22 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
             const conversationId = crypto.randomUUID();
             await context.stores.conversation.createConversation({
                 id: conversationId,
-                userId: DEFAULT_USER_ID,
+                userId,
                 characterId: character.id,
                 title: "new chat",
                 createdAt: now,
                 updatedAt: now,
             }, { selfDisplayName: character.displayName ?? character.name });
-            const userProfile = await context.stores.userProfile.getUserProfile(DEFAULT_USER_ID);
+            const userProfile = await context.stores.userProfile.getUserProfile(userId);
             await context.stores.conversationActor.addConversationActor({
                 conversationId,
                 role: "other",
                 sourceType: "logged_user",
-                displayName: userProfile?.name ?? DEFAULT_USER_ID,
-                userProfileId: DEFAULT_USER_ID,
+                displayName: userProfile?.name ?? userId,
+                userProfileId: userId,
             });
             await context.stores.chat.upsertCharacterState({
-                userId: DEFAULT_USER_ID,
+                userId,
                 characterId: character.id,
                 currentConversationId: conversationId,
                 createdAt: now,
@@ -130,7 +132,8 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
     // GET /v1/characters/:id
     registerApi(context.app, ApiGetCharacter, {
         handleRequest: async (req) => {
-            const character = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId: req.params.id });
+            const userId = await resolveRequestUserId(req, context);
+            const character = await store.getCharacterById({ userId, characterId: req.params.id });
             if (!character) throw new Error(`Character not found: ${req.params.id}`);
             return toContractCharacter(character);
         },
@@ -140,7 +143,8 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
     // PATCH /v1/characters/:id
     registerApi(context.app, ApiUpdateCharacter, {
         handleRequest: async (req, body: UpdateCharacterRequest) => {
-            const existing = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId: req.params.id });
+            const userId = await resolveRequestUserId(req, context);
+            const existing = await store.getCharacterById({ userId, characterId: req.params.id });
             if (!existing || existing.status === "archived") {
                 throw new Error(`Character not found: ${req.params.id}`);
             }
@@ -165,8 +169,8 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 && body.modelConfig !== null && typeof body.modelConfig === "object") {
                 patch.modelConfig = body.modelConfig as Record<string, unknown>;
             }
-            await store.updateCharacter({ userId: DEFAULT_USER_ID, characterId: req.params.id, patch });
-            const updated = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId: req.params.id });
+            await store.updateCharacter({ userId, characterId: req.params.id, patch });
+            const updated = await store.getCharacterById({ userId, characterId: req.params.id });
             return toContractCharacter(updated!);
         },
         handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
@@ -175,11 +179,12 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
     // DELETE /v1/characters/:id
     registerApi(context.app, ApiDeleteCharacter, {
         handleRequest: async (req) => {
-            const existing = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId: req.params.id });
+            const userId = await resolveRequestUserId(req, context);
+            const existing = await store.getCharacterById({ userId, characterId: req.params.id });
             if (!existing || existing.status === "archived") {
                 throw new Error(`Character not found: ${req.params.id}`);
             }
-            await store.archiveCharacter({ userId: DEFAULT_USER_ID, characterId: req.params.id, updatedAt: new Date().toISOString() });
+            await store.archiveCharacter({ userId, characterId: req.params.id, updatedAt: new Date().toISOString() });
         },
         handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
     });
@@ -187,27 +192,29 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
     // ── Active character ────────────────────────────────────────────────────────
 
     registerApi(context.app, ApiGetActiveCharacter, {
-        handleRequest: async () => {
-            const prefs = await context.stores.userPreferences.getUserPreferences(DEFAULT_USER_ID);
+        handleRequest: async (req) => {
+            const userId = await resolveRequestUserId(req, context);
+            const prefs = await context.stores.userPreferences.getUserPreferences(userId);
             return { characterId: prefs?.currentCharacterId ?? null };
         },
     });
 
     registerApi(context.app, ApiSetActiveCharacter, {
-        handleRequest: async (_, body) => {
+        handleRequest: async (req, body) => {
+            const userId = await resolveRequestUserId(req, context);
             const characterId = typeof body?.characterId === "string" ? body.characterId : "";
-            const character = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId });
+            const character = await store.getCharacterById({ userId, characterId });
             if (!character || character.status === "archived") {
                 throw new Error(`Character not found: ${characterId}`);
             }
             await context.stores.userPreferences.setCurrentCharacter({
-                userId: DEFAULT_USER_ID,
+                userId,
                 characterId,
                 updatedAt: new Date().toISOString(),
             });
             const [state, convList] = await Promise.all([
-                context.stores.chat.getCharacterState({ userId: DEFAULT_USER_ID, characterId }),
-                context.stores.conversation.listConversations({ userId: DEFAULT_USER_ID, characterId }),
+                context.stores.chat.getCharacterState({ userId, characterId }),
+                context.stores.conversation.listConversations({ userId, characterId }),
             ]);
             return {
                 character: toContractCharacter(character),

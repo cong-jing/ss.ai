@@ -23,6 +23,10 @@
         "./apis/userProfile": {
             "types": "./dist/apis/userProfile.api.d.ts",
             "import": "./dist/apis/userProfile.api.js"
+        },
+        "./apis/auth": {
+            "types": "./dist/apis/auth.api.d.ts",
+            "import": "./dist/apis/auth.api.js"
         }
     }
 }
