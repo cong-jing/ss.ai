@@ -85,4 +85,36 @@ describe("Auth API", () => {
             .set("Cookie", cookie)
             .expect(401);
     });
+
+    it("marks session cookies as secure for staging deployments", async () => {
+        const previousAppEnv = process.env.APP_ENV;
+        process.env.APP_ENV = "staging";
+
+        const stagingApp = createTestApp({}, {
+            auth: {
+                mode: "local-password",
+                defaultUserId: "default",
+                allowRegistration: true,
+                sessionDays: 30,
+                cookieName: "ss_ai_session",
+            },
+        });
+
+        try {
+            const registerRes = await stagingApp.agent
+                .post("/v1/auth/register")
+                .send({ username: "stageuser", password: "password123", displayName: "Stage User" })
+                .expect(200);
+
+            const cookie = registerRes.headers["set-cookie"]?.[0] ?? "";
+            assert.match(cookie, /; Secure/i);
+        } finally {
+            stagingApp.cleanup();
+            if (previousAppEnv === undefined) {
+                delete process.env.APP_ENV;
+            } else {
+                process.env.APP_ENV = previousAppEnv;
+            }
+        }
+    });
 });

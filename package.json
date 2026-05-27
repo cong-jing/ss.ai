@@ -26,7 +26,7 @@
         "prompt:debug": "pnpm --filter @ss-ai/prompt-debug-cli dev --",
         "start:server:staging": "pnpm --dir ./.deploy-staging/server start",
         "start:server:prod": "pnpm --dir ./.deploy-prod/server start",
-        "test": "pnpm -r --if-present test"
+        "test": "pnpm run build && pnpm -r --if-present test"
     },
     "devDependencies": {
         "@vitejs/plugin-vue": "^5.2.1",
