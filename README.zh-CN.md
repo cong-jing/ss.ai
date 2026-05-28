@@ -18,14 +18,9 @@ npm run setup
 pnpm install
 pnpm run dev:server
 pnpm run dev:web
-pnpm run dev:all
 pnpm run build
 pnpm run deploy:staging
 pnpm run deploy:prod
-pnpm run deploy:server:staging
-pnpm run deploy:server:prod
-pnpm run deploy:web:staging
-pnpm run deploy:web:prod
 pnpm run start:server:staging
 pnpm run start:server:prod
 pnpm run test
@@ -93,7 +88,7 @@ pnpm run start:server:staging
 pnpm run start:server:prod
 ```
 
-`APP_HOME` 默认取当前工作目录。在本地开发里，执行 `pnpm run dev:server` 时它就是 `apps/server`；在部署布局里，则是 `.deploy-staging/server` 或 `.deploy-prod/server` 本身，因此这些场景下都不需要额外设置 `APP_HOME`。如果你不是在运行根目录下启动服务，请显式设置 `APP_HOME`，这样配置内的相对运行路径和配置文件都会以期望的运行根目录为基准。
+本地开发命令默认都从仓库根目录启动。也就是说，执行 `pnpm run dev:server`、`pnpm run dev:web`、`pnpm run dev:qq-bot` 时，`process.cwd()` 都是仓库根目录，所以运行时文件会落到仓库根的 `./.runtime/`。部署后通过 `pnpm run start:server:staging`、`pnpm run start:server:prod`，或者进入 `.deploy-*/server` 再执行 `pnpm start` 时，工作目录则会是对应的 `server` 目录，因此运行时文件会落在部署目录内部。
 
 示例：
 
@@ -102,7 +97,7 @@ pnpm --filter @ss-ai/server start
 pnpm --dir ./.deploy-prod/server start
 ```
 
-如果你需要手工设置环境变量，请使用当前 shell 对应的语法。跨平台场景下，优先使用内置的 `pnpm run start:server:staging` 和 `pnpm run start:server:prod`。
+如果你确实需要手工覆盖运行时文件根目录，可以设置 `RUNTIME_HOME`。正常开发和部署一般不需要显式设置。
 
 如果你修改了任意 workspace 包的依赖声明（`dependencies`、`devDependencies`、`peerDependencies` 或 workspace 依赖关系），需要重新执行 `pnpm install`，以同步 `pnpm-lock.yaml` 与部署依赖图。
 
@@ -270,13 +265,13 @@ QQ bot 集成。
 
 合并后的配置会使用 `apps/server/schemas/config.schema.json` 做校验。
 
-`APP_HOME` 现在只决定 `logger.logFilePath`、`runtimeFiles.tempDir`、`runtimeFiles.userDataDir`、`promptLog.filePath` 这类相对路径以谁为基准展开。配置文件会相对 `apps/server` 包目录（或部署后的 server 包根目录）读取。如果省略 `APP_HOME`，服务端会使用 `process.cwd()` 作为运行时根目录。
+配置文件在源码模式下始终从 `apps/server/config` 读取，在部署模式下始终从 `server/config` 读取。`logger.logFilePath`、`runtimeFiles.tempDir`、`runtimeFiles.userDataDir`、`promptLog.filePath` 这类相对运行时路径，默认都以当前工作目录为基准展开；如果确实需要覆盖，可以设置 `RUNTIME_HOME`。
 
 `apps/server/config/config.local.json` 用于本机覆盖，不提交到仓库；需要本地覆盖时，从 `apps/server/config/config.local.json.example` 复制一份即可。
 
 当前已提交到仓库的环境覆盖文件是 `apps/server/config/config.staging.json` 和 `apps/server/config/config.prod.json`。
 
-`apps/qq-bot` 默认从 `apps/qq-bot/.env` 读取 bot 环境变量。
+`apps/qq-bot` 默认从 `apps/qq-bot/.env` 读取 bot 环境变量。通过仓库根目录的 `pnpm run dev:qq-bot` 启动时，它的运行时输出也会落到仓库根的 `.runtime/`。
 
 ## 数据和 Actor 模型
 

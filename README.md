@@ -18,14 +18,9 @@ npm run setup
 pnpm install
 pnpm run dev:server
 pnpm run dev:web
-pnpm run dev:all
 pnpm run build
 pnpm run deploy:staging
 pnpm run deploy:prod
-pnpm run deploy:server:staging
-pnpm run deploy:server:prod
-pnpm run deploy:web:staging
-pnpm run deploy:web:prod
 pnpm run start:server:staging
 pnpm run start:server:prod
 pnpm run test
@@ -93,7 +88,7 @@ pnpm run start:server:staging
 pnpm run start:server:prod
 ```
 
-`APP_HOME` defaults to the current working directory. In local development that means `apps/server` when you run `pnpm run dev:server`. In the deployed layout that means `.deploy-staging/server` or `.deploy-prod/server`, so starting from those directories works without setting `APP_HOME`. If you start the server from a different directory, set `APP_HOME` explicitly so relative runtime paths and config files resolve from the intended runtime root.
+Local development commands are intended to be started from the repo root. `pnpm run dev:server`, `pnpm run dev:web`, and `pnpm run dev:qq-bot` therefore use the repo root as `process.cwd()`, so runtime files land under `./.runtime/`. In the deployed layout, `pnpm run start:server:staging`, `pnpm run start:server:prod`, or `pnpm --dir ./.deploy-prod/server start` run with `.deploy-*/server` as the working directory, so runtime files land under that server package.
 
 Examples:
 
@@ -102,7 +97,7 @@ pnpm --filter @ss-ai/server start
 pnpm --dir ./.deploy-prod/server start
 ```
 
-For manual environment variable setup, use the syntax of your shell. The built-in `pnpm run start:server:staging` and `pnpm run start:server:prod` scripts are the cross-platform option.
+If you need to override the runtime file root manually, set `RUNTIME_HOME`. The default commands should cover normal development and deployment flows.
 
 If dependency declarations change in any workspace package (`dependencies`, `devDependencies`, `peerDependencies`, or workspace links), run `pnpm install` again so `pnpm-lock.yaml` and the deploy dependency graph stay in sync.
 
@@ -280,13 +275,13 @@ Load order:
 
 The merged config is validated by `apps/server/schemas/config.schema.json`.
 
-Config files are resolved relative to the `apps/server` package (or the deployed server package root). `APP_HOME` only decides how relative runtime paths such as `logger.logFilePath`, `runtimeFiles.tempDir`, `runtimeFiles.userDataDir`, and `promptLog.filePath` are expanded. If `APP_HOME` is omitted, the server uses `process.cwd()` as the runtime root.
+Config files are always read from `apps/server/config` in source mode or from `server/config` in the deployed package. Relative runtime paths such as `logger.logFilePath`, `runtimeFiles.tempDir`, `runtimeFiles.userDataDir`, and `promptLog.filePath` are resolved from the current working directory by default. If you ever need to override that, set `RUNTIME_HOME`.
 
 `apps/server/config/config.local.json` is intended for machine-local overrides and is not committed. `apps/server/config/config.local.json.example` is the template to copy when you need local development overrides.
 
 Committed environment overlays currently live in `apps/server/config/config.staging.json` and `apps/server/config/config.prod.json`.
 
-`apps/qq-bot` defaults to loading its bot environment from `apps/qq-bot/.env`.
+`apps/qq-bot` defaults to loading its bot environment from `apps/qq-bot/.env`. When started through `pnpm run dev:qq-bot` from the repo root, its runtime output also lands under the repo root `.runtime/`.
 
 Important sections:
 

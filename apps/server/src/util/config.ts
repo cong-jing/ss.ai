@@ -51,8 +51,15 @@ export interface RuntimeConfig {
     };
 }
 
+// Loader overrides used by tests and special startup paths.
+// - `runtimeHome`: base directory for relative runtime outputs such as logs,
+//   temp files, sqlite data, and prompt logs.
+// - `appEnv`: selects `config.{appEnv}.json` as an optional overlay. (staging, production, etc.)
+// - `cwd`: resolution base for relative `runtimeHome` / `configDir`; defaults
+//   to the real process working directory when omitted.
+// - `configDir`: explicit config directory override, mainly for tests.
 interface RuntimeConfigContext {
-    appHome?: string;
+    runtimeHome?: string;
     appEnv?: string;
     cwd?: string;
     configDir?: string;
@@ -155,15 +162,21 @@ function buildRuntimeModels(modelsRaw: RawConfig["models"]): Record<string, Runt
     return runtimeModels;
 }
 
+// Runtime files and sqlite data follow the runtime home. In normal development
+// this is the repo root because `pnpm run dev:*` starts there. In deployed
+// layouts it becomes `.deploy-*/server` because the start command runs there.
 function resolveRuntimeHome(context: RuntimeConfigContext = {}): string {
-    const configuredAppHome = context.appHome ?? process.env["APP_HOME"]?.trim();
-    if (!configuredAppHome) {
+    const configuredRuntimeHome = context.runtimeHome
+        ?? process.env["RUNTIME_HOME"]?.trim();
+    if (!configuredRuntimeHome) {
         return context.cwd ?? process.cwd();
     }
 
-    return path.resolve(context.cwd ?? process.cwd(), configuredAppHome);
+    return path.resolve(context.cwd ?? process.cwd(), configuredRuntimeHome);
 }
 
+// Config files are intentionally *not* resolved from runtimeHome. Source mode
+// always reads the committed server config directory unless tests override it.
 function resolveConfigDir(context: RuntimeConfigContext = {}): string {
     if (context.configDir?.trim()) {
         return path.resolve(context.cwd ?? process.cwd(), context.configDir);
@@ -282,6 +295,8 @@ function mergeConfig(base: RawConfig, override: RawConfig): RawConfig {
     return result as RawConfig;
 }
 
+// Relative paths inside JSON config are expanded from runtimeHome so the same
+// config file can be reused in repo-root dev mode and deployed server mode.
 function toAbsolutePath(runtimeHome: string, input: unknown, fallbackRelativePath: string): string {
     if (typeof input === "string" && input.trim()) {
         return path.resolve(runtimeHome, input);
@@ -299,6 +314,8 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
     const envConfigPath = appEnv ? path.join(configDir, `config.${appEnv}.json`) : undefined;
     const localConfigPath = path.join(configDir, "config.local.json");
 
+    // Required base config + optional env/local overlays. The merge order is
+    // default < env < local, matching the intended override precedence.
     const defaultConfig = readJsonConfig(defaultConfigPath, { required: true });
     const envConfig = envConfigPath
         ? readJsonConfig(envConfigPath)

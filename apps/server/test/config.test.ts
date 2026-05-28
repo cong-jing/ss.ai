@@ -74,10 +74,10 @@ describe("loadRuntimeConfig", () => {
             logger?: { logFilePath?: string };
         };
         const originalAppEnv = process.env.APP_ENV;
-        const originalAppHome = process.env.APP_HOME;
+        const originalRuntimeHome = process.env.RUNTIME_HOME;
 
         delete process.env.APP_ENV;
-        delete process.env.APP_HOME;
+        delete process.env.RUNTIME_HOME;
 
         try {
             const config = loadRuntimeConfig({ cwd: runtimeHome });
@@ -93,15 +93,15 @@ describe("loadRuntimeConfig", () => {
             } else {
                 process.env.APP_ENV = originalAppEnv;
             }
-            if (originalAppHome === undefined) {
-                delete process.env.APP_HOME;
+            if (originalRuntimeHome === undefined) {
+                delete process.env.RUNTIME_HOME;
             } else {
-                process.env.APP_HOME = originalAppHome;
+                process.env.RUNTIME_HOME = originalRuntimeHome;
             }
         }
     });
 
-    it("uses cwd as the default app home and resolves relative runtime paths from it", async () => {
+    it("uses cwd as the default runtime home and resolves relative runtime paths from it", async () => {
         const runtimeHome = await createTempDir("ss-ai-config-cwd-");
         const configRoot = path.join(runtimeHome, "config");
         await writeJson(configPath(configRoot, "config.default.json"), {
@@ -124,7 +124,7 @@ describe("loadRuntimeConfig", () => {
         assert.equal(config.promptLog.filePath, path.join(runtimeHome, ".runtime/logs/dev.prompt.log"));
     });
 
-    it("merges default, env, and local config in order while resolving relative APP_HOME from cwd", async () => {
+    it("merges default, env, and local config in order while resolving relative runtime home from cwd", async () => {
         const cwd = await createTempDir("ss-ai-config-parent-");
         const runtimeHome = path.join(cwd, "runtime-root");
         const configRoot = await createTempDir("ss-ai-config-dir-");
@@ -159,7 +159,7 @@ describe("loadRuntimeConfig", () => {
 
         const config = loadRuntimeConfig({
             cwd,
-            appHome: "./runtime-root",
+            runtimeHome: "./runtime-root",
             appEnv: "staging",
             configDir: configRoot,
         });
