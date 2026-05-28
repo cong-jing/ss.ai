@@ -289,9 +289,8 @@ function normalizeDisplayName(value: string | null | undefined): string | null {
 }
 
 function validatePassword(value: string): string {
-    const password = value.trim();
-    if (password.length < PASSWORD_MIN_LENGTH) {
+    if (value.length < PASSWORD_MIN_LENGTH) {
         throw new AuthHttpError(400, `password must be at least ${PASSWORD_MIN_LENGTH} chars.`);
     }
-    return password;
+    return value;
 }

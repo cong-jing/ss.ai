@@ -87,6 +87,23 @@ describe("Auth API", () => {
             .expect(401);
     });
 
+    it("treats leading and trailing spaces in password as significant", async () => {
+        await app.agent
+            .post("/v1/auth/register")
+            .send({ username: "spacey", password: "  password123  ", displayName: "Spacey" })
+            .expect(200);
+
+        await app.agent
+            .post("/v1/auth/login")
+            .send({ username: "spacey", password: "password123" })
+            .expect(401);
+
+        await app.agent
+            .post("/v1/auth/login")
+            .send({ username: "spacey", password: "  password123  " })
+            .expect(200);
+    });
+
     it("marks session cookies as secure when cookieSecure is enabled", async () => {
         const stagingApp = createTestApp({}, {
             auth: {
