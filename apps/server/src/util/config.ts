@@ -214,8 +214,15 @@ function validateRawConfig(
     return parsed as RawConfig;
 }
 
-function readJsonConfig(configPath: string): { config: RawConfig; exists: boolean } {
+function readJsonConfig(
+    configPath: string,
+    options: { required?: boolean } = {},
+): { config: RawConfig; exists: boolean } {
+    const required = options.required ?? false;
     if (!fs.existsSync(configPath)) {
+        if (required) {
+            throw new Error(`Missing required config file: ${configPath}. Check APP_HOME and deployment config files.`);
+        }
         return {
             config: {},
             exists: false,
@@ -277,7 +284,7 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
     const envConfigPath = appEnv ? path.join(configDir, `config.${appEnv}.json`) : undefined;
     const localConfigPath = path.join(configDir, "config.local.json");
 
-    const defaultConfig = readJsonConfig(defaultConfigPath);
+    const defaultConfig = readJsonConfig(defaultConfigPath, { required: true });
     const envConfig = envConfigPath
         ? readJsonConfig(envConfigPath)
         : {

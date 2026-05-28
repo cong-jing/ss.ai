@@ -148,4 +148,13 @@ describe("loadRuntimeConfig", () => {
         assert.equal(config.http.port, 9300);
         assert.equal(config.logger.logFilePath, path.join(appHome, ".runtime/logs/ss-ai.log"));
     });
+
+    it("fails fast when config.default.json is missing", async () => {
+        const appHome = await createTempDir("ss-ai-config-missing-default-");
+
+        assert.throws(
+            () => loadRuntimeConfig({ cwd: appHome }),
+            /Missing required config file: .*config\.default\.json/,
+        );
+    });
 });
