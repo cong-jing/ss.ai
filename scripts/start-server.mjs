@@ -28,6 +28,6 @@ if (result.error) {
     throw result.error;
 }
 
-if (result.status !== 0) {
+if (result.status !== 0 || result.signal != null) {
     process.exit(result.status ?? 1);
 }
