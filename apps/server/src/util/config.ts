@@ -16,7 +16,7 @@ export interface RuntimeModelEntry {
 }
 
 export interface RuntimeConfig {
-    configSources?: string[];
+    configSources: string[];
     http: {
         host: string;
         port: number;

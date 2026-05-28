@@ -38,7 +38,7 @@ async function main(): Promise<void> {
     });
 
     process.stdout.write(`Server is running at http://${config.http.host}:${config.http.port}\n`);
-    process.stdout.write(`Config sources: ${config.configSources?.join(", ")}\n`);
+    process.stdout.write(`Config sources: ${config.configSources.join(", ")}\n`);
     process.stdout.write(`Working directory: ${process.cwd()}\n`);
     process.stdout.write(`Runtime paths: log=${config.logger.logFilePath}, temp=${config.runtimeFiles.tempDir}, userData=${config.runtimeFiles.userDataDir}, promptLog=${config.promptLog.filePath}\n`);
 }
