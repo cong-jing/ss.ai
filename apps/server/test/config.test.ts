@@ -74,8 +74,10 @@ describe("loadRuntimeConfig", () => {
             logger?: { logFilePath?: string };
         };
         const originalAppEnv = process.env.APP_ENV;
+        const originalAppHome = process.env.APP_HOME;
 
         delete process.env.APP_ENV;
+        delete process.env.APP_HOME;
 
         try {
             const config = loadRuntimeConfig({ cwd: runtimeHome });
@@ -90,6 +92,11 @@ describe("loadRuntimeConfig", () => {
                 delete process.env.APP_ENV;
             } else {
                 process.env.APP_ENV = originalAppEnv;
+            }
+            if (originalAppHome === undefined) {
+                delete process.env.APP_HOME;
+            } else {
+                process.env.APP_HOME = originalAppHome;
             }
         }
     });
