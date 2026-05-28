@@ -138,7 +138,7 @@ export type NewAppUserRow = typeof appUsers.$inferInsert;
 export const appSessions = sqliteTable("app_sessions", {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
-    tokenHash: text("token_hash").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
     expiresAt: text("expires_at").notNull(),
     createdAt: text("created_at").notNull(),
 });

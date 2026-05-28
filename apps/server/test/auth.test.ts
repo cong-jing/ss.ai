@@ -14,6 +14,7 @@ describe("Auth API", () => {
                 allowRegistration: true,
                 sessionDays: 30,
                 cookieName: "ss_ai_session",
+                cookieSecure: false,
             },
         });
     });
@@ -86,10 +87,7 @@ describe("Auth API", () => {
             .expect(401);
     });
 
-    it("marks session cookies as secure for staging deployments", async () => {
-        const previousAppEnv = process.env.APP_ENV;
-        process.env.APP_ENV = "staging";
-
+    it("marks session cookies as secure when cookieSecure is enabled", async () => {
         const stagingApp = createTestApp({}, {
             auth: {
                 mode: "local-password",
@@ -97,6 +95,7 @@ describe("Auth API", () => {
                 allowRegistration: true,
                 sessionDays: 30,
                 cookieName: "ss_ai_session",
+                cookieSecure: true,
             },
         });
 
@@ -110,11 +109,6 @@ describe("Auth API", () => {
             assert.match(cookie, /; Secure/i);
         } finally {
             stagingApp.cleanup();
-            if (previousAppEnv === undefined) {
-                delete process.env.APP_ENV;
-            } else {
-                process.env.APP_ENV = previousAppEnv;
-            }
         }
     });
 });

@@ -8,3 +8,4 @@
 import "./messages.test.js";
 import "./characters.test.js";
 import "./conversations.test.js";
+import "./sessionsMigration.test.js";

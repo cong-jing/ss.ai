@@ -8,6 +8,8 @@ async function removePath(path) {
 }
 
 await removePath("deploy");
+await removePath(".deploy-staging");
+await removePath(".deploy-prod");
 await removePath("node_modules");
 await removePath("package-lock.json");
 await removePath("npm-shrinkwrap.json");

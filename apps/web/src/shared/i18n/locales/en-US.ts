@@ -1,4 +1,13 @@
 export const enUS = {
+    "auth.login": "Login",
+    "auth.register": "Register",
+    "auth.username": "Username",
+    "auth.displayName": "Display Name",
+    "auth.password": "Password",
+    "auth.signIn": "Sign In",
+    "auth.createAccount": "Create Account",
+    "auth.logout": "Log Out",
+    "auth.signingOut": "Signing Out...",
     "common.loading": "Loading...",
     "common.saving": "Saving...",
     "common.save": "Save",

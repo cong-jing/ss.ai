@@ -48,7 +48,7 @@ async function onLogout(): Promise<void> {
             {{ isSavingUser ? t("common.saving") : t("common.save") }}
           </Button>
           <Button v-if="showLogout" variant="danger" :disabled="isLoggingOut" @click="onLogout">
-            {{ isLoggingOut ? "Signing Out..." : "Log Out" }}
+            {{ isLoggingOut ? t("auth.signingOut") : t("auth.logout") }}
           </Button>
         </div>
         <p v-if="isLoadingUser" class="hint">{{ t("common.loading") }}</p>

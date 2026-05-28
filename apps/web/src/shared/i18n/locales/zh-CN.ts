@@ -1,6 +1,15 @@
 import type { MessageSchema } from "./en-US";
 
 export const zhCN: MessageSchema = {
+    "auth.login": "登录",
+    "auth.register": "注册",
+    "auth.username": "用户名",
+    "auth.displayName": "显示名",
+    "auth.password": "密码",
+    "auth.signIn": "登录",
+    "auth.createAccount": "创建账号",
+    "auth.logout": "退出登录",
+    "auth.signingOut": "正在退出...",
     "common.loading": "加载中...",
     "common.saving": "保存中...",
     "common.save": "保存",

@@ -16,6 +16,11 @@ const sourceConfigDir = resolve(repoRoot, "config");
 const sourceSchemaDir = resolve(repoRoot, "schemas");
 const sourceEnvConfig = resolve(sourceConfigDir, `config.${appEnv}.json`);
 const deployPackageJsonPath = resolve(deployRoot, "package.json");
+const configWhitelist = [
+    "config.default.json",
+    `config.${appEnv}.json`,
+    "config.local.json.example",
+];
 
 try {
     await access(sourceEnvConfig);
@@ -26,7 +31,20 @@ try {
 await mkdir(resolve(deployRoot, "schemas"), { recursive: true });
 await mkdir(resolve(deployRoot, "config"), { recursive: true });
 await cp(sourceSchemaDir, resolve(deployRoot, "schemas"), { recursive: true });
-await cp(sourceConfigDir, resolve(deployRoot, "config"), { recursive: true });
+for (const configFile of configWhitelist) {
+    const sourceFile = resolve(sourceConfigDir, configFile);
+    const isOptional = configFile === "config.local.json.example";
+    try {
+        await access(sourceFile);
+        await cp(sourceFile, resolve(deployRoot, "config", configFile));
+    } catch {
+        if (isOptional) {
+            process.stdout.write(`Skipping optional config file: ${configFile}\n`);
+        } else {
+            throw new Error(`Missing required config file: ${configFile} (expected at ${sourceFile})`);
+        }
+    }
+}
 
 const deployPackageRaw = await readFile(deployPackageJsonPath, "utf-8");
 const deployPackage = JSON.parse(deployPackageRaw);

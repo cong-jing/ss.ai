@@ -211,6 +211,53 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             ON app_sessions(expires_at)
     `);
 
+    // Backfill migration for legacy databases that may not enforce uniqueness
+    // on app_sessions.token_hash yet. We keep the latest row per token_hash
+    // before ensuring a unique index exists to avoid DDL failure on duplicates.
+    const appSessionIndexes = sqlite.prepare(`PRAGMA index_list('app_sessions')`).all() as Array<{
+        name: string;
+        unique: number;
+    }>;
+    const hasUniqueTokenHashIndex = appSessionIndexes.some((indexRow) => {
+        if (Number(indexRow.unique) !== 1) {
+            return false;
+        }
+
+        const indexName = indexRow.name.replace(/'/g, "''");
+        const indexColumns = sqlite.prepare(`PRAGMA index_info('${indexName}')`).all() as Array<{
+            name: string;
+        }>;
+
+        return indexColumns.length === 1 && indexColumns[0]?.name === "token_hash";
+    });
+
+    if (!hasUniqueTokenHashIndex) {
+        const migrateAppSessionTokenHashes = sqlite.transaction(() => {
+            sqlite.exec(`
+                DELETE FROM app_sessions
+                WHERE rowid IN (
+                    SELECT rowid
+                    FROM (
+                        SELECT
+                            rowid,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY token_hash
+                                ORDER BY expires_at DESC, created_at DESC, rowid DESC
+                            ) AS duplicate_rank
+                        FROM app_sessions
+                    ) ranked_sessions
+                    WHERE duplicate_rank > 1
+                )
+            `);
+            sqlite.exec(`
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_app_sessions_token_hash_unique
+                    ON app_sessions(token_hash)
+            `);
+        });
+
+        migrateAppSessionTokenHashes();
+    }
+
     const db = drizzle(sqlite, { schema });
 
     return { sqlite, db };

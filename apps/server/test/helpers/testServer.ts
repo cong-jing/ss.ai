@@ -64,10 +64,14 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}, op
             allowRegistration: true,
             sessionDays: 30,
             cookieName: "ss_ai_session",
+            cookieSecure: false,
         },
     };
     if (options.auth) {
-        config.auth = options.auth;
+        config.auth = {
+            ...config.auth,
+            ...options.auth,
+        };
     }
 
     const conversationActor = new InMemoryConversationActorStore();

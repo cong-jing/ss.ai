@@ -4,6 +4,7 @@ import Button from "../shared/ui/Button.vue";
 import TextInput from "../shared/ui/TextInput.vue";
 import { useAuthState } from "./useAuthState";
 import { useToast } from "../shared/ui/useToast";
+import { t } from "../shared/i18n/i18n";
 
 const { allowRegistration, login, register } = useAuthState();
 const toast = useToast();
@@ -45,25 +46,25 @@ function switchTab(next: "login" | "register"): void {
     <section class="auth-panel">
       <div class="auth-tabs">
         <Button :variant="tab === 'login' ? 'primary' : 'default'" @click="switchTab('login')">
-          Login
+          {{ t("auth.login") }}
         </Button>
         <Button :variant="tab === 'register' ? 'primary' : 'default'" :disabled="!canSwitchToRegister" @click="switchTab('register')">
-          Register
+          {{ t("auth.register") }}
         </Button>
       </div>
 
       <div class="auth-form">
-        <label class="auth-label">Username</label>
+        <label class="auth-label">{{ t("auth.username") }}</label>
         <TextInput v-model="username" autocomplete="username" />
 
-        <label v-if="tab === 'register'" class="auth-label">Display Name</label>
+        <label v-if="tab === 'register'" class="auth-label">{{ t("auth.displayName") }}</label>
         <TextInput v-if="tab === 'register'" v-model="displayName" autocomplete="nickname" />
 
-        <label class="auth-label">Password</label>
+        <label class="auth-label">{{ t("auth.password") }}</label>
         <TextInput v-model="password" type="password" autocomplete="current-password" />
 
         <Button variant="primary" :disabled="isSubmitting" @click="onSubmit">
-          {{ tab === "login" ? "Sign In" : "Create Account" }}
+          {{ tab === "login" ? t("auth.signIn") : t("auth.createAccount") }}
         </Button>
       </div>
     </section>
