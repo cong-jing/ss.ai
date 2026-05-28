@@ -89,11 +89,8 @@ pnpm run start:server:prod
 手工启动也可以：
 
 ```bash
-cd .deploy-staging/server
-APP_ENV=staging pnpm start
-
-cd .deploy-prod/server
-APP_ENV=prod pnpm start
+pnpm run start:server:staging
+pnpm run start:server:prod
 ```
 
 `APP_HOME` 默认取当前工作目录。在本地开发里，执行 `pnpm run dev:server` 时它就是 `apps/server`；在部署布局里，则是 `.deploy-staging/server` 或 `.deploy-prod/server` 本身，因此这些场景下都不需要额外设置 `APP_HOME`。如果你不是在运行根目录下启动服务，请显式设置 `APP_HOME`，这样配置内的相对运行路径和配置文件都会以期望的运行根目录为基准。
@@ -101,10 +98,11 @@ APP_ENV=prod pnpm start
 示例：
 
 ```bash
-APP_HOME=/absolute/path/to/runtime-root APP_ENV=staging node /absolute/path/to/runtime-root/dist/index.js
 pnpm --filter @ss-ai/server start
-APP_ENV=prod pnpm --dir ./.deploy-prod/server start
+pnpm --dir ./.deploy-prod/server start
 ```
+
+如果你需要手工设置环境变量，请使用当前 shell 对应的语法。跨平台场景下，优先使用内置的 `pnpm run start:server:staging` 和 `pnpm run start:server:prod`。
 
 如果你修改了任意 workspace 包的依赖声明（`dependencies`、`devDependencies`、`peerDependencies` 或 workspace 依赖关系），需要重新执行 `pnpm install`，以同步 `pnpm-lock.yaml` 与部署依赖图。
 

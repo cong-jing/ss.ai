@@ -89,11 +89,8 @@ pnpm run start:server:prod
 Manual startup still works:
 
 ```bash
-cd .deploy-staging/server
-APP_ENV=staging pnpm start
-
-cd .deploy-prod/server
-APP_ENV=prod pnpm start
+pnpm run start:server:staging
+pnpm run start:server:prod
 ```
 
 `APP_HOME` defaults to the current working directory. In local development that means `apps/server` when you run `pnpm run dev:server`. In the deployed layout that means `.deploy-staging/server` or `.deploy-prod/server`, so starting from those directories works without setting `APP_HOME`. If you start the server from a different directory, set `APP_HOME` explicitly so relative runtime paths and config files resolve from the intended runtime root.
@@ -101,10 +98,11 @@ APP_ENV=prod pnpm start
 Examples:
 
 ```bash
-APP_HOME=/absolute/path/to/runtime-root APP_ENV=staging node /absolute/path/to/runtime-root/dist/index.js
 pnpm --filter @ss-ai/server start
-APP_ENV=prod pnpm --dir ./.deploy-prod/server start
+pnpm --dir ./.deploy-prod/server start
 ```
+
+For manual environment variable setup, use the syntax of your shell. The built-in `pnpm run start:server:staging` and `pnpm run start:server:prod` scripts are the cross-platform option.
 
 If dependency declarations change in any workspace package (`dependencies`, `devDependencies`, `peerDependencies`, or workspace links), run `pnpm install` again so `pnpm-lock.yaml` and the deploy dependency graph stay in sync.
 

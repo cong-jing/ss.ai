@@ -7,7 +7,6 @@ import type { LogLevel } from "@ss-ai/persona-flow-logger";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(moduleDir, "..", "..");
-const repoRoot = path.resolve(serverRoot, "..", "..");
 
 export interface RuntimeModelEntry {
     provider: string;
@@ -17,7 +16,7 @@ export interface RuntimeModelEntry {
 }
 
 export interface RuntimeConfig {
-    configSources: string[];
+    configSources?: string[];
     http: {
         host: string;
         port: number;
