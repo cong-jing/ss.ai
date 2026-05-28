@@ -13,18 +13,22 @@
     },
     "exports": {
         ".": {
+            "source": "./src/index.ts",
             "types": "./dist/index.d.ts",
             "import": "./dist/index.js"
         },
         "./apis/userPreference": {
+            "source": "./src/apis/userPreference.api.ts",
             "types": "./dist/apis/userPreference.api.d.ts",
             "import": "./dist/apis/userPreference.api.js"
         },
         "./apis/userProfile": {
+            "source": "./src/apis/userProfile.api.ts",
             "types": "./dist/apis/userProfile.api.d.ts",
             "import": "./dist/apis/userProfile.api.js"
         },
         "./apis/auth": {
+            "source": "./src/apis/auth.api.ts",
             "types": "./dist/apis/auth.api.d.ts",
             "import": "./dist/apis/auth.api.js"
         }
