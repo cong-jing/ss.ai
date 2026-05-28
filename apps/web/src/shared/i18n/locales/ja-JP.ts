@@ -1,6 +1,15 @@
 import type { MessageSchema } from "./en-US";
 
 export const jaJP: MessageSchema = {
+    "auth.login": "ログイン",
+    "auth.register": "登録",
+    "auth.username": "ユーザー名",
+    "auth.displayName": "表示名",
+    "auth.password": "パスワード",
+    "auth.signIn": "サインイン",
+    "auth.createAccount": "アカウント作成",
+    "auth.logout": "ログアウト",
+    "auth.signingOut": "ログアウト中...",
     "common.loading": "読み込み中...",
     "common.saving": "保存中...",
     "common.save": "保存",

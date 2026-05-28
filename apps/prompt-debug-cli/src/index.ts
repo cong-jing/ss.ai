@@ -1,8 +1,29 @@
 import fs from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
-import { renderPromptTemplate, type PromptViewModel } from "@ss-ai/persona-flow";
-import { createModelClientFromConfig } from "@ss-ai/persona-flow-model-client";
+import { renderPromptTemplate } from "@ss-ai/persona-flow";
+import { DefaultModelClient } from "@ss-ai/persona-flow-model-client";
 import { parse as parseYaml } from "yaml";
+
+type PromptViewModel = {
+    p1: {
+        speakerTag: string;
+        displayName: string;
+        description: string;
+        personaPrompt: string;
+    };
+    p2: {
+        speakerTag: string;
+    };
+    actors: Array<{
+        speakerTag: string;
+        displayName: string;
+        sourceType: "logged_user" | "local_actor";
+        profile: string;
+    }>;
+    relationshipState: string;
+    memories: string[];
+    structuredOutput: boolean;
+};
 
 type CliConfig = {
     name?: string;
@@ -322,19 +343,24 @@ async function runChat(
         throw new Error("Missing API key. Set config.apiKey or env MISTRAL_API_KEY / MODEL_API_KEY.");
     }
 
-    const client = createModelClientFromConfig({
-        provider: config.provider,
-        model: config.model,
-        apiKey,
-        apiUrl: config.apiUrl ?? "https://api.mistral.ai",
-    });
-
-    const result = await client.generateNonStructured({
-        messages: assembledMessages,
+    const client = new DefaultModelClient({
+        providerConfigs: {
+            [config.provider.toLowerCase()]: {
+                provider: config.provider,
+                apiUrl: config.apiUrl ?? "https://api.mistral.ai",
+            },
+        },
         timeoutMs: config.timeoutMs ?? 60000,
     });
 
-    const raw = result.output;
+    const result = await client.generate({
+        provider: config.provider,
+        model: config.model,
+        encryptedApiKey: apiKey,
+        messages: assembledMessages,
+    });
+
+    const raw = typeof result.output === "string" ? result.output : "";
     if (!raw) {
         return "";
     }

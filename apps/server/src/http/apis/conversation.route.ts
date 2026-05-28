@@ -7,7 +7,7 @@ import {
 } from "@ss-ai/contracts";
 import type { Conversation } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
-import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
+import { resolveRequestUserId, toErrorResponse, type HttpApiContext } from "./apiContext.js";
 
 function toContractConversation(c: Conversation): ConversationInfo {
     return { id: c.id, title: c.title, createdAt: c.createdAt, updatedAt: c.updatedAt };
@@ -18,14 +18,15 @@ export function registerConversationRoutes(context: HttpApiContext): void {
 
     registerApi(context.app, ApiListConversations, {
         handleRequest: async (req) => {
+            const userId = await resolveRequestUserId(req, context);
             const characterId = req.params.id;
-            const character = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId });
+            const character = await store.getCharacterById({ userId, characterId });
             if (!character || character.status === "archived") {
                 throw new Error(`Character not found: ${characterId}`);
             }
             const [state, convList] = await Promise.all([
-                context.stores.chat.getCharacterState({ userId: DEFAULT_USER_ID, characterId }),
-                context.stores.conversation.listConversations({ userId: DEFAULT_USER_ID, characterId }),
+                context.stores.chat.getCharacterState({ userId, characterId }),
+                context.stores.conversation.listConversations({ userId, characterId }),
             ]);
             return {
                 conversations: convList.map(toContractConversation),
@@ -37,8 +38,9 @@ export function registerConversationRoutes(context: HttpApiContext): void {
 
     registerApi(context.app, ApiCreateConversation, {
         handleRequest: async (req) => {
+            const userId = await resolveRequestUserId(req, context);
             const characterId = req.params.id;
-            const character = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId });
+            const character = await store.getCharacterById({ userId, characterId });
             if (!character || character.status === "archived") {
                 throw new Error(`Character not found: ${characterId}`);
             }
@@ -46,28 +48,28 @@ export function registerConversationRoutes(context: HttpApiContext): void {
             const conversationId = crypto.randomUUID();
             await context.stores.conversation.createConversation({
                 id: conversationId,
-                userId: DEFAULT_USER_ID,
+                userId,
                 characterId,
                 title: "new chat",
                 createdAt: now,
                 updatedAt: now,
             }, { selfDisplayName: character.displayName ?? character.name });
-            const userProfile = await context.stores.userProfile.getUserProfile(DEFAULT_USER_ID);
+            const userProfile = await context.stores.userProfile.getUserProfile(userId);
             await context.stores.conversationActor.addConversationActor({
                 conversationId,
                 role: "other",
                 sourceType: "logged_user",
-                displayName: userProfile?.name ?? DEFAULT_USER_ID,
-                userProfileId: DEFAULT_USER_ID,
+                displayName: userProfile?.name ?? userId,
+                userProfileId: userId,
             });
             await context.stores.chat.upsertCharacterState({
-                userId: DEFAULT_USER_ID,
+                userId,
                 characterId,
                 currentConversationId: conversationId,
                 createdAt: now,
                 updatedAt: now,
             });
-            const convList = await context.stores.conversation.listConversations({ userId: DEFAULT_USER_ID, characterId });
+            const convList = await context.stores.conversation.listConversations({ userId, characterId });
             return {
                 conversationId,
                 conversations: convList.map(toContractConversation),
@@ -79,19 +81,20 @@ export function registerConversationRoutes(context: HttpApiContext): void {
 
     registerApi(context.app, ApiSelectConversation, {
         handleRequest: async (req, body) => {
+            const userId = await resolveRequestUserId(req, context);
             const characterId = req.params.id;
             const conversationId = typeof body?.conversationId === "string" ? body.conversationId : "";
-            const character = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId });
+            const character = await store.getCharacterById({ userId, characterId });
             if (!character || character.status === "archived") {
                 throw new Error(`Character not found: ${characterId}`);
             }
-            const convList = await context.stores.conversation.listConversations({ userId: DEFAULT_USER_ID, characterId });
+            const convList = await context.stores.conversation.listConversations({ userId, characterId });
             if (!convList.some(c => c.id === conversationId)) {
                 throw new Error(`Conversation not found: ${conversationId}`);
             }
             const now = new Date().toISOString();
             await context.stores.chat.upsertCharacterState({
-                userId: DEFAULT_USER_ID,
+                userId,
                 characterId,
                 currentConversationId: conversationId,
                 createdAt: now,
@@ -104,25 +107,26 @@ export function registerConversationRoutes(context: HttpApiContext): void {
 
     registerApi(context.app, ApiDeleteConversation, {
         handleRequest: async (req) => {
+            const userId = await resolveRequestUserId(req, context);
             const characterId = req.params.id;
             const convId = req.params.convId;
-            const character = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId });
+            const character = await store.getCharacterById({ userId, characterId });
             if (!character || character.status === "archived") {
                 throw new Error(`Character not found: ${characterId}`);
             }
 
             const existingConversation = await context.stores.conversation.getConversationById({
-                userId: DEFAULT_USER_ID,
+                userId,
                 conversationId: convId,
             });
             if (!existingConversation || existingConversation.characterId !== characterId) {
                 throw new Error(`Conversation not found: ${convId}`);
             }
 
-            const state = await context.stores.chat.getCharacterState({ userId: DEFAULT_USER_ID, characterId });
-            await context.stores.conversation.deleteConversation({ userId: DEFAULT_USER_ID, conversationId: convId });
+            const state = await context.stores.chat.getCharacterState({ userId, characterId });
+            await context.stores.conversation.deleteConversation({ userId, conversationId: convId });
 
-            let remaining = await context.stores.conversation.listConversations({ userId: DEFAULT_USER_ID, characterId });
+            let remaining = await context.stores.conversation.listConversations({ userId, characterId });
             let activeConversationId: string | null = state?.currentConversationId ?? null;
 
             if (state?.currentConversationId === convId) {
@@ -133,25 +137,25 @@ export function registerConversationRoutes(context: HttpApiContext): void {
                     const newConvId = crypto.randomUUID();
                     await context.stores.conversation.createConversation({
                         id: newConvId,
-                        userId: DEFAULT_USER_ID,
+                        userId,
                         characterId,
                         title: "new chat",
                         createdAt: now,
                         updatedAt: now,
                     }, { selfDisplayName: character.displayName ?? character.name });
-                    const userProfile = await context.stores.userProfile.getUserProfile(DEFAULT_USER_ID);
+                    const userProfile = await context.stores.userProfile.getUserProfile(userId);
                     await context.stores.conversationActor.addConversationActor({
                         conversationId: newConvId,
                         role: "other",
                         sourceType: "logged_user",
-                        displayName: userProfile?.name ?? DEFAULT_USER_ID,
-                        userProfileId: DEFAULT_USER_ID,
+                        displayName: userProfile?.name ?? userId,
+                        userProfileId: userId,
                     });
                     activeConversationId = newConvId;
-                    remaining = [{ id: newConvId, userId: DEFAULT_USER_ID, characterId, title: "new chat", createdAt: now, updatedAt: now }];
+                    remaining = [{ id: newConvId, userId, characterId, title: "new chat", createdAt: now, updatedAt: now }];
                 }
                 await context.stores.chat.upsertCharacterState({
-                    userId: DEFAULT_USER_ID,
+                    userId,
                     characterId,
                     currentConversationId: activeConversationId,
                     createdAt: state?.createdAt ?? new Date().toISOString(),
@@ -169,15 +173,16 @@ export function registerConversationRoutes(context: HttpApiContext): void {
 
     context.app.patch("/v1/characters/:id/conversations/:convId", async (req, res) => {
         try {
+            const userId = await resolveRequestUserId(req, context);
             const characterId = req.params.id;
             const convId = req.params.convId;
-            const character = await store.getCharacterById({ userId: DEFAULT_USER_ID, characterId });
+            const character = await store.getCharacterById({ userId, characterId });
             if (!character || character.status === "archived") {
                 throw new Error(`Character not found: ${characterId}`);
             }
 
             const existingConversation = await context.stores.conversation.getConversationById({
-                userId: DEFAULT_USER_ID,
+                userId,
                 conversationId: convId,
             });
             if (!existingConversation || existingConversation.characterId !== characterId) {
@@ -187,13 +192,13 @@ export function registerConversationRoutes(context: HttpApiContext): void {
             const title = typeof req.body?.title === "string" ? req.body.title.trim() || null : null;
             const updatedAt = new Date().toISOString();
             await context.stores.conversation.updateConversationTitle({
-                userId: DEFAULT_USER_ID,
+                userId,
                 conversationId: convId,
                 title,
                 updatedAt,
             });
 
-            const convList = await context.stores.conversation.listConversations({ userId: DEFAULT_USER_ID, characterId });
+            const convList = await context.stores.conversation.listConversations({ userId, characterId });
             const updated = convList.find((c) => c.id === convId);
             res.json({
                 conversation: updated ? toContractConversation(updated) : null,

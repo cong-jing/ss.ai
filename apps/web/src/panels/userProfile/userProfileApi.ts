@@ -54,6 +54,7 @@ export async function apiUpdateCharacter(
 ): Promise<Character> {
     const res = await fetch(`/v1/characters/${encodeURIComponent(id)}`, {
         method: "PATCH",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
     });
@@ -65,7 +66,7 @@ export async function apiUpdateCharacter(
 }
 
 export async function apiDeleteCharacter(id: string): Promise<void> {
-    const res = await fetch(`/v1/characters/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const res = await fetch(`/v1/characters/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "same-origin" });
     if (!res.ok && res.status !== 204) {
         const err = (await res.json()) as { message?: string };
         throw new Error(err.message ?? `Request failed: ${res.status}`);
@@ -81,7 +82,9 @@ export async function apiSetActiveCharacter(id: string): Promise<SetActiveCharac
 }
 
 export async function apiListConversations(characterId: string): Promise<ListConversationsResponse> {
-    const res = await fetch(`/v1/characters/${encodeURIComponent(characterId)}/conversations`);
+    const res = await fetch(`/v1/characters/${encodeURIComponent(characterId)}/conversations`, {
+        credentials: "same-origin",
+    });
     if (!res.ok) {
         const err = (await res.json()) as { message?: string };
         throw new Error(err.message ?? `Request failed: ${res.status}`);
@@ -92,6 +95,7 @@ export async function apiListConversations(characterId: string): Promise<ListCon
 export async function apiCreateConversation(characterId: string): Promise<CreateConversationResponse> {
     const res = await fetch(`/v1/characters/${encodeURIComponent(characterId)}/conversations`, {
         method: "POST",
+        credentials: "same-origin",
     });
     if (!res.ok) {
         const err = (await res.json()) as { message?: string };
@@ -103,6 +107,7 @@ export async function apiCreateConversation(characterId: string): Promise<Create
 export async function apiSelectConversation(characterId: string, conversationId: string): Promise<SelectConversationResponse> {
     const res = await fetch(`/v1/characters/${encodeURIComponent(characterId)}/active-conversation`, {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId }),
     });
@@ -116,7 +121,7 @@ export async function apiSelectConversation(characterId: string, conversationId:
 export async function apiDeleteConversation(characterId: string, conversationId: string): Promise<DeleteConversationResponse> {
     const res = await fetch(
         `/v1/characters/${encodeURIComponent(characterId)}/conversations/${encodeURIComponent(conversationId)}`,
-        { method: "DELETE" },
+        { method: "DELETE", credentials: "same-origin" },
     );
     if (!res.ok) {
         const err = (await res.json()) as { message?: string };

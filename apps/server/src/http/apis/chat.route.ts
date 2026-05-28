@@ -17,7 +17,7 @@ import { handleStreamChatRequest } from "./chat/streamService.js";
 
 export function registerChatRoute(context: HttpApiContext): void {
     registerApi(context.app, ApiChat, {
-        handleRequest: (_, body) => handleNonStreamChatRequest(context, body as ChatRequest & { userId?: string }),
+        handleRequest: (req, body) => handleNonStreamChatRequest(context, req, body as ChatRequest),
         handleError: (error) => {
             const response = toErrorResponse(error);
             context.logger.error("chat: failed", { message: response.message });
@@ -29,7 +29,7 @@ export function registerChatRoute(context: HttpApiContext): void {
 
     // Dry-run endpoint: assembles the prompt without calling the LLM or persisting anything
     registerApi(context.app, ApiChatDryRun, {
-        handleRequest: (_, body) => handleDryRunChatRequest(context, body as ChatDryRunRequest & { userId?: string }),
+        handleRequest: (req, body) => handleDryRunChatRequest(context, req, body as ChatDryRunRequest),
         handleError: (error) => {
             const response = toErrorResponse(error);
             context.logger.error("chat/dry-run: failed", { message: response.message });
@@ -39,13 +39,13 @@ export function registerChatRoute(context: HttpApiContext): void {
 
     // GET /v1/conversations/:id/messages
     registerApi(context.app, ApiGetMessages, {
-        handleRequest: (req) => handleGetConversationMessages(context, req.params.id),
+        handleRequest: (req) => handleGetConversationMessages(context, req, req.params.id),
         handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
     });
 
     // DELETE /v1/conversations/:id/messages/:messageId
     registerApi(context.app, ApiDeleteMessage, {
-        handleRequest: (req) => handleDeleteConversationMessage(context, req.params.id, req.params.messageId),
+        handleRequest: (req) => handleDeleteConversationMessage(context, req, req.params.id, req.params.messageId),
         handleError: (error) => ({ status: getStatusCode(error, 404), body: toErrorResponse(error) }),
     });
 }

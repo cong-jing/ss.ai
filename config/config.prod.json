@@ -10,6 +10,10 @@
         "tempDir": ".runtime/prod/temp",
         "userDataDir": ".runtime/prod/user-data"
     },
+    "auth": {
+        "mode": "local-password",
+        "cookieSecure": false
+    },
     "promptLog": {
         "enabled": false,
         "filePath": ".runtime/prod/logs/ss-ai.prompt.log"

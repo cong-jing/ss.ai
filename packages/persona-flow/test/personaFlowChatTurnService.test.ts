@@ -121,7 +121,7 @@ describe("persona-flow chat turn service", () => {
 
                 return { output: "", toolCalls: [] };
             },
-            generateNonStructuredStream: async () => ({ output: "", toolCalls: [], completed: true }),
+            generateStream: async () => ({ output: "", toolCalls: [], completed: true }),
             listModels: async () => [],
         };
 
@@ -175,7 +175,7 @@ describe("persona-flow chat turn service", () => {
 
                 return { output: "unused", toolCalls: [] };
             },
-            generateNonStructuredStream: async () => {
+            generateStream: async () => {
                 throw new Error("should not be called");
             },
             listModels: async () => [],

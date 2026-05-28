@@ -19,6 +19,7 @@ export async function apiUpdateConversationTitle(
         `/v1/characters/${encodeURIComponent(characterId)}/conversations/${encodeURIComponent(conversationId)}`,
         {
             method: 'PATCH',
+            credentials: "same-origin",
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title }),
         },
@@ -30,7 +31,9 @@ export async function apiUpdateConversationTitle(
 }
 
 export async function apiListConversationActors(conversationId: string): Promise<{ actors: ConversationActor[] }> {
-    const res = await fetch(`/v1/conversations/${encodeURIComponent(conversationId)}/actors`)
+    const res = await fetch(`/v1/conversations/${encodeURIComponent(conversationId)}/actors`, {
+        credentials: "same-origin",
+    })
     if (!res.ok) {
         const err = await res.json() as { message?: string }
         throw new Error(err.message ?? `Request failed: ${res.status}`)
@@ -44,6 +47,7 @@ export async function apiCreateConversationActor(
 ): Promise<{ actor: ConversationActor }> {
     const res = await fetch(`/v1/conversations/${encodeURIComponent(conversationId)}/actors`, {
         method: 'POST',
+        credentials: "same-origin",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
     })
@@ -61,6 +65,7 @@ export async function apiUpdateConversationActor(
 ): Promise<{ actor: ConversationActor }> {
     const res = await fetch(`/v1/conversations/${encodeURIComponent(conversationId)}/actors/${encodeURIComponent(actorId)}`, {
         method: 'PATCH',
+        credentials: "same-origin",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
     })
@@ -74,6 +79,7 @@ export async function apiUpdateConversationActor(
 export async function apiDeleteConversationActor(conversationId: string, actorId: string): Promise<void> {
     const res = await fetch(`/v1/conversations/${encodeURIComponent(conversationId)}/actors/${encodeURIComponent(actorId)}`, {
         method: 'DELETE',
+        credentials: "same-origin",
     })
     if (!res.ok) {
         const err = await res.json() as { message?: string }

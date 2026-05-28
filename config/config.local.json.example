@@ -13,6 +13,10 @@
         "enabled": true,
         "filePath": "./.runtime/logs/ss-ai.prompt.log"
     },
+    "auth": {
+        "mode": "default-user",
+        "cookieSecure": false
+    },
     "runtimeFiles": {
         "tempDir": "./.runtime/temp-dev",
         "userDataDir": "./.runtime/user-data-dev"

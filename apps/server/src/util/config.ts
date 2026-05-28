@@ -36,6 +36,14 @@ export interface RuntimeConfig {
         enabled: boolean;
         filePath: string;
     };
+    auth: {
+        mode: "default-user" | "local-password";
+        defaultUserId: string;
+        allowRegistration: boolean;
+        sessionDays: number;
+        cookieName: string;
+        cookieSecure: boolean;
+    };
 }
 
 interface RuntimeConfigContext {
@@ -76,6 +84,14 @@ interface RawConfig {
     promptLog?: {
         enabled?: boolean;
         filePath?: string;
+    };
+    auth?: {
+        mode?: "default-user" | "local-password";
+        defaultUserId?: string;
+        allowRegistration?: boolean;
+        sessionDays?: number;
+        cookieName?: string;
+        cookieSecure?: boolean;
     };
 }
 
@@ -198,8 +214,15 @@ function validateRawConfig(
     return parsed as RawConfig;
 }
 
-function readJsonConfig(configPath: string): { config: RawConfig; exists: boolean } {
+function readJsonConfig(
+    configPath: string,
+    options: { required?: boolean } = {},
+): { config: RawConfig; exists: boolean } {
+    const required = options.required ?? false;
     if (!fs.existsSync(configPath)) {
+        if (required) {
+            throw new Error(`Missing required config file: ${configPath}. Check APP_HOME and deployment config files.`);
+        }
         return {
             config: {},
             exists: false,
@@ -261,7 +284,7 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
     const envConfigPath = appEnv ? path.join(configDir, `config.${appEnv}.json`) : undefined;
     const localConfigPath = path.join(configDir, "config.local.json");
 
-    const defaultConfig = readJsonConfig(defaultConfigPath);
+    const defaultConfig = readJsonConfig(defaultConfigPath, { required: true });
     const envConfig = envConfigPath
         ? readJsonConfig(envConfigPath)
         : {
@@ -288,6 +311,14 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
     const tempDir = toAbsolutePath(appHome, fileConfig.runtimeFiles?.tempDir, ".runtime/temp");
     const userDataDir = toAbsolutePath(appHome, fileConfig.runtimeFiles?.userDataDir, ".runtime/user-data");
     const promptLogFilePath = toAbsolutePath(appHome, fileConfig.promptLog?.filePath, ".runtime/logs/prompt.log");
+    const authMode = fileConfig.auth?.mode ?? "default-user";
+    const defaultUserId = normalizeOptionalString(fileConfig.auth?.defaultUserId) ?? "default";
+    const cookieName = normalizeOptionalString(fileConfig.auth?.cookieName) ?? "ss_ai_session";
+    const sessionDaysRaw = fileConfig.auth?.sessionDays;
+    const sessionDays = Number.isFinite(sessionDaysRaw)
+        ? Math.max(1, Math.floor(sessionDaysRaw as number))
+        : 30;
+    const cookieSecure = fileConfig.auth?.cookieSecure ?? false;
 
     return {
         http: {
@@ -313,6 +344,14 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
         promptLog: {
             enabled: fileConfig.promptLog?.enabled ?? false,
             filePath: promptLogFilePath,
+        },
+        auth: {
+            mode: authMode,
+            defaultUserId,
+            allowRegistration: fileConfig.auth?.allowRegistration ?? true,
+            sessionDays,
+            cookieName,
+            cookieSecure,
         },
     };
 }

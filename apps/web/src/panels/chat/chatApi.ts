@@ -2,7 +2,9 @@ import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMe
 import { callApi } from "../../shared/api/httpClient";
 
 export async function apiGetMessages(conversationId: string): Promise<GetMessagesResponse> {
-    const res = await fetch(`/v1/conversations/${encodeURIComponent(conversationId)}/messages`);
+    const res = await fetch(`/v1/conversations/${encodeURIComponent(conversationId)}/messages`, {
+        credentials: "same-origin",
+    });
     if (!res.ok) {
         const err = await res.json() as { message?: string };
         throw new Error(err.message ?? `Request failed: ${res.status}`);
@@ -13,6 +15,7 @@ export async function apiGetMessages(conversationId: string): Promise<GetMessage
 export async function apiDeleteMessage(conversationId: string, messageId: string): Promise<void> {
     const res = await fetch(`/v1/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`, {
         method: "DELETE",
+        credentials: "same-origin",
     });
     if (!res.ok) {
         const err = await res.json() as { message?: string };
@@ -57,6 +60,7 @@ export async function apiStreamChatMessage(
 ): Promise<{ requestId: string; model: string }> {
     const response = await fetch(ApiChatStream.apiUrl, {
         method: ApiChatStream.method,
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ characterId, conversationId, userMessageText, senderActorId, llmResponseMode, interactionMode, includeAssembledMessages }),
         signal

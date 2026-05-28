@@ -1,10 +1,12 @@
 import type { ConversationActorSourceType } from "@ss-ai/contracts";
-import { DEFAULT_USER_ID, type HttpApiContext } from "../apiContext.js";
+import type { Request } from "express";
+import { resolveRequestUserId, type HttpApiContext } from "../apiContext.js";
 import { HttpStatusError } from "./chatUtil.js";
 
-export async function handleGetConversationMessages(context: HttpApiContext, conversationId: string) {
+export async function handleGetConversationMessages(context: HttpApiContext, req: Request, conversationId: string) {
+    const userId = await resolveRequestUserId(req, context);
     const conversation = await context.stores.conversation.getConversationById({
-        userId: DEFAULT_USER_ID,
+        userId,
         conversationId,
     });
     if (!conversation) {
@@ -12,10 +14,10 @@ export async function handleGetConversationMessages(context: HttpApiContext, con
     }
 
     const [messages, actors, character] = await Promise.all([
-        context.stores.chat.getRecentMessages({ userId: DEFAULT_USER_ID, conversationId, limit: 200 }),
+        context.stores.chat.getRecentMessages({ userId, conversationId, limit: 200 }),
         context.stores.conversationActor.listConversationActors({ conversationId }),
         context.stores.character.getCharacterById({
-            userId: DEFAULT_USER_ID,
+            userId,
             characterId: conversation.characterId,
         }),
     ]);
@@ -42,9 +44,10 @@ export async function handleGetConversationMessages(context: HttpApiContext, con
     };
 }
 
-export async function handleDeleteConversationMessage(context: HttpApiContext, conversationId: string, messageId: string) {
+export async function handleDeleteConversationMessage(context: HttpApiContext, req: Request, conversationId: string, messageId: string) {
+    const userId = await resolveRequestUserId(req, context);
     const conversation = await context.stores.conversation.getConversationById({
-        userId: DEFAULT_USER_ID,
+        userId,
         conversationId,
     });
     if (!conversation) {

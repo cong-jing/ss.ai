@@ -23,6 +23,14 @@
         "enabled": true,
         "filePath": ".runtime/logs/ss-ai.prompt.log"
     },
+    "auth": {
+        "mode": "default-user",
+        "defaultUserId": "default",
+        "allowRegistration": true,
+        "sessionDays": 30,
+        "cookieName": "ss_ai_session",
+        "cookieSecure": false
+    },
     "models": {
         "mistral.ai": {
             "apiUrl": "https://api.mistral.ai",

@@ -14,6 +14,9 @@ import {
     createSqliteStores,
 } from "@ss-ai/persona-flow-sqlite";
 import type { AppStores } from "@ss-ai/persona-flow";
+import { createAuthRuntime } from "../auth/authRuntime.js";
+import { registerAuthRoutes } from "../auth/auth.route.js";
+import { getErrorStatusCode } from "../auth/errors.js";
 
 export interface ServerStoreOverrides {
     stores?: AppStores;
@@ -64,6 +67,10 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
         characterDbDir,
         dblog: (sql: unknown) => logger.verbose("[db.character]", { sql: String(sql) }),
     });
+    const authRuntime = createAuthRuntime({
+        config: config.auth,
+        sqlite,
+    });
 
     app.use(express.json());
 
@@ -76,7 +83,25 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
         logger,
         config,
         stores,
+        authRuntime,
     };
+
+    registerAuthRoutes(apiContext);
+
+    app.use("/v1", async (req, res, next) => {
+        if (req.path.startsWith("/auth/")) {
+            next();
+            return;
+        }
+        try {
+            await authRuntime.requireUser(req);
+            next();
+        } catch (error) {
+            res.status(getErrorStatusCode(error, 401)).json({
+                message: error instanceof Error ? error.message : "Authentication required.",
+            });
+        }
+    });
 
     registerUserPreferenceRoutes(apiContext);
     registerChatRoute(apiContext);

@@ -362,6 +362,7 @@ Start here when reviewing or changing behavior:
 - Tool calls are detected/logged as TODO and not executed.
 - Interaction modes other than `single_character_chat` are declared but not implemented in renderer dispatch yet.
 - The server opens SQLite even when test overrides provide stores; this may matter for test/runtime isolation.
+- TODO: i18n access currently relies on shared module-level helpers in web components; migrate to a `useI18n`-style hook/provider when SSR, per-app instances, or stricter test isolation become requirements.
 
 ## Quick Smoke Paths
 

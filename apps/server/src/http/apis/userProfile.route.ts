@@ -3,12 +3,13 @@ import {
     ApiUpsertUserProfile
 } from "@ss-ai/contracts";
 import { registerApi } from "../registerApi.js";
-import { toErrorResponse, DEFAULT_USER_ID, type HttpApiContext } from "./apiContext.js";
+import { toErrorResponse, resolveRequestUserId, type HttpApiContext } from "./apiContext.js";
 
 export function registerUserProfileRoutes(context: HttpApiContext): void {
     registerApi(context.app, ApiGetUserProfile, {
-        handleRequest: async () => {
-            const profile = await context.stores.userProfile.getUserProfile(DEFAULT_USER_ID);
+        handleRequest: async (req) => {
+            const userId = await resolveRequestUserId(req, context);
+            const profile = await context.stores.userProfile.getUserProfile(userId);
             return {
                 name: profile?.name ?? "",
                 bio: profile?.bio ?? "",
@@ -18,7 +19,8 @@ export function registerUserProfileRoutes(context: HttpApiContext): void {
     });
 
     registerApi(context.app, ApiUpsertUserProfile, {
-        handleRequest: async (_, body) => {
+        handleRequest: async (req, body) => {
+            const userId = await resolveRequestUserId(req, context);
             const name = typeof body?.name === "string" ? body.name : "";
             const bio = typeof body?.bio === "string" ? body.bio : "";
             const preferredAddress = typeof body?.preferredAddress === "string"
@@ -26,9 +28,9 @@ export function registerUserProfileRoutes(context: HttpApiContext): void {
                 : null;
 
             const now = new Date().toISOString();
-            const existing = await context.stores.userProfile.getUserProfile(DEFAULT_USER_ID);
+            const existing = await context.stores.userProfile.getUserProfile(userId);
             await context.stores.userProfile.upsertUserProfile({
-                userId: DEFAULT_USER_ID,
+                userId,
                 name,
                 bio,
                 preferredAddress,

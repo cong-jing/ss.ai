@@ -1,15 +1,34 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import Button from "../../shared/ui/Button.vue";
 import CollapsibleSection from "../../shared/ui/CollapsibleSection.vue";
 import TextInput from "../../shared/ui/TextInput.vue";
 import { useUserProfileViewModel } from "./useUserProfileViewModel";
 import { t } from "../../shared/i18n/i18n";
+import { useAuthState } from "../../auth/useAuthState";
+import { useToast } from "../../shared/ui/useToast";
 
 const { userInfo, isLoadingUser, isSavingUser, loadUserInfo, saveUserInfo } = useUserProfileViewModel();
+const { authMode, logout } = useAuthState();
+const toast = useToast();
+const isLoggingOut = ref(false);
+const showLogout = computed(() => authMode.value === "local-password");
+
 onMounted(() => {
   void loadUserInfo();
 });
+
+async function onLogout(): Promise<void> {
+  if (isLoggingOut.value) return;
+  isLoggingOut.value = true;
+  try {
+    await logout();
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    isLoggingOut.value = false;
+  }
+}
 </script>
 
 <template>
@@ -27,6 +46,9 @@ onMounted(() => {
         <div class="actions">
           <Button :disabled="isSavingUser || isLoadingUser" @click="saveUserInfo">
             {{ isSavingUser ? t("common.saving") : t("common.save") }}
+          </Button>
+          <Button v-if="showLogout" variant="danger" :disabled="isLoggingOut" @click="onLogout">
+            {{ isLoggingOut ? t("auth.signingOut") : t("auth.logout") }}
           </Button>
         </div>
         <p v-if="isLoadingUser" class="hint">{{ t("common.loading") }}</p>
@@ -76,6 +98,7 @@ onMounted(() => {
 
 .actions {
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
 }
 

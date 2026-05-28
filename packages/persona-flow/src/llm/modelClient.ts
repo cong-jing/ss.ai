@@ -65,7 +65,7 @@ export interface ModelClient {
 export interface ModelClientFactoryInput {
     provider: string;
     model: string;
-    generateStream: string;
+    apiUrl: string;
     encryptedApiKey: string;
     timeoutMs: number;
     maxRetries: number;
