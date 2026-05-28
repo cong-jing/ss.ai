@@ -73,14 +73,25 @@ describe("loadRuntimeConfig", () => {
             http?: { port?: number };
             logger?: { logFilePath?: string };
         };
+        const originalAppEnv = process.env.APP_ENV;
 
-        const config = loadRuntimeConfig({ cwd: runtimeHome });
+        delete process.env.APP_ENV;
 
-        assert.equal(config.http.port, defaultConfig.http?.port ?? 3000);
-        assert.equal(
-            config.logger.logFilePath,
-            path.join(runtimeHome, defaultConfig.logger?.logFilePath ?? "app.log"),
-        );
+        try {
+            const config = loadRuntimeConfig({ cwd: runtimeHome });
+
+            assert.equal(config.http.port, defaultConfig.http?.port ?? 3000);
+            assert.equal(
+                config.logger.logFilePath,
+                path.join(runtimeHome, defaultConfig.logger?.logFilePath ?? "app.log"),
+            );
+        } finally {
+            if (originalAppEnv === undefined) {
+                delete process.env.APP_ENV;
+            } else {
+                process.env.APP_ENV = originalAppEnv;
+            }
+        }
     });
 
     it("uses cwd as the default app home and resolves relative runtime paths from it", async () => {
