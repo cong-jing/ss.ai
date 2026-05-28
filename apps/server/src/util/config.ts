@@ -179,20 +179,9 @@ function resolveAppEnv(context: RuntimeConfigContext = {}): string | undefined {
 }
 
 function createSchemaValidator(): ValidateFunction | null {
-    const configSchemaCandidates = [
-        path.join(serverRoot, "schemas", "config.schema.json"),
-        path.join(repoRoot, "schemas", "config.schema.json"),
-    ];
+    const configSchemaPath = path.join(serverRoot, "schemas", "config.schema.json");
 
-    let configSchemaPath: string | null = null;
-    for (const candidate of configSchemaCandidates) {
-        if (fs.existsSync(candidate)) {
-            configSchemaPath = candidate;
-            break;
-        }
-    }
-
-    if (!configSchemaPath) {
+    if (!fs.existsSync(configSchemaPath)) {
         return null;
     }
 
