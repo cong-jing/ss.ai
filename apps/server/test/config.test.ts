@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadRuntimeConfig } from "../src/util/config.js";
 
 const tempDirs = new Set<string>();
+const testDir = path.dirname(fileURLToPath(import.meta.url));
+const packageRoot = path.resolve(testDir, "..");
+const packageConfigRoot = path.join(packageRoot, "config");
 
 after(async () => {
     await Promise.all(Array.from(tempDirs, dir => rm(dir, { recursive: true, force: true })));
@@ -57,14 +61,32 @@ function createBaseConfig() {
     };
 }
 
-function configPath(appHome: string, fileName: string): string {
-    return path.join(appHome, "config", fileName);
+function configPath(configRoot: string, fileName: string): string {
+    return path.join(configRoot, fileName);
 }
 
 describe("loadRuntimeConfig", () => {
+    it("discovers package-local config when configDir is omitted", async () => {
+        const runtimeHome = await createTempDir("ss-ai-config-default-dir-");
+        const defaultConfigRaw = await readFile(configPath(packageConfigRoot, "config.default.json"), "utf-8");
+        const defaultConfig = JSON.parse(defaultConfigRaw) as {
+            http?: { port?: number };
+            logger?: { logFilePath?: string };
+        };
+
+        const config = loadRuntimeConfig({ cwd: runtimeHome });
+
+        assert.equal(config.http.port, defaultConfig.http?.port ?? 3000);
+        assert.equal(
+            config.logger.logFilePath,
+            path.join(runtimeHome, defaultConfig.logger?.logFilePath ?? "app.log"),
+        );
+    });
+
     it("uses cwd as the default app home and resolves relative runtime paths from it", async () => {
-        const appHome = await createTempDir("ss-ai-config-cwd-");
-        await writeJson(configPath(appHome, "config.default.json"), {
+        const runtimeHome = await createTempDir("ss-ai-config-cwd-");
+        const configRoot = path.join(runtimeHome, "config");
+        await writeJson(configPath(configRoot, "config.default.json"), {
             ...createBaseConfig(),
             runtimeFiles: {
                 tempDir: ".runtime/temp-dev",
@@ -76,20 +98,21 @@ describe("loadRuntimeConfig", () => {
             },
         });
 
-        const config = loadRuntimeConfig({ cwd: appHome });
+        const config = loadRuntimeConfig({ cwd: runtimeHome, configDir: configRoot });
 
         assert.equal(config.http.port, 8999);
-        assert.equal(config.runtimeFiles.tempDir, path.join(appHome, ".runtime/temp-dev"));
-        assert.equal(config.runtimeFiles.userDataDir, path.join(appHome, ".runtime/user-data-dev"));
-        assert.equal(config.promptLog.filePath, path.join(appHome, ".runtime/logs/dev.prompt.log"));
+        assert.equal(config.runtimeFiles.tempDir, path.join(runtimeHome, ".runtime/temp-dev"));
+        assert.equal(config.runtimeFiles.userDataDir, path.join(runtimeHome, ".runtime/user-data-dev"));
+        assert.equal(config.promptLog.filePath, path.join(runtimeHome, ".runtime/logs/dev.prompt.log"));
     });
 
     it("merges default, env, and local config in order while resolving relative APP_HOME from cwd", async () => {
         const cwd = await createTempDir("ss-ai-config-parent-");
-        const appHome = path.join(cwd, "runtime-root");
+        const runtimeHome = path.join(cwd, "runtime-root");
+        const configRoot = await createTempDir("ss-ai-config-dir-");
 
-        await writeJson(configPath(appHome, "config.default.json"), createBaseConfig());
-        await writeJson(configPath(appHome, "config.staging.json"), {
+        await writeJson(configPath(configRoot, "config.default.json"), createBaseConfig());
+        await writeJson(configPath(configRoot, "config.staging.json"), {
             http: {
                 host: "0.0.0.0",
                 port: 9100,
@@ -104,7 +127,7 @@ describe("loadRuntimeConfig", () => {
                 enabled: false,
             },
         });
-        await writeJson(configPath(appHome, "config.local.json"), {
+        await writeJson(configPath(configRoot, "config.local.json"), {
             http: {
                 port: 9200,
             },
@@ -120,19 +143,21 @@ describe("loadRuntimeConfig", () => {
             cwd,
             appHome: "./runtime-root",
             appEnv: "staging",
+            configDir: configRoot,
         });
 
         assert.equal(config.http.host, "0.0.0.0");
         assert.equal(config.http.port, 9200);
         assert.equal(config.logger.level, "debug");
         assert.equal(config.promptLog.enabled, false);
-        assert.equal(config.runtimeFiles.tempDir, path.join(appHome, ".runtime/temp-staging"));
-        assert.equal(config.runtimeFiles.userDataDir, path.join(appHome, ".runtime/user-data-local"));
+        assert.equal(config.runtimeFiles.tempDir, path.join(runtimeHome, ".runtime/temp-staging"));
+        assert.equal(config.runtimeFiles.userDataDir, path.join(runtimeHome, ".runtime/user-data-local"));
     });
 
     it("treats missing env-specific config as optional", async () => {
-        const appHome = await createTempDir("ss-ai-config-optional-env-");
-        await writeJson(configPath(appHome, "config.default.json"), {
+        const runtimeHome = await createTempDir("ss-ai-config-optional-env-");
+        const configRoot = path.join(runtimeHome, "config");
+        await writeJson(configPath(configRoot, "config.default.json"), {
             ...createBaseConfig(),
             http: {
                 host: "127.0.0.1",
@@ -141,19 +166,21 @@ describe("loadRuntimeConfig", () => {
         });
 
         const config = loadRuntimeConfig({
-            cwd: appHome,
+            cwd: runtimeHome,
             appEnv: "prod",
+            configDir: configRoot,
         });
 
         assert.equal(config.http.port, 9300);
-        assert.equal(config.logger.logFilePath, path.join(appHome, ".runtime/logs/ss-ai.log"));
+        assert.equal(config.logger.logFilePath, path.join(runtimeHome, ".runtime/logs/ss-ai.log"));
     });
 
     it("fails fast when config.default.json is missing", async () => {
-        const appHome = await createTempDir("ss-ai-config-missing-default-");
+        const runtimeHome = await createTempDir("ss-ai-config-missing-default-");
+        const configRoot = path.join(runtimeHome, "config");
 
         assert.throws(
-            () => loadRuntimeConfig({ cwd: appHome }),
+            () => loadRuntimeConfig({ cwd: runtimeHome, configDir: configRoot }),
             /Missing required config file: .*config\.default\.json/,
         );
     });

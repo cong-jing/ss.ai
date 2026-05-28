@@ -1,8 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import type { LogLevel } from "@ss-ai/persona-flow-logger";
+
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const serverRoot = path.resolve(moduleDir, "..", "..");
+const repoRoot = path.resolve(serverRoot, "..", "..");
 
 export interface RuntimeModelEntry {
     provider: string;
@@ -12,6 +17,7 @@ export interface RuntimeModelEntry {
 }
 
 export interface RuntimeConfig {
+    configSources: string[];
     http: {
         host: string;
         port: number;
@@ -50,6 +56,7 @@ interface RuntimeConfigContext {
     appHome?: string;
     appEnv?: string;
     cwd?: string;
+    configDir?: string;
 }
 
 interface RawModelConfig {
@@ -149,7 +156,7 @@ function buildRuntimeModels(modelsRaw: RawConfig["models"]): Record<string, Runt
     return runtimeModels;
 }
 
-function resolveAppHome(context: RuntimeConfigContext = {}): string {
+function resolveRuntimeHome(context: RuntimeConfigContext = {}): string {
     const configuredAppHome = context.appHome ?? process.env["APP_HOME"]?.trim();
     if (!configuredAppHome) {
         return context.cwd ?? process.cwd();
@@ -158,14 +165,34 @@ function resolveAppHome(context: RuntimeConfigContext = {}): string {
     return path.resolve(context.cwd ?? process.cwd(), configuredAppHome);
 }
 
+function resolveConfigDir(context: RuntimeConfigContext = {}): string {
+    if (context.configDir?.trim()) {
+        return path.resolve(context.cwd ?? process.cwd(), context.configDir);
+    }
+
+    return path.join(serverRoot, "config");
+}
+
 function resolveAppEnv(context: RuntimeConfigContext = {}): string | undefined {
     const raw = context.appEnv ?? process.env["APP_ENV"]?.trim();
     return raw ? raw : undefined;
 }
 
-function createSchemaValidator(appHome: string): ValidateFunction | null {
-    const configSchemaPath = path.join(appHome, "schemas", "config.schema.json");
-    if (!fs.existsSync(configSchemaPath)) {
+function createSchemaValidator(): ValidateFunction | null {
+    const configSchemaCandidates = [
+        path.join(serverRoot, "schemas", "config.schema.json"),
+        path.join(repoRoot, "schemas", "config.schema.json"),
+    ];
+
+    let configSchemaPath: string | null = null;
+    for (const candidate of configSchemaCandidates) {
+        if (fs.existsSync(candidate)) {
+            configSchemaPath = candidate;
+            break;
+        }
+    }
+
+    if (!configSchemaPath) {
         return null;
     }
 
@@ -221,7 +248,7 @@ function readJsonConfig(
     const required = options.required ?? false;
     if (!fs.existsSync(configPath)) {
         if (required) {
-            throw new Error(`Missing required config file: ${configPath}. Check APP_HOME and deployment config files.`);
+            throw new Error(`Missing required config file: ${configPath}. Check server config assets and deployment config files.`);
         }
         return {
             config: {},
@@ -267,19 +294,19 @@ function mergeConfig(base: RawConfig, override: RawConfig): RawConfig {
     return result as RawConfig;
 }
 
-function toAbsolutePath(appHome: string, input: unknown, fallbackRelativePath: string): string {
+function toAbsolutePath(runtimeHome: string, input: unknown, fallbackRelativePath: string): string {
     if (typeof input === "string" && input.trim()) {
-        return path.resolve(appHome, input);
+        return path.resolve(runtimeHome, input);
     }
 
-    return path.resolve(appHome, fallbackRelativePath);
+    return path.resolve(runtimeHome, fallbackRelativePath);
 }
 
 export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeConfig {
-    const appHome = resolveAppHome(context);
+    const runtimeHome = resolveRuntimeHome(context);
     const appEnv = resolveAppEnv(context);
-    const configDir = path.join(appHome, "config");
-    const validateConfigWithSchema = createSchemaValidator(appHome);
+    const configDir = resolveConfigDir(context);
+    const validateConfigWithSchema = createSchemaValidator();
     const defaultConfigPath = path.join(configDir, "config.default.json");
     const envConfigPath = appEnv ? path.join(configDir, `config.${appEnv}.json`) : undefined;
     const localConfigPath = path.join(configDir, "config.local.json");
@@ -307,10 +334,10 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
     const fileConfig = validateRawConfig(mergedConfig, configSources.join(" + "), validateConfigWithSchema);
     const models = buildRuntimeModels(fileConfig.models);
 
-    const loggerFilePath = toAbsolutePath(appHome, fileConfig.logger?.logFilePath, "app.log");
-    const tempDir = toAbsolutePath(appHome, fileConfig.runtimeFiles?.tempDir, ".runtime/temp");
-    const userDataDir = toAbsolutePath(appHome, fileConfig.runtimeFiles?.userDataDir, ".runtime/user-data");
-    const promptLogFilePath = toAbsolutePath(appHome, fileConfig.promptLog?.filePath, ".runtime/logs/prompt.log");
+    const loggerFilePath = toAbsolutePath(runtimeHome, fileConfig.logger?.logFilePath, "app.log");
+    const tempDir = toAbsolutePath(runtimeHome, fileConfig.runtimeFiles?.tempDir, ".runtime/temp");
+    const userDataDir = toAbsolutePath(runtimeHome, fileConfig.runtimeFiles?.userDataDir, ".runtime/user-data");
+    const promptLogFilePath = toAbsolutePath(runtimeHome, fileConfig.promptLog?.filePath, ".runtime/logs/prompt.log");
     const authMode = fileConfig.auth?.mode ?? "default-user";
     const defaultUserId = normalizeOptionalString(fileConfig.auth?.defaultUserId) ?? "default";
     const cookieName = normalizeOptionalString(fileConfig.auth?.cookieName) ?? "ss_ai_session";
@@ -321,6 +348,7 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
     const cookieSecure = fileConfig.auth?.cookieSecure ?? false;
 
     return {
+        configSources,
         http: {
             host: fileConfig.http?.host ?? "0.0.0.0",
             port: fileConfig.http?.port ?? 3000

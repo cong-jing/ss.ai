@@ -1,8 +1,8 @@
 node_modules/
 dist/
 
-config/config.local.json
-config/config.*.local.json
+apps/server/config/config.local.json
+apps/server/config/config.*.local.json
 
 .runtime/
 .deploy*/

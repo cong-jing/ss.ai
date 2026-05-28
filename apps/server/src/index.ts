@@ -25,9 +25,22 @@ async function main(): Promise<void> {
     await startHttpServer({ config });
     logger.info("HTTP server started", {
         host: config.http.host,
-        port: config.http.port
+        port: config.http.port,
     });
+
+    logger.debug("Paths", {
+        configSources: config.configSources,
+        cwd: process.cwd(),
+        logFilePath: config.logger.logFilePath,
+        tempDir: config.runtimeFiles.tempDir,
+        userDataDir: config.runtimeFiles.userDataDir,
+        promptLogFilePath: config.promptLog.filePath,
+    });
+
     process.stdout.write(`Server is running at http://${config.http.host}:${config.http.port}\n`);
+    process.stdout.write(`Config sources: ${config.configSources.join(", ")}\n`);
+    process.stdout.write(`Working directory: ${process.cwd()}\n`);
+    process.stdout.write(`Runtime paths: log=${config.logger.logFilePath}, temp=${config.runtimeFiles.tempDir}, userData=${config.runtimeFiles.userDataDir}, promptLog=${config.promptLog.filePath}\n`);
 }
 
 main().catch((error) => {

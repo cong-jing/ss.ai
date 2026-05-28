@@ -1,0 +1,149 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "./schemas/config.schema.json",
+    "title": "ss.ai config",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "models"
+    ],
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "http": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "host": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "number"
+                }
+            }
+        },
+        "logger": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "level": {
+                    "type": "string",
+                    "enum": [
+                        "verbose",
+                        "debug",
+                        "info",
+                        "warn",
+                        "error"
+                    ]
+                },
+                "logFilePath": {
+                    "type": "string"
+                },
+                "clearLogFileOnStart": {
+                    "type": "boolean"
+                },
+                "includeSourceLocation": {
+                    "type": "boolean"
+                },
+                "includeStackTrace": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "runtimeFiles": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "tempDir": {
+                    "type": "string"
+                },
+                "userDataDir": {
+                    "type": "string"
+                }
+            }
+        },
+        "agent": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "timeoutMs": {
+                    "type": "number"
+                },
+                "maxRetries": {
+                    "type": "number"
+                }
+            }
+        },
+        "promptLog": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "filePath": {
+                    "type": "string"
+                }
+            }
+        },
+        "auth": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "default-user",
+                        "local-password"
+                    ]
+                },
+                "defaultUserId": {
+                    "type": "string"
+                },
+                "allowRegistration": {
+                    "type": "boolean"
+                },
+                "sessionDays": {
+                    "type": "number"
+                },
+                "cookieName": {
+                    "type": "string"
+                },
+                "cookieSecure": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "models": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+                "type": "object",
+                "required": [
+                    "apiUrl"
+                ],
+                "properties": {
+                    "provider": {
+                        "type": "string"
+                    },
+                    "apiUrl": {
+                        "type": "string"
+                    },
+                    "apiKey": {
+                        "type": "string"
+                    },
+                    "model": {
+                        "type": "string"
+                    },
+                    "availableModels": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

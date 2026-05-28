@@ -5,12 +5,14 @@
     "type": "module",
     "main": "./dist/index.js",
     "files": [
-        "dist"
+        "dist",
+        "config",
+        "schemas"
     ],
     "scripts": {
-        "dev": "APP_HOME=../.. tsx --conditions=source src/index.ts",
-        "build": "tsc -p tsconfig.build.json && node scripts/copy-runtime-assets.mjs",
-        "start": "APP_HOME=../.. node dist/index.js",
+        "dev": "tsx --conditions=source src/index.ts",
+        "build": "tsc -p tsconfig.build.json",
+        "start": "node dist/index.js",
         "typecheck": "tsc --noEmit",
         "test": "tsx --test test/.run.ts"
     },

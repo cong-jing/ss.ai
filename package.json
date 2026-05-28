@@ -22,10 +22,10 @@
         "dev:all": "concurrently --names \"server,web\" \"pnpm run dev:server\" \"pnpm run dev:web\"",
         "dev:server": "pnpm --filter @ss-ai/server dev",
         "dev:web": "pnpm --filter @ss-ai/web dev",
-        "dev:qq-bot": "pnpm --filter qq-bot dev -- --config ./qq-bot.env",
+        "dev:qq-bot": "pnpm --filter qq-bot dev",
         "prompt:debug": "pnpm --filter @ss-ai/prompt-debug-cli dev --",
-        "start:server:staging": "pnpm --dir ./.deploy-staging/server start",
-        "start:server:prod": "pnpm --dir ./.deploy-prod/server start",
+        "start:server:staging": "node scripts/start-server.mjs staging ./.deploy-staging",
+        "start:server:prod": "node scripts/start-server.mjs prod ./.deploy-prod",
         "test": "pnpm run build && pnpm -r --if-present test"
     },
     "devDependencies": {
