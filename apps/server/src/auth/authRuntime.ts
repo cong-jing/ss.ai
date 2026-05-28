@@ -47,8 +47,7 @@ export function createAuthRuntime(input: {
     const allowRegistration = input.config.allowRegistration;
     const cookieName = input.config.cookieName;
     const sessionDays = input.config.sessionDays;
-    const runtimeEnv = (process.env["APP_ENV"] ?? process.env["NODE_ENV"] ?? "").toLowerCase();
-    const secureCookie = !["", "dev", "development", "local", "test"].includes(runtimeEnv);
+    const secureCookie = input.config.cookieSecure;
     const store = new LocalAuthStore(input.sqlite);
     const defaultUser: RequestUser = {
         userId: input.config.defaultUserId,

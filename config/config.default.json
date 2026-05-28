@@ -28,7 +28,8 @@
         "defaultUserId": "default",
         "allowRegistration": true,
         "sessionDays": 30,
-        "cookieName": "ss_ai_session"
+        "cookieName": "ss_ai_session",
+        "cookieSecure": false
     },
     "models": {
         "mistral.ai": {

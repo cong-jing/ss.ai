@@ -11,7 +11,8 @@
         "userDataDir": ".runtime/prod/user-data"
     },
     "auth": {
-        "mode": "local-password"
+        "mode": "local-password",
+        "cookieSecure": false
     },
     "promptLog": {
         "enabled": false,

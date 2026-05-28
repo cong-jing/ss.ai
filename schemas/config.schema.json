@@ -104,6 +104,9 @@
                 },
                 "cookieName": {
                     "type": "string"
+                },
+                "cookieSecure": {
+                    "type": "boolean"
                 }
             }
         },

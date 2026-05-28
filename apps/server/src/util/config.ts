@@ -42,6 +42,7 @@ export interface RuntimeConfig {
         allowRegistration: boolean;
         sessionDays: number;
         cookieName: string;
+        cookieSecure: boolean;
     };
 }
 
@@ -90,6 +91,7 @@ interface RawConfig {
         allowRegistration?: boolean;
         sessionDays?: number;
         cookieName?: string;
+        cookieSecure?: boolean;
     };
 }
 
@@ -309,6 +311,7 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
     const sessionDays = Number.isFinite(sessionDaysRaw)
         ? Math.max(1, Math.floor(sessionDaysRaw as number))
         : 30;
+    const cookieSecure = fileConfig.auth?.cookieSecure ?? false;
 
     return {
         http: {
@@ -341,6 +344,7 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
             allowRegistration: fileConfig.auth?.allowRegistration ?? true,
             sessionDays,
             cookieName,
+            cookieSecure,
         },
     };
 }
