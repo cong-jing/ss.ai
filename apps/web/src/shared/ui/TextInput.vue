@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const props = withDefaults(defineProps<{
   modelValue: string;
+  id?: string;
   type?: string;
   placeholder?: string;
   autocomplete?: string;
@@ -20,6 +21,7 @@ function onInput(event: Event) {
 
 <template>
   <input
+    :id="props.id"
     class="text-input"
     :type="props.type"
     :value="props.modelValue"

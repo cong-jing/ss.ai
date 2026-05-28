@@ -15,6 +15,10 @@ const password = ref("");
 const displayName = ref("");
 const isSubmitting = ref(false);
 
+const usernameInputId = "auth-username";
+const displayNameInputId = "auth-display-name";
+const passwordInputId = "auth-password";
+
 const canSwitchToRegister = computed(() => allowRegistration.value);
 
 async function onSubmit(): Promise<void> {
@@ -54,14 +58,14 @@ function switchTab(next: "login" | "register"): void {
       </div>
 
       <div class="auth-form">
-        <label class="auth-label">{{ t("auth.username") }}</label>
-        <TextInput v-model="username" autocomplete="username" />
+        <label class="auth-label" :for="usernameInputId">{{ t("auth.username") }}</label>
+        <TextInput :id="usernameInputId" v-model="username" autocomplete="username" />
 
-        <label v-if="tab === 'register'" class="auth-label">{{ t("auth.displayName") }}</label>
-        <TextInput v-if="tab === 'register'" v-model="displayName" autocomplete="nickname" />
+        <label v-if="tab === 'register'" class="auth-label" :for="displayNameInputId">{{ t("auth.displayName") }}</label>
+        <TextInput v-if="tab === 'register'" :id="displayNameInputId" v-model="displayName" autocomplete="nickname" />
 
-        <label class="auth-label">{{ t("auth.password") }}</label>
-        <TextInput v-model="password" type="password" autocomplete="current-password" />
+        <label class="auth-label" :for="passwordInputId">{{ t("auth.password") }}</label>
+        <TextInput :id="passwordInputId" v-model="password" type="password" autocomplete="current-password" />
 
         <Button variant="primary" :disabled="isSubmitting" @click="onSubmit">
           {{ tab === "login" ? t("auth.signIn") : t("auth.createAccount") }}

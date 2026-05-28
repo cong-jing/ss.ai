@@ -124,7 +124,7 @@ export type NewUserProviderCredentialRow = typeof userProviderCredentials.$infer
 // ── app_users ────────────────────────────────────────────────────────────────
 export const appUsers = sqliteTable("app_users", {
     id: text("id").primaryKey(),
-    username: text("username").notNull(),
+    username: text("username").notNull().unique(),
     passwordHash: text("password_hash").notNull(),
     displayName: text("display_name"),
     createdAt: text("created_at").notNull(),
