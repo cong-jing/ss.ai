@@ -3,11 +3,17 @@ defineProps<{
   disabled?: boolean;
   size?: "sm" | "md";
   variant?: "default" | "danger" | "primary";
+  type?: "button" | "submit" | "reset";
 }>();
 </script>
 
 <template>
-  <button class="btn" :class="[size === 'sm' ? 'btn--sm' : '', variant === 'danger' ? 'btn--danger' : '', variant === 'primary' ? 'btn--primary' : '']" :disabled="disabled" type="button">
+  <button
+    class="btn"
+    :class="[size === 'sm' ? 'btn--sm' : '', variant === 'danger' ? 'btn--danger' : '', variant === 'primary' ? 'btn--primary' : '']"
+    :disabled="disabled"
+    :type="type ?? 'button'"
+  >
     <slot />
   </button>
 </template>

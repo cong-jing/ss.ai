@@ -57,7 +57,7 @@ function switchTab(next: "login" | "register"): void {
         </Button>
       </div>
 
-      <div class="auth-form">
+      <form class="auth-form" @submit.prevent="onSubmit">
         <label class="auth-label" :for="usernameInputId">{{ t("auth.username") }}</label>
         <TextInput :id="usernameInputId" v-model="username" autocomplete="username" />
 
@@ -67,10 +67,10 @@ function switchTab(next: "login" | "register"): void {
         <label class="auth-label" :for="passwordInputId">{{ t("auth.password") }}</label>
         <TextInput :id="passwordInputId" v-model="password" type="password" autocomplete="current-password" />
 
-        <Button variant="primary" :disabled="isSubmitting" @click="onSubmit">
+        <Button type="submit" variant="primary" :disabled="isSubmitting">
           {{ tab === "login" ? t("auth.signIn") : t("auth.createAccount") }}
         </Button>
-      </div>
+      </form>
     </section>
   </main>
 </template>
