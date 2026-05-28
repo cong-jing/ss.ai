@@ -33,7 +33,7 @@ const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
 runCommand(pnpmCommand, [
     "--filter",
-    "@ss-ai/server",
+    "@ss-ai/server...",
     "build",
 ]);
 
@@ -44,10 +44,4 @@ runCommand(pnpmCommand, [
     "--force",
     "deploy",
     deployServerRoot,
-]);
-
-runCommand(process.execPath, [
-    resolve(repoRoot, "scripts", "prepare-server-deploy.mjs"),
-    deployServerRoot,
-    appEnv,
 ]);

@@ -18,21 +18,16 @@ npm run setup
 pnpm install
 pnpm run dev:server
 pnpm run dev:web
-pnpm run dev:all
 pnpm run build
 pnpm run deploy:staging
 pnpm run deploy:prod
-pnpm run deploy:server:staging
-pnpm run deploy:server:prod
-pnpm run deploy:web:staging
-pnpm run deploy:web:prod
 pnpm run start:server:staging
 pnpm run start:server:prod
 pnpm run test
 pnpm run prompt:debug -- --help
 ```
 
-Current local default HTTP port is `8999` from `config/config.default.json`.
+Current local default HTTP port is `8999` from `apps/server/config/config.default.json`.
 
 ## Install And Deploy
 
@@ -60,10 +55,10 @@ Deployment output root is `.deploy-staging` or `.deploy-prod`.
 
 Fixed subdirectories under each deploy root:
 
-- `server`: Node.js server package and runtime config assets
+- `server`: Node.js server package, including `config/*` and `schemas/config.schema.json`
 - `web`: static web assets built from `apps/web/dist`
 
-The deploy step copies runtime config assets into the deploy root itself:
+The deployed server reads config assets from the server package root:
 
 - `.deploy-staging/server/config/config.default.json`
 - `.deploy-staging/server/config/config.staging.json`
@@ -89,21 +84,20 @@ pnpm run start:server:prod
 Manual startup still works:
 
 ```bash
-cd .deploy-staging/server
-pnpm start
-
-cd .deploy-prod/server
-pnpm start
+pnpm run start:server:staging
+pnpm run start:server:prod
 ```
 
-`APP_HOME` defaults to the current working directory. In the deployed layout that means `.deploy-staging/server` or `.deploy-prod/server`, so starting from those directories works without setting `APP_HOME`. If you start the server from a different directory, set `APP_HOME` explicitly so config lookup and relative runtime paths resolve from the intended runtime root.
+Local development commands are intended to be started from the repo root. `pnpm run dev:server`, `pnpm run dev:web`, and `pnpm run dev:qq-bot` therefore use the repo root as `process.cwd()`, so runtime files land under `./.runtime/`. In the deployed layout, `pnpm run start:server:staging`, `pnpm run start:server:prod`, or `pnpm --dir ./.deploy-prod/server start` run with `.deploy-*/server` as the working directory, so runtime files land under that server package.
 
 Examples:
 
 ```bash
-APP_HOME=/absolute/path/to/runtime-root APP_ENV=staging node /absolute/path/to/runtime-root/dist/index.js
-APP_HOME=../.. pnpm --filter @ss-ai/server start
+pnpm --filter @ss-ai/server start
+pnpm --dir ./.deploy-prod/server start
 ```
+
+If you need to override the runtime file root manually, set `RUNTIME_HOME`. The default commands should cover normal development and deployment flows.
 
 If dependency declarations change in any workspace package (`dependencies`, `devDependencies`, `peerDependencies`, or workspace links), run `pnpm install` again so `pnpm-lock.yaml` and the deploy dependency graph stay in sync.
 
@@ -204,7 +198,7 @@ Express HTTP server.
 
 Responsibilities:
 
-- Loads runtime config from `config/config.default.json`, optional `config/config.{APP_ENV}.json`, and optional `config/config.local.json`.
+- Loads runtime config from `apps/server/config/config.default.json`, optional `apps/server/config/config.{APP_ENV}.json`, and optional `apps/server/config/config.local.json`.
 - Opens SQLite DB under `runtimeFiles.userDataDir/app.db`.
 - Creates `AppStores` through `createSqliteStores`.
 - Registers HTTP routes for chat, user preferences, profiles, characters, conversations, and conversation actors.
@@ -275,17 +269,19 @@ Config loading is implemented in `apps/server/src/util/config.ts`.
 
 Load order:
 
-1. `config/config.default.json`
-2. `config/config.{APP_ENV}.json` if `APP_ENV` is set and the file exists
-3. `config/config.local.json` if present
+1. `apps/server/config/config.default.json`
+2. `apps/server/config/config.{APP_ENV}.json` if `APP_ENV` is set and the file exists
+3. `apps/server/config/config.local.json` if present
 
-The merged config is validated by `schemas/config.schema.json`.
+The merged config is validated by `apps/server/schemas/config.schema.json`.
 
-`APP_HOME` decides both where config files are discovered and how relative runtime paths such as `logger.logFilePath`, `runtimeFiles.tempDir`, `runtimeFiles.userDataDir`, and `promptLog.filePath` are resolved. Config files are read from `APP_HOME/config/*`. If `APP_HOME` is omitted, the server uses `process.cwd()`.
+Config files are always read from `apps/server/config` in source mode or from `server/config` in the deployed package. Relative runtime paths such as `logger.logFilePath`, `runtimeFiles.tempDir`, `runtimeFiles.userDataDir`, and `promptLog.filePath` are resolved from the current working directory by default. If you ever need to override that, set `RUNTIME_HOME`.
 
-`config/config.local.json` is intended for machine-local overrides and is not committed. `config/config.local.json.example` is the template to copy when you need local development overrides.
+`apps/server/config/config.local.json` is intended for machine-local overrides and is not committed. `apps/server/config/config.local.json.example` is the template to copy when you need local development overrides.
 
-Committed environment overlays currently live in `config/config.staging.json` and `config/config.prod.json`.
+Committed environment overlays currently live in `apps/server/config/config.staging.json` and `apps/server/config/config.prod.json`.
+
+`apps/qq-bot` defaults to loading its bot environment from `apps/qq-bot/.env`. When started through `pnpm run dev:qq-bot` from the repo root, its runtime output also lands under the repo root `.runtime/`.
 
 Important sections:
 
