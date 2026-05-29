@@ -14,10 +14,10 @@ if (!deployBaseArg || !releaseSha || !targetEnv) {
 }
 
 const deployBase = resolve(deployBaseArg);
-const releasesDir = resolve(deployBase, "releases");
+const releasesDir = resolve(deployBase, serviceName, "releases");
 const releaseDir = resolve(releasesDir, releaseSha);
-const currentLink = resolve(deployBase, "current");
-const sharedRuntimeDir = resolve(deployBase, "shared", "runtime");
+const currentLink = resolve(deployBase, serviceName, "current");
+const sharedRuntimeDir = resolve(deployBase, serviceName, "shared", "runtime");
 const archivePath = `/tmp/ss-ai-${targetEnv}-${releaseSha}.tgz`;
 
 function runCommand(command, args) {
