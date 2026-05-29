@@ -122,8 +122,12 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile=~/.ssh/known_hosts \
             "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}" \
-            "DEPLOY_BASE='${LIGHTSAIL_DEPLOY_BASE}' SERVICE_NAME='${LIGHTSAIL_SERVICE_NAME}' RELEASE_SHA='${GITHUB_SHA}' TARGET_ENV='${TARGET_ENV}' bash -s" <<'EOF'
+            bash -s -- "${LIGHTSAIL_DEPLOY_BASE}" "${LIGHTSAIL_SERVICE_NAME}" "${GITHUB_SHA}" "${TARGET_ENV}" <<'EOF'
           set -euo pipefail
+          DEPLOY_BASE="$1"
+          SERVICE_NAME="$2"
+          RELEASE_SHA="$3"
+          TARGET_ENV="$4"
 
           RELEASES_DIR="$DEPLOY_BASE/releases"
           RELEASE_DIR="$RELEASES_DIR/$RELEASE_SHA"
