@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - master
+      - main
       - staging
   workflow_dispatch:
     inputs:
@@ -47,17 +47,19 @@ jobs:
         run: pnpm run test
 
   deploy:
-    name: Deploy ${{ inputs.target }} to Lightsail
-    if: github.event_name == 'workflow_dispatch'
+    name: Deploy ${{ github.event_name == 'push' && 'staging' || inputs.target }} to Lightsail
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/staging') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     needs: ci
     runs-on: ubuntu-latest
-    environment: ${{ inputs.target }}
+    environment: ${{ github.event_name == 'push' && 'staging' || inputs.target }}
     concurrency:
-      group: lightsail-${{ inputs.target }}
+      group: lightsail-${{ github.event_name == 'push' && 'staging' || inputs.target }}
       cancel-in-progress: false
     env:
-      TARGET_ENV: ${{ inputs.target }}
-      LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+      TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.target }}
+      LIGHTSAIL_USER: ubuntu
       LIGHTSAIL_SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
       LIGHTSAIL_DEPLOY_BASE: ${{ vars.LIGHTSAIL_DEPLOY_BASE }}
       LIGHTSAIL_SERVICE_NAME: ${{ vars.LIGHTSAIL_SERVICE_NAME }}
