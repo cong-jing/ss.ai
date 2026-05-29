@@ -57,12 +57,12 @@ jobs:
       cancel-in-progress: false
     env:
       TARGET_ENV: ${{ inputs.target }}
-      LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
       LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
       LIGHTSAIL_SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
       LIGHTSAIL_DEPLOY_BASE: ${{ vars.LIGHTSAIL_DEPLOY_BASE }}
       LIGHTSAIL_SERVICE_NAME: ${{ vars.LIGHTSAIL_SERVICE_NAME }}
-      LIGHTSAIL_SSH_PORT: ${{ vars.LIGHTSAIL_SSH_PORT }}
+      LIGHTSAIL_HOST: 13.159.36.248
+      LIGHTSAIL_SSH_PORT: 22
 
     steps:
       - name: Check out repository
@@ -93,10 +93,11 @@ jobs:
 
       - name: Validate deploy settings
         run: |
-          test -n "$LIGHTSAIL_HOST"
           test -n "$LIGHTSAIL_USER"
           test -n "$LIGHTSAIL_SSH_KEY"
           test -n "$LIGHTSAIL_DEPLOY_BASE"
+          test "$LIGHTSAIL_HOST" = "13.159.36.248"
+          test "$LIGHTSAIL_SSH_PORT" = "22"
 
       - name: Configure SSH
         run: |
