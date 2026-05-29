@@ -1,0 +1,157 @@
+name: CI and Deploy to Lightsail
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - staging
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - prod
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Test and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.3.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm run test
+
+  deploy:
+    name: Deploy ${{ inputs.target }} to Lightsail
+    if: github.event_name == 'workflow_dispatch'
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target }}
+    concurrency:
+      group: lightsail-${{ inputs.target }}
+      cancel-in-progress: false
+    env:
+      TARGET_ENV: ${{ inputs.target }}
+      LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+      LIGHTSAIL_SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+      LIGHTSAIL_DEPLOY_BASE: ${{ vars.LIGHTSAIL_DEPLOY_BASE }}
+      LIGHTSAIL_SERVICE_NAME: ${{ vars.LIGHTSAIL_SERVICE_NAME }}
+      LIGHTSAIL_HOST: 13.159.36.248
+      LIGHTSAIL_SSH_PORT: 22
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.3.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build deploy bundle
+        run: pnpm run deploy:${TARGET_ENV}
+
+      - name: Pack release archive
+        run: |
+          tar -C ".deploy-${TARGET_ENV}" -czf "ss-ai-${TARGET_ENV}-${GITHUB_SHA}.tgz" .
+          ls -lh "ss-ai-${TARGET_ENV}-${GITHUB_SHA}.tgz"
+
+      - name: Validate deploy settings
+        run: |
+          test -n "$LIGHTSAIL_USER"
+          test -n "$LIGHTSAIL_SSH_KEY"
+          test -n "$LIGHTSAIL_DEPLOY_BASE"
+          test "$LIGHTSAIL_HOST" = "13.159.36.248"
+          test "$LIGHTSAIL_SSH_PORT" = "22"
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$LIGHTSAIL_SSH_KEY" > ~/.ssh/lightsail.key
+          chmod 600 ~/.ssh/lightsail.key
+          cp .github/known_hosts/lightsail ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload release archive
+        run: |
+          scp -P "${LIGHTSAIL_SSH_PORT:-22}" -i ~/.ssh/lightsail.key \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "ss-ai-${TARGET_ENV}-${GITHUB_SHA}.tgz" \
+            "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}:/tmp/ss-ai-${TARGET_ENV}-${GITHUB_SHA}.tgz"
+
+      # Use a mounted filesystem path such as /opt/ss-ai/staging here.
+      # The block device name /dev/sda1 is not used by GitHub Actions directly.
+      - name: Activate release on Lightsail
+        run: |
+          ssh -p "${LIGHTSAIL_SSH_PORT:-22}" -i ~/.ssh/lightsail.key \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}" \
+            bash -s -- "${LIGHTSAIL_DEPLOY_BASE}" "${LIGHTSAIL_SERVICE_NAME}" "${GITHUB_SHA}" "${TARGET_ENV}" <<'EOF'
+          set -euo pipefail
+          DEPLOY_BASE="$1"
+          SERVICE_NAME="$2"
+          RELEASE_SHA="$3"
+          TARGET_ENV="$4"
+
+          RELEASES_DIR="$DEPLOY_BASE/releases"
+          RELEASE_DIR="$RELEASES_DIR/$RELEASE_SHA"
+          CURRENT_LINK="$DEPLOY_BASE/current"
+          SHARED_RUNTIME_DIR="$DEPLOY_BASE/shared/runtime"
+          ARCHIVE_PATH="/tmp/ss-ai-$TARGET_ENV-$RELEASE_SHA.tgz"
+
+          mkdir -p "$RELEASES_DIR" "$SHARED_RUNTIME_DIR"
+          rm -rf "$RELEASE_DIR"
+          mkdir -p "$RELEASE_DIR"
+
+          tar -xzf "$ARCHIVE_PATH" -C "$RELEASE_DIR"
+
+          rm -rf "$RELEASE_DIR/server/.runtime"
+          ln -sfn "$SHARED_RUNTIME_DIR" "$RELEASE_DIR/server/.runtime"
+          ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
+
+          rm -f "$ARCHIVE_PATH"
+
+          if [ -n "${SERVICE_NAME:-}" ]; then
+            sudo systemctl restart "$SERVICE_NAME"
+            sudo systemctl --no-pager --full status "$SERVICE_NAME" | sed -n '1,20p'
+          fi
+
+          find "$RELEASES_DIR" -mindepth 1 -maxdepth 1 -type d ! -path "$RELEASE_DIR" -exec rm -rf {} +
+          EOF
