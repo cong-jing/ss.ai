@@ -58,6 +58,7 @@ jobs:
       LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
       LIGHTSAIL_SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
       LIGHTSAIL_DEPLOY_BASE: ${{ vars.LIGHTSAIL_DEPLOY_BASE }}
+      LIGHTSAIL_RELEASES_TO_KEEP: ${{ vars.LIGHTSAIL_RELEASES_TO_KEEP }}
       LIGHTSAIL_SERVICE_NAME: ${{ vars.LIGHTSAIL_SERVICE_NAME }}
       LIGHTSAIL_SSH_PORT: ${{ vars.LIGHTSAIL_SSH_PORT }}
 
@@ -97,11 +98,14 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$LIGHTSAIL_SSH_KEY" > ~/.ssh/lightsail.key
           chmod 600 ~/.ssh/lightsail.key
-          ssh-keyscan -p "${LIGHTSAIL_SSH_PORT:-22}" -H "$LIGHTSAIL_HOST" >> ~/.ssh/known_hosts
+          cp .github/known_hosts/lightsail ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
 
       - name: Upload release archive
         run: |
           scp -P "${LIGHTSAIL_SSH_PORT:-22}" -i ~/.ssh/lightsail.key \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
             "ss-ai-${TARGET_ENV}-${GITHUB_SHA}.tgz" \
             "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}:/tmp/ss-ai-${TARGET_ENV}-${GITHUB_SHA}.tgz"
 
@@ -110,8 +114,10 @@ jobs:
       - name: Activate release on Lightsail
         run: |
           ssh -p "${LIGHTSAIL_SSH_PORT:-22}" -i ~/.ssh/lightsail.key \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
             "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}" \
-            "DEPLOY_BASE='${LIGHTSAIL_DEPLOY_BASE}' SERVICE_NAME='${LIGHTSAIL_SERVICE_NAME}' RELEASE_SHA='${GITHUB_SHA}' TARGET_ENV='${TARGET_ENV}' bash -s" <<'EOF'
+            "DEPLOY_BASE='${LIGHTSAIL_DEPLOY_BASE}' RELEASES_TO_KEEP='${LIGHTSAIL_RELEASES_TO_KEEP:-5}' SERVICE_NAME='${LIGHTSAIL_SERVICE_NAME}' RELEASE_SHA='${GITHUB_SHA}' TARGET_ENV='${TARGET_ENV}' bash -s" <<'EOF'
           set -euo pipefail
 
           RELEASES_DIR="$DEPLOY_BASE/releases"
@@ -119,6 +125,18 @@ jobs:
           CURRENT_LINK="$DEPLOY_BASE/current"
           SHARED_RUNTIME_DIR="$DEPLOY_BASE/shared/runtime"
           ARCHIVE_PATH="/tmp/ss-ai-$TARGET_ENV-$RELEASE_SHA.tgz"
+
+          case "$RELEASES_TO_KEEP" in
+            ''|*[!0-9]*)
+              echo "RELEASES_TO_KEEP must be a positive integer, got: $RELEASES_TO_KEEP" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ "$RELEASES_TO_KEEP" -lt 1 ]; then
+            echo "RELEASES_TO_KEEP must be at least 1, got: $RELEASES_TO_KEEP" >&2
+            exit 1
+          fi
 
           mkdir -p "$RELEASES_DIR" "$SHARED_RUNTIME_DIR"
           rm -rf "$RELEASE_DIR"
@@ -135,5 +153,14 @@ jobs:
           if [ -n "${SERVICE_NAME:-}" ]; then
             sudo systemctl restart "$SERVICE_NAME"
             sudo systemctl --no-pager --full status "$SERVICE_NAME" | sed -n '1,20p'
+          fi
+
+          OLD_RELEASES="$(find "$RELEASES_DIR" -mindepth 1 -maxdepth 1 -type d ! -path "$RELEASE_DIR" -printf '%T@ %p\n' | sort -nr | awk -v keep="$((RELEASES_TO_KEEP - 1))" 'NR > keep { print $2 }')"
+
+          if [ -n "$OLD_RELEASES" ]; then
+            printf '%s\n' "$OLD_RELEASES" | while IFS= read -r old_release; do
+              [ -n "$old_release" ] || continue
+              rm -rf "$old_release"
+            done
           fi
           EOF
