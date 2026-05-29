@@ -104,8 +104,11 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "$LIGHTSAIL_SSH_KEY" > ~/.ssh/lightsail.key
+          printf '%s' "$LIGHTSAIL_SSH_KEY" \
+            | perl -0pe 's/\r\n/\n/g; s/\r/\n/g; s/\\n/\n/g' \
+            > ~/.ssh/lightsail.key
           chmod 600 ~/.ssh/lightsail.key
+          ssh-keygen -y -f ~/.ssh/lightsail.key > /dev/null
           cp .github/known_hosts/lightsail ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
@@ -117,6 +120,14 @@ jobs:
             "ss-ai-${TARGET_ENV}-${GITHUB_SHA}.tgz" \
             "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}:/tmp/ss-ai-${TARGET_ENV}-${GITHUB_SHA}.tgz"
 
+      - name: Upload activate script
+        run: |
+          scp -P "${LIGHTSAIL_SSH_PORT:-22}" -i ~/.ssh/lightsail.key \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "scripts/activate-lightsail-release.mjs" \
+            "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}:/tmp/ss-ai-activate-release-${GITHUB_SHA}.mjs"
+
       # Use a mounted filesystem path such as /opt/ss-ai/staging here.
       # The block device name /dev/sda1 is not used by GitHub Actions directly.
       - name: Activate release on Lightsail
@@ -125,35 +136,14 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile=~/.ssh/known_hosts \
             "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}" \
-            bash -s -- "${LIGHTSAIL_DEPLOY_BASE}" "${LIGHTSAIL_SERVICE_NAME}" "${GITHUB_SHA}" "${TARGET_ENV}" <<'EOF'
+            bash -s -- "/tmp/ss-ai-activate-release-${GITHUB_SHA}.mjs" "${LIGHTSAIL_DEPLOY_BASE}" "${LIGHTSAIL_SERVICE_NAME}" "${GITHUB_SHA}" "${TARGET_ENV}" <<'EOF'
           set -euo pipefail
-          DEPLOY_BASE="$1"
-          SERVICE_NAME="$2"
-          RELEASE_SHA="$3"
-          TARGET_ENV="$4"
+          SCRIPT_PATH="$1"
+          DEPLOY_BASE="$2"
+          SERVICE_NAME="$3"
+          RELEASE_SHA="$4"
+          TARGET_ENV="$5"
 
-          RELEASES_DIR="$DEPLOY_BASE/releases"
-          RELEASE_DIR="$RELEASES_DIR/$RELEASE_SHA"
-          CURRENT_LINK="$DEPLOY_BASE/current"
-          SHARED_RUNTIME_DIR="$DEPLOY_BASE/shared/runtime"
-          ARCHIVE_PATH="/tmp/ss-ai-$TARGET_ENV-$RELEASE_SHA.tgz"
-
-          mkdir -p "$RELEASES_DIR" "$SHARED_RUNTIME_DIR"
-          rm -rf "$RELEASE_DIR"
-          mkdir -p "$RELEASE_DIR"
-
-          tar -xzf "$ARCHIVE_PATH" -C "$RELEASE_DIR"
-
-          rm -rf "$RELEASE_DIR/server/.runtime"
-          ln -sfn "$SHARED_RUNTIME_DIR" "$RELEASE_DIR/server/.runtime"
-          ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
-
-          rm -f "$ARCHIVE_PATH"
-
-          if [ -n "${SERVICE_NAME:-}" ]; then
-            sudo systemctl restart "$SERVICE_NAME"
-            sudo systemctl --no-pager --full status "$SERVICE_NAME" | sed -n '1,20p'
-          fi
-
-          find "$RELEASES_DIR" -mindepth 1 -maxdepth 1 -type d ! -path "$RELEASE_DIR" -exec rm -rf {} +
+          node "$SCRIPT_PATH" "$DEPLOY_BASE" "$SERVICE_NAME" "$RELEASE_SHA" "$TARGET_ENV"
+          rm -f "$SCRIPT_PATH"
           EOF
