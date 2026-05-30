@@ -47,8 +47,6 @@ await mkdir(releaseDir, { recursive: true });
 
 runCommand("tar", ["-xzf", archivePath, "-C", releaseDir]);
 
-await rm(resolve(releaseDir, "server", ".runtime"), { recursive: true, force: true });
-await symlink(sharedRuntimeDir, resolve(releaseDir, "server", ".runtime"));
 await rm(currentLink, { recursive: true, force: true });
 await symlink(releaseDir, currentLink);
 
