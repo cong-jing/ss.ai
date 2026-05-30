@@ -62,7 +62,7 @@ jobs:
       LIGHTSAIL_USER: ubuntu
       LIGHTSAIL_SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
       LIGHTSAIL_DEPLOY_BASE: ${{ vars.LIGHTSAIL_DEPLOY_BASE }}
-      LIGHTSAIL_SERVICE_NAME: ${{ vars.LIGHTSAIL_SERVICE_NAME }}
+      LIGHTSAIL_SERVICE_NAME: ss-ai-${{ github.event_name == 'push' && 'staging' || inputs.target }}
       LIGHTSAIL_HOST: 13.159.36.248
       LIGHTSAIL_SSH_PORT: 22
 

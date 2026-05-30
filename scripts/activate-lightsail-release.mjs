@@ -17,7 +17,7 @@ const deployBase = resolve(deployBaseArg);
 const releasesDir = resolve(deployBase, targetEnv, "releases");
 const releaseDir = resolve(releasesDir, releaseSha);
 const currentLink = resolve(deployBase, targetEnv, "current");
-const sharedRuntimeDir = resolve(deployBase, targetEnv, "shared", "runtime");
+const sharedRuntimeDir = resolve(deployBase, targetEnv, "shared");
 const archivePath = `/tmp/ss-ai-${targetEnv}-${releaseSha}.tgz`;
 
 function runCommand(command, args) {
