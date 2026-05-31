@@ -108,10 +108,12 @@ export function useUserPreferenceViewModel() {
 
         p.isSavingKey = true;
         p.testResult = "none";
+        p.testMessage = "";
         try {
             const res = await apiDeleteApiKey(providerName);
             p.userApiKeySet = res.apiKeySet;
             p.effectiveApiKeySource = p.defaultApiKeySet ? "default" : "missing";
+            p.availableModels = [];
             p.apiKeyInput = null;
         } catch (e) {
             toast.error(localizeApiError(e));

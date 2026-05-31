@@ -130,6 +130,18 @@ jobs:
             "scripts/activate-lightsail-release.mjs" \
             "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}:/tmp/ss-ai-activate-release-${GITHUB_SHA}.mjs"
 
+      - name: Upload default API key secret file
+        run: |
+          umask 077
+          SECRET_FILE="$(mktemp)"
+          printf '%s' "$LIGHTSAIL_DEFAULT_API_KEY" > "$SECRET_FILE"
+          scp -P "${LIGHTSAIL_SSH_PORT:-22}" -i ~/.ssh/lightsail.key \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "$SECRET_FILE" \
+            "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}:/tmp/ss-ai-default-api-key-${GITHUB_SHA}"
+          rm -f "$SECRET_FILE"
+
       # Use a mounted filesystem path such as /opt/ss-ai/staging here.
       # The block device name /dev/sda1 is not used by GitHub Actions directly.
       - name: Activate release on Lightsail
@@ -138,16 +150,15 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile=~/.ssh/known_hosts \
             "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}" \
-            bash -s -- "/tmp/ss-ai-activate-release-${GITHUB_SHA}.mjs" "${LIGHTSAIL_DEPLOY_BASE}" "${LIGHTSAIL_SERVICE_NAME}" "${GITHUB_SHA}" "${TARGET_ENV}" "${LIGHTSAIL_DEFAULT_API_KEY}" <<'EOF'
+            bash -s -- "/tmp/ss-ai-activate-release-${GITHUB_SHA}.mjs" "${LIGHTSAIL_DEPLOY_BASE}" "${LIGHTSAIL_SERVICE_NAME}" "${GITHUB_SHA}" "${TARGET_ENV}" "/tmp/ss-ai-default-api-key-${GITHUB_SHA}" <<'EOF'
           set -euo pipefail
           SCRIPT_PATH="$1"
           DEPLOY_BASE="$2"
           SERVICE_NAME="$3"
           RELEASE_SHA="$4"
           TARGET_ENV="$5"
-          DEFAULT_API_KEY="$6"
+          DEFAULT_API_KEY_FILE="$6"
 
-          # Pass plaintext API key secret to release activation script.
-          node "$SCRIPT_PATH" "$DEPLOY_BASE" "$SERVICE_NAME" "$RELEASE_SHA" "$TARGET_ENV" "$DEFAULT_API_KEY"
+          node "$SCRIPT_PATH" "$DEPLOY_BASE" "$SERVICE_NAME" "$RELEASE_SHA" "$TARGET_ENV" "$DEFAULT_API_KEY_FILE"
           rm -f "$SCRIPT_PATH"
           EOF

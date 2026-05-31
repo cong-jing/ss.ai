@@ -1,4 +1,4 @@
-import { rm, mkdir, symlink, readdir, writeFile } from "node:fs/promises";
+import { readFile, rm, mkdir, symlink, readdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -6,11 +6,11 @@ const deployBaseArg = process.argv[2];
 const serviceName = process.argv[3] ?? "";
 const releaseSha = process.argv[4];
 const targetEnv = process.argv[5];
-const defaultApiKeyPlaintext = process.argv[6] ?? "";
+const defaultApiKeyFilePath = process.argv[6] ?? "";
 
 if (!deployBaseArg || !releaseSha || !targetEnv) {
     throw new Error(
-        "Usage: node scripts/activate-lightsail-release.mjs <deploy-base> <service-name> <release-sha> <target-env> [default-api-key]",
+        "Usage: node scripts/activate-lightsail-release.mjs <deploy-base> <service-name> <release-sha> <target-env> [default-api-key-file]",
     );
 }
 
@@ -21,6 +21,15 @@ const currentLink = resolve(deployBase, targetEnv, "current");
 const sharedRuntimeDir = resolve(deployBase, targetEnv, "shared");
 const releaseConfigLocalPath = resolve(releaseDir, "server", "config", "config.local.json");
 const archivePath = `/tmp/ss-ai-${targetEnv}-${releaseSha}.tgz`;
+
+async function readDefaultApiKey(secretFilePath) {
+    if (!secretFilePath) {
+        return "";
+    }
+
+    const secret = await readFile(secretFilePath, "utf8");
+    return secret.trim();
+}
 
 function runCommand(command, args) {
     const result = spawnSync(command, args, {
@@ -49,8 +58,9 @@ await mkdir(releaseDir, { recursive: true });
 
 runCommand("tar", ["-xzf", archivePath, "-C", releaseDir]);
 
-if (defaultApiKeyPlaintext.trim()) {
-    const apiKey = defaultApiKeyPlaintext.trim();
+const defaultApiKeyPlaintext = await readDefaultApiKey(defaultApiKeyFilePath);
+if (defaultApiKeyPlaintext) {
+    const apiKey = defaultApiKeyPlaintext;
     if (/[\r\n]/.test(apiKey)) {
         throw new Error("Invalid default API key: must not contain newline characters.");
     }
@@ -64,6 +74,10 @@ if (defaultApiKeyPlaintext.trim()) {
     };
     await writeFile(releaseConfigLocalPath, `${JSON.stringify(localConfig, null, 4)}\n`, { encoding: "utf8", mode: 0o600 });
     process.stdout.write(`Wrote runtime config.local.json for ${targetEnv}.\n`);
+}
+
+if (defaultApiKeyFilePath) {
+    await rm(defaultApiKeyFilePath, { force: true });
 }
 
 await rm(currentLink, { recursive: true, force: true });
