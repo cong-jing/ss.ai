@@ -57,7 +57,7 @@ export interface ChatStreamRequest {
 /** SSE stream event — one per `data:` line */
 export type ChatStreamEvent =
     | { type: "chunk"; content: string }
-    | { type: "done"; requestId: string; model: string; apiKeySource: "user" | "default" }
+    | { type: "done"; requestId: string; model: string; apiKeySource?: "user" | "default" }
     | { type: "assembledMessages"; messages: ChatDryRunMessage[] };
 
 export const ApiChat = new ApiDefine<ChatRequest, ChatResponse>("/v1/chat", "POST");

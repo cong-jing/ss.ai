@@ -203,13 +203,15 @@ describe("UserPreference API defaults", () => {
         assert.equal(data.modelAssignments["chat.main"]?.effectiveAssignment?.model, "mistral-large-latest");
     });
 
-    it("POST /v1/user-preference/test-api-key can use default api key", async () => {
+    it("POST /v1/user-preference/test-api-key performs remote validation with default api key", async () => {
         const res = await app.agent
             .post("/v1/user-preference/test-api-key")
             .send({ provider: "mistral" })
             .expect(200);
 
-        assert.equal(res.body.ok, true);
+        assert.equal(res.body.ok, false);
         assert.equal(res.body.source, "default");
+        assert.ok(typeof res.body.message === "string" && res.body.message.length > 0);
+        assert.doesNotMatch(String(res.body.message ?? ""), /not remotely validated/i);
     });
 });

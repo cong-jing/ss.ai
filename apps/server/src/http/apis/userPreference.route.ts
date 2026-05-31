@@ -138,23 +138,13 @@ async function testApiKey(
     const provider = (body?.provider ?? "").trim().toLowerCase();
     if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
 
-    const modelEntry = context.config.models[provider];
-    if (!modelEntry) throw new AppHttpError(400, "user_preference.provider_unsupported", `Unsupported provider: ${provider}`);
+    if (!context.config.models[provider]) throw new AppHttpError(400, "user_preference.provider_unsupported", `Unsupported provider: ${provider}`);
 
     const credential = await context.stores.providerCredential.getCredential({ userId, provider });
     const resolvedApiKey = getEffectiveApiKey(context, provider, credential?.encryptedApiKey);
     if (!resolvedApiKey.encryptedApiKey) {
         return { provider, ok: false, source: "missing", message: "API key not set" };
     }
-    if (modelEntry.availableModels.length > 0) {
-        return {
-            provider,
-            ok: true,
-            source: resolvedApiKey.source,
-            message: `${modelEntry.availableModels.length} model(s) available`,
-        };
-    }
-
     try {
         const client = new DefaultModelClient({
             providerConfigs: context.config.models,
