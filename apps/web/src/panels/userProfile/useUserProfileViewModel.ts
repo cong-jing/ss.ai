@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { apiGetUserProfileInfo, apiSaveUserProfileInfo } from "./userProfileApi";
 import type { UserProfileInfo } from "./userProfileTypes";
+import { localizeApiError } from "../../shared/api/localizeApiError";
 import { useToast } from "../../shared/ui/useToast";
 
 export function useUserProfileViewModel() {
@@ -14,7 +15,7 @@ export function useUserProfileViewModel() {
         try {
             userInfo.value = await apiGetUserProfileInfo();
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             isLoadingUser.value = false;
         }
@@ -25,7 +26,7 @@ export function useUserProfileViewModel() {
         try {
             userInfo.value = await apiSaveUserProfileInfo(userInfo.value);
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             isSavingUser.value = false;
         }

@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import type { AuthErrorCode } from "@ss-ai/contracts";
 import { computed, ref } from "vue";
 import Button from "../shared/ui/Button.vue";
 import TextInput from "../shared/ui/TextInput.vue";
 import { useAuthState } from "./useAuthState";
+import { ApiRequestError } from "../shared/api/apiRequestError";
 import { useToast } from "../shared/ui/useToast";
 import { t } from "../shared/i18n/i18n";
+import type { MessageKey } from "../shared/i18n/messages";
 
 const { allowRegistration, login, register } = useAuthState();
 const toast = useToast();
@@ -21,6 +24,29 @@ const passwordInputId = "auth-password";
 
 const canSwitchToRegister = computed(() => allowRegistration.value);
 
+const AUTH_ERROR_MESSAGE_KEYS: Record<AuthErrorCode, MessageKey> = {
+  "auth.authentication_required": "serverError.auth.authenticationRequired",
+  "auth.registration_not_available": "serverError.auth.registrationNotAvailable",
+  "auth.registration_disabled": "serverError.auth.registrationDisabled",
+  "auth.username_invalid": "serverError.auth.usernameInvalid",
+  "auth.username_taken": "serverError.auth.usernameTaken",
+  "auth.login_not_available": "serverError.auth.loginNotAvailable",
+  "auth.invalid_credentials": "serverError.auth.invalidCredentials",
+  "auth.display_name_too_long": "serverError.auth.displayNameTooLong",
+  "auth.password_too_short": "serverError.auth.passwordTooShort",
+};
+
+function resolveAuthErrorMessage(error: unknown): string {
+  if (error instanceof ApiRequestError && error.code) {
+    const key = AUTH_ERROR_MESSAGE_KEYS[error.code as AuthErrorCode];
+    if (key) {
+      return t(key, error.params);
+    }
+  }
+
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function onSubmit(): Promise<void> {
     if (isSubmitting.value) return;
     isSubmitting.value = true;
@@ -32,8 +58,7 @@ async function onSubmit(): Promise<void> {
         }
         password.value = "";
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        toast.error(message);
+      toast.error(resolveAuthErrorMessage(error));
     } finally {
         isSubmitting.value = false;
     }

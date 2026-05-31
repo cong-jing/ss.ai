@@ -1,7 +1,7 @@
 import { ApiAuthMe, type AuthSessionResponse } from "@ss-ai/contracts";
 import type { HttpApiContext } from "../http/apis/apiContext.js";
 import { registerApi } from "../http/registerApi.js";
-import { getErrorStatusCode } from "./errors.js";
+import { getErrorStatusCode, toAuthErrorResponse } from "./errors.js";
 import { toAuthUserInfo } from "./authRuntime.js";
 
 export function registerAuthRoutes(context: HttpApiContext): void {
@@ -15,7 +15,7 @@ export function registerAuthRoutes(context: HttpApiContext): void {
                 user: me.user,
             };
         },
-        handleError: (error) => ({ status: getErrorStatusCode(error, 401), body: { message: error instanceof Error ? error.message : "Unknown error" } }),
+        handleError: (error) => ({ status: getErrorStatusCode(error, 401), body: toAuthErrorResponse(error) }),
     });
 
     context.app.post("/v1/auth/register", async (req, res) => {
@@ -33,7 +33,7 @@ export function registerAuthRoutes(context: HttpApiContext): void {
             };
             res.json(response);
         } catch (error) {
-            res.status(getErrorStatusCode(error, 400)).json({ message: error instanceof Error ? error.message : "Unknown error" });
+            res.status(getErrorStatusCode(error, 400)).json(toAuthErrorResponse(error));
         }
     });
 
@@ -51,7 +51,7 @@ export function registerAuthRoutes(context: HttpApiContext): void {
             };
             res.json(response);
         } catch (error) {
-            res.status(getErrorStatusCode(error, 400)).json({ message: error instanceof Error ? error.message : "Unknown error" });
+            res.status(getErrorStatusCode(error, 400)).json(toAuthErrorResponse(error));
         }
     });
 
@@ -61,7 +61,7 @@ export function registerAuthRoutes(context: HttpApiContext): void {
             context.authRuntime.clearSessionCookie(res);
             res.status(204).send();
         } catch (error) {
-            res.status(getErrorStatusCode(error, 400)).json({ message: error instanceof Error ? error.message : "Unknown error" });
+            res.status(getErrorStatusCode(error, 400)).json(toAuthErrorResponse(error));
         }
     });
 }

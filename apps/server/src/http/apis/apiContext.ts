@@ -5,6 +5,8 @@ import type { Logger } from "@ss-ai/persona-flow-logger";
 import type { ErrorResponse } from "@ss-ai/contracts";
 import type { AppStores } from "@ss-ai/persona-flow";
 import type { AuthRuntime, RequestUser } from "../../auth/authRuntime.js";
+import { AuthHttpError } from "../../auth/errors.js";
+import { AppHttpError } from "../errors/appHttpError.js";
 
 export interface HttpApiContext {
     app: Express;
@@ -15,6 +17,22 @@ export interface HttpApiContext {
 }
 
 export function toErrorResponse(error: unknown): ErrorResponse {
+    if (error instanceof AppHttpError) {
+        return {
+            message: error.message,
+            code: error.code,
+            params: error.params,
+        };
+    }
+
+    if (error instanceof AuthHttpError) {
+        return {
+            message: error.message,
+            code: error.code,
+            params: error.params,
+        };
+    }
+
     return {
         message: error instanceof Error ? error.message : "Unknown error"
     };

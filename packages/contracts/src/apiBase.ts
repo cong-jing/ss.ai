@@ -1,3 +1,5 @@
+import type { AppErrorCode, ErrorParams } from "./errorCode.js";
+
 export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
 export class ApiDefine<TRequest, TResponse> {
@@ -18,4 +20,6 @@ export type ApiResponseOf<TApi extends ApiDefine<unknown, unknown>> =
 
 export interface ErrorResponse {
     message: string;
+    code?: AppErrorCode;
+    params?: ErrorParams;
 }

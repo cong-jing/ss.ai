@@ -4,6 +4,7 @@ import { MODEL_CALL_PURPOSES } from "@ss-ai/contracts";
 import { DefaultModelClient } from "@ss-ai/persona-flow-model-client";
 import { registerApi } from "../registerApi.js";
 import { toErrorResponse, resolveRequestUserId, type HttpApiContext } from "./apiContext.js";
+import { AppHttpError, getAppErrorStatusCode } from "../errors/appHttpError.js";
 
 async function listModelsForProvider(context: HttpApiContext, provider: string, userId: string): Promise<string[]> {
     const modelEntry = context.config.models[provider];
@@ -57,9 +58,9 @@ async function upsertApiKey(
     const provider = (body?.provider ?? "").trim().toLowerCase();
     const apiKey = (body?.apiKey ?? "").trim();
 
-    if (!provider) throw new Error("provider is required");
-    if (!context.config.models[provider]) throw new Error(`Unsupported provider: ${provider}`);
-    if (!apiKey) throw new Error("apiKey is required");
+    if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
+    if (!context.config.models[provider]) throw new AppHttpError(400, "user_preference.provider_unsupported", `Unsupported provider: ${provider}`);
+    if (!apiKey) throw new AppHttpError(400, "user_preference.api_key_required", "apiKey is required");
 
     const now = new Date().toISOString();
     const existing = await context.stores.providerCredential.getCredential({ userId, provider });
@@ -81,7 +82,7 @@ async function deleteApiKey(
     body: UserPreferenceApi.DeleteApiKeyRequest
 ): Promise<UserPreferenceApi.DeleteApiKeyResponse> {
     const provider = (body?.provider ?? "").trim().toLowerCase();
-    if (!provider) throw new Error("provider is required");
+    if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
 
     await context.stores.providerCredential.deleteCredential({ userId, provider });
     return { provider, apiKeySet: false };
@@ -93,10 +94,10 @@ async function testApiKey(
     body: UserPreferenceApi.TestApiKeyRequest
 ): Promise<UserPreferenceApi.TestApiKeyResponse> {
     const provider = (body?.provider ?? "").trim().toLowerCase();
-    if (!provider) throw new Error("provider is required");
+    if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
 
     const modelEntry = context.config.models[provider];
-    if (!modelEntry) throw new Error(`Unsupported provider: ${provider}`);
+    if (!modelEntry) throw new AppHttpError(400, "user_preference.provider_unsupported", `Unsupported provider: ${provider}`);
 
     const credential = await context.stores.providerCredential.getCredential({ userId, provider });
     if (!credential) {
@@ -128,10 +129,10 @@ async function upsertModelAssignment(
     const model = (body?.model ?? "").trim();
 
     if (!modelCallPurpose || !(MODEL_CALL_PURPOSES as readonly string[]).includes(modelCallPurpose)) {
-        throw new Error(`Invalid model call purpose: ${modelCallPurpose}`);
+        throw new AppHttpError(400, "user_preference.model_call_purpose_invalid", `Invalid model call purpose: ${modelCallPurpose}`);
     }
-    if (!provider) throw new Error("provider is required");
-    if (!model) throw new Error("model is required");
+    if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
+    if (!model) throw new AppHttpError(400, "user_preference.model_required", "model is required");
 
     const now = new Date().toISOString();
     await context.stores.userPreferences.setModelAssignment({
@@ -155,8 +156,8 @@ async function listModels(
     body: UserPreferenceApi.ListModelsRequest
 ): Promise<UserPreferenceApi.ListModelsResponse> {
     const provider = (body?.provider ?? "").trim().toLowerCase();
-    if (!provider) throw new Error("provider is required");
-    if (!context.config.models[provider]) throw new Error(`Unsupported provider: ${provider}`);
+    if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
+    if (!context.config.models[provider]) throw new AppHttpError(400, "user_preference.provider_unsupported", `Unsupported provider: ${provider}`);
 
     const models = await listModelsForProvider(context, provider, userId);
     return { provider, models };
@@ -168,7 +169,7 @@ function handleError(message: string, context: HttpApiContext, error: unknown): 
 } {
     const response = toErrorResponse(error);
     context.logger.error(message, { message: response.message });
-    return { status: 400, body: response };
+    return { status: getAppErrorStatusCode(error, 400), body: response };
 }
 
 export function registerUserPreferenceRoutes(context: HttpApiContext): void {

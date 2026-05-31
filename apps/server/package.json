@@ -14,7 +14,7 @@
         "build": "tsc -p tsconfig.build.json",
         "start": "node dist/index.js",
         "typecheck": "tsc --noEmit",
-        "test": "tsx --test test/.run.ts"
+        "test": "tsx --conditions=source --test test/.run.ts"
     },
     "dependencies": {
         "@ss-ai/contracts": "workspace:*",

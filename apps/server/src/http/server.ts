@@ -16,7 +16,7 @@ import {
 import type { AppStores } from "@ss-ai/persona-flow";
 import { createAuthRuntime } from "../auth/authRuntime.js";
 import { registerAuthRoutes } from "../auth/auth.route.js";
-import { getErrorStatusCode } from "../auth/errors.js";
+import { getErrorStatusCode, toAuthErrorResponse } from "../auth/errors.js";
 
 export interface ServerStoreOverrides {
     stores?: AppStores;
@@ -97,9 +97,7 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
             await authRuntime.requireUser(req);
             next();
         } catch (error) {
-            res.status(getErrorStatusCode(error, 401)).json({
-                message: error instanceof Error ? error.message : "Authentication required.",
-            });
+            res.status(getErrorStatusCode(error, 401)).json(toAuthErrorResponse(error));
         }
     });
 

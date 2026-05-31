@@ -7,6 +7,7 @@ import {
     apiDeleteConversation,
     apiUpdateConversationTitle,
 } from "../../conversation/conversationApi";
+import { localizeApiError } from "../../../shared/api/localizeApiError";
 import { activeCharacterId } from "../../character/useCharacterViewModel";
 import { useToast } from "../../../shared/ui/useToast";
 import { bumpContextVersion } from "../../../shared/state/appState";
@@ -28,7 +29,7 @@ export function useConversationViewModel() {
             activeConversationId.value = res.activeConversationId;
             bumpContextVersion();
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             isLoadingConversations.value = false;
         }
@@ -44,7 +45,7 @@ export function useConversationViewModel() {
             activeConversationId.value = res.activeConversationId;
             bumpContextVersion();
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             isLoadingConversations.value = false;
         }
@@ -59,7 +60,7 @@ export function useConversationViewModel() {
             activeConversationId.value = res.conversationId;
             bumpContextVersion();
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         }
     }
 
@@ -72,7 +73,7 @@ export function useConversationViewModel() {
             activeConversationId.value = res.activeConversationId;
             bumpContextVersion();
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         }
     }
 
@@ -84,7 +85,7 @@ export function useConversationViewModel() {
             const conv = conversations.value.find((c) => c.id === conversationId);
             if (conv) conv.title = title;
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         }
     }
 

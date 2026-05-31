@@ -19,6 +19,7 @@ import {
 import type { Character as PFCharacter, Conversation } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
 import { resolveRequestUserId, toErrorResponse, type HttpApiContext } from "./apiContext.js";
+import { AppHttpError, getAppErrorStatusCode } from "../errors/appHttpError.js";
 
 // ── Projections ────────────────────────────────────────────────────────────────
 
@@ -77,7 +78,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
         handleRequest: async (req, body: CreateCharacterRequest) => {
             const userId = await resolveRequestUserId(req, context);
             const name = typeof body?.name === "string" ? body.name.trim() : "";
-            if (!name) throw new Error("name is required");
+            if (!name) throw new AppHttpError(400, "character.name_required", "name is required");
             const now = new Date().toISOString();
             const character: PFCharacter = {
                 id: crypto.randomUUID(),
@@ -126,7 +127,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
 
             return toContractCharacter(character);
         },
-        handleError: (error) => ({ status: 400, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 400), body: toErrorResponse(error) }),
     });
 
     // GET /v1/characters/:id
@@ -134,10 +135,10 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
         handleRequest: async (req) => {
             const userId = await resolveRequestUserId(req, context);
             const character = await store.getCharacterById({ userId, characterId: req.params.id });
-            if (!character) throw new Error(`Character not found: ${req.params.id}`);
+            if (!character) throw new AppHttpError(404, "character.not_found", `Character not found: ${req.params.id}`);
             return toContractCharacter(character);
         },
-        handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 404), body: toErrorResponse(error) }),
     });
 
     // PATCH /v1/characters/:id
@@ -146,7 +147,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
             const userId = await resolveRequestUserId(req, context);
             const existing = await store.getCharacterById({ userId, characterId: req.params.id });
             if (!existing || existing.status === "archived") {
-                throw new Error(`Character not found: ${req.params.id}`);
+                throw new AppHttpError(404, "character.not_found", `Character not found: ${req.params.id}`);
             }
             const patch: Partial<Omit<PFCharacter, "id" | "userId" | "createdAt">> = {
                 updatedAt: new Date().toISOString(),
@@ -173,7 +174,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
             const updated = await store.getCharacterById({ userId, characterId: req.params.id });
             return toContractCharacter(updated!);
         },
-        handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 404), body: toErrorResponse(error) }),
     });
 
     // DELETE /v1/characters/:id
@@ -182,11 +183,11 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
             const userId = await resolveRequestUserId(req, context);
             const existing = await store.getCharacterById({ userId, characterId: req.params.id });
             if (!existing || existing.status === "archived") {
-                throw new Error(`Character not found: ${req.params.id}`);
+                throw new AppHttpError(404, "character.not_found", `Character not found: ${req.params.id}`);
             }
             await store.archiveCharacter({ userId, characterId: req.params.id, updatedAt: new Date().toISOString() });
         },
-        handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 404), body: toErrorResponse(error) }),
     });
 
     // ── Active character ────────────────────────────────────────────────────────
@@ -205,7 +206,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
             const characterId = typeof body?.characterId === "string" ? body.characterId : "";
             const character = await store.getCharacterById({ userId, characterId });
             if (!character || character.status === "archived") {
-                throw new Error(`Character not found: ${characterId}`);
+                throw new AppHttpError(404, "character.not_found", `Character not found: ${characterId}`);
             }
             await context.stores.userPreferences.setCurrentCharacter({
                 userId,
@@ -222,7 +223,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 activeConversationId: state?.currentConversationId ?? null,
             };
         },
-        handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 404), body: toErrorResponse(error) }),
     });
 
     registerApi(context.app, ApiListCharacterInteractionModes, {

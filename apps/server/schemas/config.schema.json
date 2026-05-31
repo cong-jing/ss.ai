@@ -4,9 +4,6 @@
     "title": "ss.ai config",
     "type": "object",
     "additionalProperties": false,
-    "required": [
-        "models"
-    ],
     "properties": {
         "$schema": {
             "type": "string"
