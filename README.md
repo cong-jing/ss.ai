@@ -69,6 +69,8 @@ The deployed server reads config assets from the server package root:
 - `.deploy-prod/server/config/config.local.json.example`
 - `.deploy-prod/server/schemas/config.schema.json`
 
+Lightsail deployment can also create `server/config/config.local.json` at release activation time. The current workflow uses CI secret `LIGHTSAIL_DEFAULT_API_KEY` and `scripts/activate-lightsail-release.mjs` to write a machine-local override file on the target host.
+
 Web deploy output:
 
 - `.deploy-staging/web/*`
@@ -207,6 +209,9 @@ Responsibilities:
 Important behavior:
 
 - The app is effectively single-user right now: API code uses `DEFAULT_USER_ID = "default"` unless a request supplies `userId` in selected chat paths.
+- Auth supports two modes through `config.auth.mode`: `default-user` and `local-password`.
+- `default-user` skips real sign-in and treats every request as the configured default user.
+- `local-password` enables a small built-in username/password + session-cookie auth flow.
 - `/v1/chat` defaults to structured output.
 - `/v1/chat/stream` defaults to non-structured SSE output and rejects structured mode.
 - `/v1/chat/dry-run` assembles prompt messages without LLM calls or persistence.
@@ -279,6 +284,8 @@ Config files are always read from `apps/server/config` in source mode or from `s
 
 `apps/server/config/config.local.json` is intended for machine-local overrides and is not committed. `apps/server/config/config.local.json.example` is the template to copy when you need local development overrides.
 
+In the current Lightsail deploy flow, `config.local.json` does not need to exist in the release archive ahead of time. It can be created on the server during release activation and used as the highest-precedence runtime override.
+
 Committed environment overlays currently live in `apps/server/config/config.staging.json` and `apps/server/config/config.prod.json`.
 
 `apps/qq-bot` defaults to loading its bot environment from `apps/qq-bot/.env`. When started through `pnpm run dev:qq-bot` from the repo root, its runtime output also lands under the repo root `.runtime/`.
@@ -290,7 +297,9 @@ Important sections:
 - `runtimeFiles`: temp and user data directories.
 - `agent`: timeout and retry settings for model clients.
 - `promptLog`: prompt logging enablement/path.
-- `models`: provider config, API URL, default model, and optional static `availableModels`.
+- `models`: provider config, API URL, optional default API key, default model, and optional static `availableModels`.
+- `defaultModelAssignments`: per-`ModelCallPurpose` fallback provider/model mapping.
+- `auth`: auth mode, default user id, registration flag, session lifetime, and cookie settings.
 
 The default config currently defines provider key `mistral.ai` with Mistral API URL and a static model list.
 
@@ -321,10 +330,22 @@ Current purposes:
 
 The chat path currently calls the model with `modelCallPurpose: "chat.main"`.
 
+Resolution order is user-first with config fallback:
+
+1. user model assignment
+2. `defaultModelAssignments[modelCallPurpose]`
+3. error
+
+API key resolution is also user-first:
+
+1. user provider credential
+2. `models[provider].apiKey`
+3. error
+
 For a call to work, the current user must have:
 
-1. a model assignment in user preferences for the requested purpose
-2. a provider credential for that assignment's provider
+1. a model assignment in user preferences for the requested purpose, or a matching `defaultModelAssignments` entry
+2. a provider credential for that assignment's provider, or a default API key in runtime config
 3. runtime config for that provider
 
 ## Key Files

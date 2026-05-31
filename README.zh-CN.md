@@ -312,3 +312,11 @@ Conversation 不是简单的 user/assistant transcript，而是由 actor 驱动�
 - API key 加密/解密 hook 已放在 SQLite credential store，目前为空实现。
 - 实现或移除尚未接入的 tool call TODO。
 - 补齐非 `single_character_chat` prompt mode 的 renderer。
+
+
+## Supplemental Notes
+
+- Auth modes: default-user and local-password.
+- Missing user model assignment or provider credential can fall back to defaultModelAssignments and models[provider].apiKey.
+- Lightsail deploy can write server/config/config.local.json from secret LIGHTSAIL_DEFAULT_API_KEY during release activation.
+
