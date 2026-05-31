@@ -3,7 +3,7 @@ import type { MessageKey } from "../i18n/messages";
 import { t } from "../i18n/i18n";
 import { ApiRequestError } from "./apiRequestError";
 
-const ERROR_MESSAGE_KEYS: Partial<Record<AppErrorCode, MessageKey>> = {
+const ERROR_MESSAGE_KEYS: Record<AppErrorCode, MessageKey> = {
     "auth.authentication_required": "serverError.auth.authenticationRequired",
     "auth.registration_not_available": "serverError.auth.registrationNotAvailable",
     "auth.registration_disabled": "serverError.auth.registrationDisabled",
@@ -31,9 +31,7 @@ const ERROR_MESSAGE_KEYS: Partial<Record<AppErrorCode, MessageKey>> = {
 export function localizeApiError(error: unknown): string {
     if (error instanceof ApiRequestError && error.code) {
         const key = ERROR_MESSAGE_KEYS[error.code];
-        if (key) {
-            return t(key, error.params);
-        }
+        return t(key, error.params);
     }
     return error instanceof Error ? error.message : String(error);
 }

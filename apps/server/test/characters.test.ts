@@ -64,7 +64,9 @@ describe("Character CRUD API", () => {
     });
 
     it("POST /v1/characters — rejects empty name with 400", async () => {
-        await app.agent.post("/v1/characters").send({ name: "" }).expect(400);
+        const res = await app.agent.post("/v1/characters").send({ name: "" }).expect(400);
+        assert.equal(res.body.code, "character.name_required");
+        assert.equal(res.body.params, undefined);
     });
 
     // ── List after creates ────────────────────────────────────────────────────
