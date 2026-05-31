@@ -86,7 +86,12 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
         return;
     }
 
-    const doneEvent: ChatStreamEvent = { type: "done", requestId: streamResult.requestId, model: streamResult.model };
+    const doneEvent: ChatStreamEvent = {
+        type: "done",
+        requestId: streamResult.requestId,
+        model: streamResult.model,
+        apiKeySource: streamResult.apiKeySource,
+    };
     res.write(`data: ${JSON.stringify(doneEvent)}\n\n`);
     res.end();
 }

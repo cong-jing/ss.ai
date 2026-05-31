@@ -61,6 +61,7 @@ jobs:
       TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.target }}
       LIGHTSAIL_USER: ubuntu
       LIGHTSAIL_SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+      LIGHTSAIL_DEFAULT_API_KEY: ${{ secrets.LIGHTSAIL_DEFAULT_API_KEY }}
       LIGHTSAIL_DEPLOY_BASE: ${{ vars.LIGHTSAIL_DEPLOY_BASE }}
       LIGHTSAIL_SERVICE_NAME: ss-ai-${{ github.event_name == 'push' && 'staging' || inputs.target }}
       LIGHTSAIL_HOST: 13.159.36.248
@@ -97,6 +98,7 @@ jobs:
         run: |
           test -n "$LIGHTSAIL_USER"
           test -n "$LIGHTSAIL_SSH_KEY"
+          test -n "$LIGHTSAIL_DEFAULT_API_KEY"
           test -n "$LIGHTSAIL_DEPLOY_BASE"
           test "$LIGHTSAIL_HOST" = "13.159.36.248"
           test "$LIGHTSAIL_SSH_PORT" = "22"
@@ -128,6 +130,18 @@ jobs:
             "scripts/activate-lightsail-release.mjs" \
             "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}:/tmp/ss-ai-activate-release-${GITHUB_SHA}.mjs"
 
+      - name: Upload default API key secret file
+        run: |
+          umask 077
+          SECRET_FILE="$(mktemp)"
+          printf '%s' "$LIGHTSAIL_DEFAULT_API_KEY" > "$SECRET_FILE"
+          scp -P "${LIGHTSAIL_SSH_PORT:-22}" -i ~/.ssh/lightsail.key \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "$SECRET_FILE" \
+            "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}:/tmp/ss-ai-default-api-key-${GITHUB_SHA}"
+          rm -f "$SECRET_FILE"
+
       # Use a mounted filesystem path such as /opt/ss-ai/staging here.
       # The block device name /dev/sda1 is not used by GitHub Actions directly.
       - name: Activate release on Lightsail
@@ -136,14 +150,15 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile=~/.ssh/known_hosts \
             "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}" \
-            bash -s -- "/tmp/ss-ai-activate-release-${GITHUB_SHA}.mjs" "${LIGHTSAIL_DEPLOY_BASE}" "${LIGHTSAIL_SERVICE_NAME}" "${GITHUB_SHA}" "${TARGET_ENV}" <<'EOF'
+            bash -s -- "/tmp/ss-ai-activate-release-${GITHUB_SHA}.mjs" "${LIGHTSAIL_DEPLOY_BASE}" "${LIGHTSAIL_SERVICE_NAME}" "${GITHUB_SHA}" "${TARGET_ENV}" "/tmp/ss-ai-default-api-key-${GITHUB_SHA}" <<'EOF'
           set -euo pipefail
           SCRIPT_PATH="$1"
           DEPLOY_BASE="$2"
           SERVICE_NAME="$3"
           RELEASE_SHA="$4"
           TARGET_ENV="$5"
+          DEFAULT_API_KEY_FILE="$6"
 
-          node "$SCRIPT_PATH" "$DEPLOY_BASE" "$SERVICE_NAME" "$RELEASE_SHA" "$TARGET_ENV"
+          node "$SCRIPT_PATH" "$DEPLOY_BASE" "$SERVICE_NAME" "$RELEASE_SHA" "$TARGET_ENV" "$DEFAULT_API_KEY_FILE"
           rm -f "$SCRIPT_PATH"
           EOF

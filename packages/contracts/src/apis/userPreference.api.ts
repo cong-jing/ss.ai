@@ -3,15 +3,28 @@ import type { ModelAssignment, ModelCallPurpose } from "../modelCallPurpose.js";
 
 // --- Provider info ---
 
+export type ApiKeySource = "user" | "default" | "missing";
+export type ModelAssignmentSource = "user" | "default" | "missing";
+
 export interface ProviderStatus {
     provider: string;
-    apiKeySet: boolean;
+    userApiKeySet: boolean;
+    defaultApiKeySet: boolean;
+    effectiveApiKeySource: ApiKeySource;
+    defaultApiKeyWarning?: string;
     availableModels: string[];
 }
 
 // --- Model assignment ---
 
-export type UserModelAssignmentMap = Partial<Record<ModelCallPurpose, ModelAssignment | null>>;
+export interface ModelAssignmentStatus {
+    userAssignment: ModelAssignment | null;
+    defaultAssignment: ModelAssignment | null;
+    effectiveAssignment: ModelAssignment | null;
+    effectiveSource: ModelAssignmentSource;
+}
+
+export type UserModelAssignmentMap = Partial<Record<ModelCallPurpose, ModelAssignmentStatus>>;
 
 // --- GET /v1/user-preference ---
 
@@ -53,6 +66,7 @@ export interface TestApiKeyRequest {
 export interface TestApiKeyResponse {
     provider: string;
     ok: boolean;
+    source: ApiKeySource;
     message?: string;
 }
 

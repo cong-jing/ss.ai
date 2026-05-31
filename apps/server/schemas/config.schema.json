@@ -141,6 +141,44 @@
                     }
                 }
             }
+        },
+        "defaultModelAssignments": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "chat.main": {
+                    "type": "object",
+                    "required": [
+                        "provider",
+                        "model"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                        "provider": {
+                            "type": "string"
+                        },
+                        "model": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "memory.summarize": {
+                    "type": "object",
+                    "required": [
+                        "provider",
+                        "model"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                        "provider": {
+                            "type": "string"
+                        },
+                        "model": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
         }
     }
 }

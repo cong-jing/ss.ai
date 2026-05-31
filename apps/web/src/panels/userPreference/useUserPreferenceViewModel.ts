@@ -11,6 +11,9 @@ import type { ModelAssignmentState, ProviderState } from "./userPreferenceTypes"
 import { MODEL_CALL_PURPOSES, type ModelCallPurpose } from "@ss-ai/contracts";
 import { localizeApiError } from "../../shared/api/localizeApiError";
 import { useToast } from "../../shared/ui/useToast";
+import { t } from "../../shared/i18n/i18n";
+
+let hasShownDefaultApiKeyToast = false;
 
 export function useUserPreferenceViewModel() {
     const toast = useToast();
@@ -26,8 +29,11 @@ export function useUserPreferenceViewModel() {
 
             providers.value = response.providers.map((p) => ({
                 provider: p.provider,
-                apiKeySet: p.apiKeySet,
-                apiKeyInput: p.apiKeySet ? null : "",
+                userApiKeySet: p.userApiKeySet,
+                defaultApiKeySet: p.defaultApiKeySet,
+                effectiveApiKeySource: p.effectiveApiKeySource,
+                defaultApiKeyWarning: p.defaultApiKeyWarning ?? "",
+                apiKeyInput: p.userApiKeySet ? null : "",
                 availableModels: p.availableModels,
                 isSavingKey: false,
                 isTestingKey: false,
@@ -39,13 +45,23 @@ export function useUserPreferenceViewModel() {
             const assignmentStates: ModelAssignmentState[] = [];
             for (const purpose of MODEL_CALL_PURPOSES) {
                 const assignment = response.modelAssignments[purpose];
-                if (assignment) {
-                    assignmentStates.push({ purpose, provider: assignment.provider, model: assignment.model });
-                } else {
-                    assignmentStates.push({ purpose, provider: "", model: "" });
-                }
+                const effectiveAssignment = assignment?.effectiveAssignment ?? null;
+                assignmentStates.push({
+                    purpose,
+                    userAssignment: assignment?.userAssignment ?? null,
+                    defaultAssignment: assignment?.defaultAssignment ?? null,
+                    effectiveAssignment,
+                    effectiveSource: assignment?.effectiveSource ?? "missing",
+                    provider: effectiveAssignment?.provider ?? "",
+                    model: effectiveAssignment?.model ?? "",
+                });
             }
             modelAssignments.value = assignmentStates;
+
+            if (!hasShownDefaultApiKeyToast && providers.value.some((p) => p.effectiveApiKeySource === "default")) {
+                toast.info(t("settings.defaultApiKeyToast"));
+                hasShownDefaultApiKeyToast = true;
+            }
         } catch (e) {
             toast.error(localizeApiError(e));
         } finally {
@@ -75,7 +91,8 @@ export function useUserPreferenceViewModel() {
         p.testResult = "none";
         try {
             const res = await apiUpsertApiKey(providerName, p.apiKeyInput.trim());
-            p.apiKeySet = res.apiKeySet;
+            p.userApiKeySet = res.apiKeySet;
+            p.effectiveApiKeySource = "user";
             p.availableModels = res.availableModels;
             p.apiKeyInput = null;
         } catch (e) {
@@ -91,9 +108,11 @@ export function useUserPreferenceViewModel() {
 
         p.isSavingKey = true;
         p.testResult = "none";
+        p.testMessage = "";
         try {
             const res = await apiDeleteApiKey(providerName);
-            p.apiKeySet = res.apiKeySet;
+            p.userApiKeySet = res.apiKeySet;
+            p.effectiveApiKeySource = p.defaultApiKeySet ? "default" : "missing";
             p.availableModels = [];
             p.apiKeyInput = null;
         } catch (e) {
@@ -113,7 +132,11 @@ export function useUserPreferenceViewModel() {
         try {
             const res = await apiTestApiKey(providerName);
             p.testResult = res.ok ? "ok" : "fail";
-            p.testMessage = res.message ?? "";
+            p.testMessage = res.source === "default" && res.message
+                ? `${t("settings.testingDefaultApiKeyPrefix")} ${res.message}`
+                : res.source === "user" && res.message
+                    ? `${t("settings.testingUserApiKeyPrefix")} ${res.message}`
+                    : (res.message ?? "");
         } catch (e) {
             p.testResult = "fail";
             p.testMessage = localizeApiError(e);
@@ -124,7 +147,7 @@ export function useUserPreferenceViewModel() {
 
     async function loadModels(providerName: string): Promise<void> {
         const p = getProvider(providerName);
-        if (!p || !p.apiKeySet) return;
+        if (!p || p.effectiveApiKeySource === "missing") return;
 
         p.isLoadingModels = true;
         try {
@@ -145,8 +168,12 @@ export function useUserPreferenceViewModel() {
                 const assignment = res.modelAssignments[purpose];
                 const state = modelAssignments.value.find(f => f.purpose === purpose);
                 if (state && assignment) {
-                    state.provider = assignment.provider;
-                    state.model = assignment.model;
+                    state.userAssignment = assignment.userAssignment;
+                    state.defaultAssignment = assignment.defaultAssignment;
+                    state.effectiveAssignment = assignment.effectiveAssignment;
+                    state.effectiveSource = assignment.effectiveSource;
+                    state.provider = assignment.effectiveAssignment?.provider ?? "";
+                    state.model = assignment.effectiveAssignment?.model ?? "";
                 }
             }
         } catch (e) {

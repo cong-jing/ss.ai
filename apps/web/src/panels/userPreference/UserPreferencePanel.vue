@@ -6,7 +6,7 @@ import TextInput from "../../shared/ui/TextInput.vue";
 import CollapsibleSection from "../../shared/ui/CollapsibleSection.vue";
 import { useUserPreferenceViewModel } from "./useUserPreferenceViewModel";
 import { useUserProfileViewModel } from "../userProfile/useUserProfileViewModel";
-import type { ModelCallPurpose } from "@ss-ai/contracts";
+import type { ApiKeySource, ModelAssignmentSource, ModelCallPurpose } from "@ss-ai/contracts";
 import { isSupportedLocale, locale, setLocale, t } from "../../shared/i18n/i18n";
 import { SUPPORTED_LOCALES, type Locale } from "../../shared/i18n/messages";
 
@@ -30,8 +30,30 @@ function modelsForProvider(providerName: string): string[] {
   return providers.value.find(p => p.provider === providerName)?.availableModels ?? [];
 }
 
-function apiKeySetFor(providerName: string): boolean {
-  return providers.value.find(p => p.provider === providerName)?.apiKeySet ?? false;
+function effectiveApiKeySourceFor(providerName: string): ApiKeySource {
+  return providers.value.find(p => p.provider === providerName)?.effectiveApiKeySource ?? "missing";
+}
+
+function apiKeyStatusLabel(source: ApiKeySource): string {
+  switch (source) {
+    case "user":
+      return t("settings.apiKeySourceUser");
+    case "default":
+      return t("settings.apiKeySourceDefault");
+    default:
+      return t("settings.apiKeySourceMissing");
+  }
+}
+
+function assignmentSourceLabel(source: ModelAssignmentSource): string {
+  switch (source) {
+    case "user":
+      return t("settings.assignmentSourceUser");
+    case "default":
+      return t("settings.assignmentSourceDefault");
+    default:
+      return t("settings.assignmentSourceMissing");
+  }
 }
 
 function formatModelCallPurpose(purpose: ModelCallPurpose): string {
@@ -67,7 +89,7 @@ async function onAssignmentProviderChange(_purpose: ModelCallPurpose, idx: numbe
   modelAssignments.value[idx].provider = providerName;
   modelAssignments.value[idx].model = "";
   const p = providers.value.find(p => p.provider === providerName);
-  if (p && p.availableModels.length === 0 && p.apiKeySet) {
+  if (p && p.availableModels.length === 0 && p.effectiveApiKeySource !== "missing") {
     await loadModels(providerName);
   }
 }
@@ -113,7 +135,6 @@ onMounted(() => {
         </div>
       </CollapsibleSection>
 
-      <!-- Section 0: User Info -->
       <CollapsibleSection :title="t('settings.section.userInfo')">
         <div class="section-body">
           <div class="form-group">
@@ -132,17 +153,22 @@ onMounted(() => {
         </div>
       </CollapsibleSection>
 
-      <!-- Section 1: API Keys -->
       <CollapsibleSection :title="t('settings.section.apiKeys')">
         <div v-for="p in providers" :key="p.provider" class="provider-block">
           <div class="provider-header">
             <span class="provider-name">{{ p.provider }}</span>
-            <span v-if="p.testResult === 'ok'" class="badge badge--ok">✓ OK</span>
-            <span v-else-if="p.testResult === 'fail'" class="badge badge--fail">✗ Failed</span>
+            <span class="provider-source" :class="`provider-source--${p.effectiveApiKeySource}`">
+              {{ apiKeyStatusLabel(p.effectiveApiKeySource) }}
+            </span>
+            <span v-if="p.testResult === 'ok'" class="badge badge--ok">OK</span>
+            <span v-else-if="p.testResult === 'fail'" class="badge badge--fail">Failed</span>
           </div>
 
-          <!-- API key already set and not editing -->
-          <template v-if="p.apiKeySet && p.apiKeyInput === null">
+          <p v-if="p.effectiveApiKeySource === 'default'" class="default-key-warning">
+            {{ t("settings.defaultApiKeyWarning") }}
+          </p>
+
+          <template v-if="p.userApiKeySet && p.apiKeyInput === null">
             <div class="key-row">
               <span class="key-set-hint">{{ t("settings.apiKeySet") }}</span>
               <div class="key-actions">
@@ -156,7 +182,6 @@ onMounted(() => {
             <p v-if="p.testMessage" class="test-message" :class="p.testResult === 'ok' ? 'test-ok' : 'test-fail'">{{ p.testMessage }}</p>
           </template>
 
-          <!-- Editing or not set -->
           <template v-else>
             <div class="key-input-row">
               <TextInput
@@ -170,17 +195,21 @@ onMounted(() => {
                 <Button size="sm" :disabled="p.isSavingKey || !p.apiKeyInput?.trim()" @click="saveApiKey(p.provider)">
                   {{ p.isSavingKey ? t("common.saving") : t("common.save") }}
                 </Button>
-                <Button v-if="p.apiKeySet" size="sm" @click="cancelEditApiKey(p.provider)">{{ t("common.cancel") }}</Button>
+                <Button v-if="p.userApiKeySet" size="sm" @click="cancelEditApiKey(p.provider)">{{ t("common.cancel") }}</Button>
+                <Button v-if="!p.userApiKeySet" size="sm" :disabled="p.isTestingKey || p.effectiveApiKeySource === 'missing'" @click="testApiKey(p.provider)">
+                  {{ p.isTestingKey ? t("settings.testing") : t("common.test") }}
+                </Button>
               </div>
             </div>
+            <p v-if="p.testMessage" class="test-message" :class="p.testResult === 'ok' ? 'test-ok' : 'test-fail'">{{ p.testMessage }}</p>
           </template>
         </div>
       </CollapsibleSection>
 
-      <!-- Section 2: Model assignment per purpose -->
       <CollapsibleSection :title="t('settings.section.modelAssignment')">
         <div v-for="(assignmentState, idx) in modelAssignments" :key="assignmentState.purpose" class="fn-block">
           <div class="fn-label">{{ formatModelCallPurpose(assignmentState.purpose) }}</div>
+          <p class="assignment-source">{{ assignmentSourceLabel(assignmentState.effectiveSource) }}</p>
           <div class="fn-edit">
             <select
               :value="assignmentState.provider"
@@ -192,7 +221,7 @@ onMounted(() => {
             </select>
 
             <template v-if="assignmentState.provider">
-              <p v-if="!apiKeySetFor(assignmentState.provider)" class="hint-inline">{{ t("settings.apiKeyMissingForProvider") }}</p>
+              <p v-if="effectiveApiKeySourceFor(assignmentState.provider) === 'missing'" class="hint-inline">{{ t("settings.apiKeyMissingForProvider") }}</p>
               <template v-else>
                 <select
                   :value="assignmentState.model"
@@ -230,11 +259,11 @@ onMounted(() => {
   gap: 10px;
 }
 
-/* Provider blocks */
 .provider-block {
   padding: 8px 0;
   border-bottom: 1px solid #f3f4f6;
 }
+
 .provider-block:last-child {
   border-bottom: none;
   padding-bottom: 0;
@@ -245,6 +274,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
+  flex-wrap: wrap;
 }
 
 .provider-name {
@@ -253,11 +283,48 @@ onMounted(() => {
   color: #374151;
 }
 
+.provider-source {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.provider-source--user {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+}
+
+.provider-source--default {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.provider-source--missing {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #4b5563;
+}
+
+.default-key-warning {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .badge {
   font-size: 11px;
   padding: 1px 6px;
   border-radius: 999px;
 }
+
 .badge--ok { background: #d1fae5; color: #065f46; }
 .badge--fail { background: #fee2e2; color: #b91c1c; }
 
@@ -276,6 +343,7 @@ onMounted(() => {
 .key-actions {
   display: flex;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .key-input-row {
@@ -288,7 +356,6 @@ onMounted(() => {
   width: 100%;
 }
 
-/* Use CSS masking instead of type=password to avoid browser save-password prompts */
 .key-input--masked :deep(input) {
   -webkit-text-security: disc;
   font-family: monospace;
@@ -298,14 +365,15 @@ onMounted(() => {
   font-size: 11px;
   margin-top: 4px;
 }
+
 .test-ok { color: #065f46; }
 .test-fail { color: #b91c1c; }
 
-/* Function model blocks */
 .fn-block {
   padding: 8px 0;
   border-bottom: 1px solid #f3f4f6;
 }
+
 .fn-block:last-child {
   border-bottom: none;
   padding-bottom: 0;
@@ -315,7 +383,13 @@ onMounted(() => {
   font-size: 12px;
   font-weight: 600;
   color: #4b5563;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+}
+
+.assignment-source {
+  font-size: 11px;
+  color: #6b7280;
+  margin: 0 0 6px;
 }
 
 .fn-edit {
@@ -346,21 +420,23 @@ onMounted(() => {
   margin: 0;
 }
 
-/* User info section */
 .section-body {
   padding: 4px 0 8px;
 }
+
 .form-group {
   display: flex;
   flex-direction: column;
   gap: 4px;
   margin-bottom: 10px;
 }
+
 .form-group label {
   font-size: 11px;
   font-weight: 500;
   color: #6b7280;
 }
+
 .info-textarea {
   border: 1px solid #d1d5db;
   border-radius: 6px;
@@ -370,10 +446,12 @@ onMounted(() => {
   resize: vertical;
   line-height: 1.5;
 }
+
 .info-textarea:focus {
   outline: none;
   border-color: #6b7280;
 }
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
@@ -385,4 +463,3 @@ onMounted(() => {
   margin: 0;
 }
 </style>
-

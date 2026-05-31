@@ -34,6 +34,7 @@
     "models": {
         "mistral.ai": {
             "apiUrl": "https://api.mistral.ai",
+            "apiKey": "",
             "availableModels": [
                 "mistral-large-latest",
                 "mistral-medium-latest",
@@ -44,6 +45,16 @@
                 "magistral-small-latest",
                 "open-mistral-nemo-2407"
             ]
+        }
+    },
+    "defaultModelAssignments": {
+        "chat.main": {
+            "provider": "mistral.ai",
+            "model": "mistral-small-latest"
+        },
+        "memory.summarize": {
+            "provider": "mistral.ai",
+            "model": "mistral-small-latest"
         }
     }
 }
