@@ -19,6 +19,7 @@ import type {
     DeleteConversationResponse,
 } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
+import { throwApiRequestError } from "../../shared/api/throwApiRequestError";
 import type { UserProfileInfo } from "./userProfileTypes";
 
 export async function apiGetUserProfileInfo(): Promise<UserProfileInfo> {
@@ -59,8 +60,7 @@ export async function apiUpdateCharacter(
         body: JSON.stringify(patch),
     });
     if (!res.ok) {
-        const err = (await res.json()) as { message?: string };
-        throw new Error(err.message ?? `Request failed: ${res.status}`);
+        await throwApiRequestError(res);
     }
     return res.json() as Promise<Character>;
 }
@@ -68,8 +68,7 @@ export async function apiUpdateCharacter(
 export async function apiDeleteCharacter(id: string): Promise<void> {
     const res = await fetch(`/v1/characters/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "same-origin" });
     if (!res.ok && res.status !== 204) {
-        const err = (await res.json()) as { message?: string };
-        throw new Error(err.message ?? `Request failed: ${res.status}`);
+        await throwApiRequestError(res);
     }
 }
 
@@ -86,8 +85,7 @@ export async function apiListConversations(characterId: string): Promise<ListCon
         credentials: "same-origin",
     });
     if (!res.ok) {
-        const err = (await res.json()) as { message?: string };
-        throw new Error(err.message ?? `Request failed: ${res.status}`);
+        await throwApiRequestError(res);
     }
     return res.json() as Promise<ListConversationsResponse>;
 }
@@ -98,8 +96,7 @@ export async function apiCreateConversation(characterId: string): Promise<Create
         credentials: "same-origin",
     });
     if (!res.ok) {
-        const err = (await res.json()) as { message?: string };
-        throw new Error(err.message ?? `Request failed: ${res.status}`);
+        await throwApiRequestError(res);
     }
     return res.json() as Promise<CreateConversationResponse>;
 }
@@ -112,8 +109,7 @@ export async function apiSelectConversation(characterId: string, conversationId:
         body: JSON.stringify({ conversationId }),
     });
     if (!res.ok) {
-        const err = (await res.json()) as { message?: string };
-        throw new Error(err.message ?? `Request failed: ${res.status}`);
+        await throwApiRequestError(res);
     }
     return res.json() as Promise<SelectConversationResponse>;
 }
@@ -124,8 +120,7 @@ export async function apiDeleteConversation(characterId: string, conversationId:
         { method: "DELETE", credentials: "same-origin" },
     );
     if (!res.ok) {
-        const err = (await res.json()) as { message?: string };
-        throw new Error(err.message ?? `Request failed: ${res.status}`);
+        await throwApiRequestError(res);
     }
     return res.json() as Promise<DeleteConversationResponse>;
 }

@@ -9,6 +9,7 @@ import {
 } from "./userPreferenceApi";
 import type { ModelAssignmentState, ProviderState } from "./userPreferenceTypes";
 import { MODEL_CALL_PURPOSES, type ModelCallPurpose } from "@ss-ai/contracts";
+import { localizeApiError } from "../../shared/api/localizeApiError";
 import { useToast } from "../../shared/ui/useToast";
 
 export function useUserPreferenceViewModel() {
@@ -46,7 +47,7 @@ export function useUserPreferenceViewModel() {
             }
             modelAssignments.value = assignmentStates;
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             isLoading.value = false;
         }
@@ -78,7 +79,7 @@ export function useUserPreferenceViewModel() {
             p.availableModels = res.availableModels;
             p.apiKeyInput = null;
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             p.isSavingKey = false;
         }
@@ -96,7 +97,7 @@ export function useUserPreferenceViewModel() {
             p.availableModels = [];
             p.apiKeyInput = null;
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             p.isSavingKey = false;
         }
@@ -115,7 +116,7 @@ export function useUserPreferenceViewModel() {
             p.testMessage = res.message ?? "";
         } catch (e) {
             p.testResult = "fail";
-            p.testMessage = e instanceof Error ? e.message : String(e);
+            p.testMessage = localizeApiError(e);
         } finally {
             p.isTestingKey = false;
         }
@@ -130,7 +131,7 @@ export function useUserPreferenceViewModel() {
             const res = await apiListModels(providerName);
             p.availableModels = res.models;
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             p.isLoadingModels = false;
         }
@@ -149,7 +150,7 @@ export function useUserPreferenceViewModel() {
                 }
             }
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             isSavingModelAssignment.value = false;
         }

@@ -1,13 +1,13 @@
 import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMessagesResponse, type LlmResponseMode, type InteractionMode } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
+import { throwApiRequestError } from "../../shared/api/throwApiRequestError";
 
 export async function apiGetMessages(conversationId: string): Promise<GetMessagesResponse> {
     const res = await fetch(`/v1/conversations/${encodeURIComponent(conversationId)}/messages`, {
         credentials: "same-origin",
     });
     if (!res.ok) {
-        const err = await res.json() as { message?: string };
-        throw new Error(err.message ?? `Request failed: ${res.status}`);
+        await throwApiRequestError(res);
     }
     return res.json() as Promise<GetMessagesResponse>;
 }
@@ -18,8 +18,7 @@ export async function apiDeleteMessage(conversationId: string, messageId: string
         credentials: "same-origin",
     });
     if (!res.ok) {
-        const err = await res.json() as { message?: string };
-        throw new Error(err.message ?? `Request failed: ${res.status}`);
+        await throwApiRequestError(res);
     }
 }
 
@@ -66,9 +65,11 @@ export async function apiStreamChatMessage(
         signal
     });
 
-    if (!response.ok || !response.body) {
-        const data = await response.json() as { message?: string };
-        throw new Error(data.message ?? `Request failed: ${response.status}`);
+    if (!response.ok) {
+        await throwApiRequestError(response);
+    }
+    if (!response.body) {
+        throw new Error("Request succeeded but stream body is missing.");
     }
 
     const reader = response.body.getReader();

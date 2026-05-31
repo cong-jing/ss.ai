@@ -8,6 +8,7 @@ import {
 import type { Conversation } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
 import { resolveRequestUserId, toErrorResponse, type HttpApiContext } from "./apiContext.js";
+import { AppHttpError, getAppErrorStatusCode } from "../errors/appHttpError.js";
 
 function toContractConversation(c: Conversation): ConversationInfo {
     return { id: c.id, title: c.title, createdAt: c.createdAt, updatedAt: c.updatedAt };
@@ -22,7 +23,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
             const characterId = req.params.id;
             const character = await store.getCharacterById({ userId, characterId });
             if (!character || character.status === "archived") {
-                throw new Error(`Character not found: ${characterId}`);
+                throw new AppHttpError(404, "character.not_found", `Character not found: ${characterId}`);
             }
             const [state, convList] = await Promise.all([
                 context.stores.chat.getCharacterState({ userId, characterId }),
@@ -33,7 +34,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
                 activeConversationId: state?.currentConversationId ?? null,
             };
         },
-        handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 404), body: toErrorResponse(error) }),
     });
 
     registerApi(context.app, ApiCreateConversation, {
@@ -42,7 +43,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
             const characterId = req.params.id;
             const character = await store.getCharacterById({ userId, characterId });
             if (!character || character.status === "archived") {
-                throw new Error(`Character not found: ${characterId}`);
+                throw new AppHttpError(404, "character.not_found", `Character not found: ${characterId}`);
             }
             const now = new Date().toISOString();
             const conversationId = crypto.randomUUID();
@@ -76,7 +77,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
                 activeConversationId: conversationId,
             };
         },
-        handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 404), body: toErrorResponse(error) }),
     });
 
     registerApi(context.app, ApiSelectConversation, {
@@ -86,11 +87,11 @@ export function registerConversationRoutes(context: HttpApiContext): void {
             const conversationId = typeof body?.conversationId === "string" ? body.conversationId : "";
             const character = await store.getCharacterById({ userId, characterId });
             if (!character || character.status === "archived") {
-                throw new Error(`Character not found: ${characterId}`);
+                throw new AppHttpError(404, "character.not_found", `Character not found: ${characterId}`);
             }
             const convList = await context.stores.conversation.listConversations({ userId, characterId });
             if (!convList.some(c => c.id === conversationId)) {
-                throw new Error(`Conversation not found: ${conversationId}`);
+                throw new AppHttpError(400, "conversation.not_found", `Conversation not found: ${conversationId}`);
             }
             const now = new Date().toISOString();
             await context.stores.chat.upsertCharacterState({
@@ -102,7 +103,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
             });
             return { conversationId, conversations: convList.map(toContractConversation) };
         },
-        handleError: (error) => ({ status: 400, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 400), body: toErrorResponse(error) }),
     });
 
     registerApi(context.app, ApiDeleteConversation, {
@@ -112,7 +113,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
             const convId = req.params.convId;
             const character = await store.getCharacterById({ userId, characterId });
             if (!character || character.status === "archived") {
-                throw new Error(`Character not found: ${characterId}`);
+                throw new AppHttpError(404, "character.not_found", `Character not found: ${characterId}`);
             }
 
             const existingConversation = await context.stores.conversation.getConversationById({
@@ -120,7 +121,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
                 conversationId: convId,
             });
             if (!existingConversation || existingConversation.characterId !== characterId) {
-                throw new Error(`Conversation not found: ${convId}`);
+                throw new AppHttpError(404, "conversation.not_found", `Conversation not found: ${convId}`);
             }
 
             const state = await context.stores.chat.getCharacterState({ userId, characterId });
@@ -168,7 +169,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
                 activeConversationId,
             };
         },
-        handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 404), body: toErrorResponse(error) }),
     });
 
     context.app.patch("/v1/characters/:id/conversations/:convId", async (req, res) => {
@@ -178,7 +179,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
             const convId = req.params.convId;
             const character = await store.getCharacterById({ userId, characterId });
             if (!character || character.status === "archived") {
-                throw new Error(`Character not found: ${characterId}`);
+                throw new AppHttpError(404, "character.not_found", `Character not found: ${characterId}`);
             }
 
             const existingConversation = await context.stores.conversation.getConversationById({
@@ -186,7 +187,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
                 conversationId: convId,
             });
             if (!existingConversation || existingConversation.characterId !== characterId) {
-                throw new Error(`Conversation not found: ${convId}`);
+                throw new AppHttpError(404, "conversation.not_found", `Conversation not found: ${convId}`);
             }
 
             const title = typeof req.body?.title === "string" ? req.body.title.trim() || null : null;
@@ -205,7 +206,7 @@ export function registerConversationRoutes(context: HttpApiContext): void {
                 conversations: convList.map(toContractConversation),
             });
         } catch (error) {
-            res.status(404).json(toErrorResponse(error));
+            res.status(getAppErrorStatusCode(error, 404)).json(toErrorResponse(error));
         }
     });
 }

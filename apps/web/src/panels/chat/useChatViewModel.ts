@@ -9,6 +9,7 @@ import { actors, selectedActorId } from "../sidebar/viewmodels/useActorViewModel
 import { useToast } from "../../shared/ui/useToast";
 import { useLocalStorage } from "../../shared/ui/useLocalStorage";
 import { t } from "../../shared/i18n/i18n";
+import { localizeApiError } from "../../shared/api/localizeApiError";
 
 export const chatDraftInput = ref("");
 
@@ -103,7 +104,7 @@ export function useChatViewModel() {
                     if (capturedAssembledMessages) msg.assembledMessages = capturedAssembledMessages;
                 }
             } catch (e) {
-                const message = e instanceof Error ? e.message : String(e);
+                const message = localizeApiError(e);
                 console.error("[chat/stream] error:", e);
                 error.value = message;
                 const msg = messages.value.find(m => m.id === msgId);
@@ -153,7 +154,7 @@ export function useChatViewModel() {
                 });
             }
         } catch (e) {
-            const message = e instanceof Error ? e.message : String(e);
+            const message = localizeApiError(e);
             console.error("[chat] error:", e);
             error.value = message;
             messages.value.push({
@@ -188,7 +189,7 @@ export function useChatViewModel() {
             messages.value = messages.value.filter(message => message.id !== messageId);
         } catch (e) {
             target.deleting = false;
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         }
     }
 
@@ -255,7 +256,7 @@ export function useChatViewModel() {
                 status: "normal" as const,
             }));
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
             messages.value = [];
         } finally {
             isLoading.value = false;
