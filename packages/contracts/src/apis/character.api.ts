@@ -2,6 +2,8 @@ import { ApiDefine } from "../apiBase.js";
 import type { InteractionMode } from "../interactionMode.js";
 import type { ModelAssignmentMap } from "../modelCallPurpose.js";
 import type { ConversationInfo } from "./conversation.api.js";
+
+export type PromptLanguage = "zh-CN" | "en-US" | "ja-JP";
 // ── Domain type ────────────────────────────────────────────────────────────────
 
 /** Per-purpose model overrides. Absent key = inherit from user preference. */
@@ -20,6 +22,7 @@ export interface Character {
     greetingMessage: string | null;
     modelConfig: CharacterModelConfig;
     interactionMode: InteractionMode;
+    language: PromptLanguage;
     status: "active" | "archived";
     createdAt: string;
     updatedAt: string;
@@ -34,6 +37,7 @@ export interface CreateCharacterRequest {
     personaPrompt?: string;
     greetingMessage?: string;
     interactionMode?: InteractionMode;
+    language?: PromptLanguage;
 }
 
 export interface UpdateCharacterRequest {
@@ -42,9 +46,28 @@ export interface UpdateCharacterRequest {
     description?: string;
     personaPrompt?: string;
     greetingMessage?: string;
-    interactionMode?: InteractionMode;
+    language?: PromptLanguage;
     /** Full replacement of modelConfig. Absent keys inherit from user preference. */
     modelConfig?: CharacterModelConfig;
+}
+
+export interface CharacterTemplate {
+    id: string;
+    name: string;
+    displayName: string | null;
+    description: string;
+    personaPrompt: string;
+    greetingMessage: string | null;
+    interactionMode: InteractionMode;
+    language: PromptLanguage;
+}
+
+export interface ListCharacterTemplatesRequest {
+    language: PromptLanguage;
+}
+
+export interface ListCharacterTemplatesResponse {
+    templates: CharacterTemplate[];
 }
 
 export interface ListCharactersResponse {
@@ -85,6 +108,7 @@ export const ApiDeleteCharacter = new ApiDefine<void, void>("/v1/characters/:id"
 
 /** GET /v1/character-interaction-modes — list selectable interaction modes for character cards. */
 export const ApiListCharacterInteractionModes = new ApiDefine<void, InteractionModesResponse>("/v1/character-interaction-modes", "GET");
+export const ApiListCharacterTemplates = new ApiDefine<ListCharacterTemplatesRequest, ListCharacterTemplatesResponse>("/v1/character-templates", "GET");
 
 // ── Active character ───────────────────────────────────────────────────────────
 

@@ -116,6 +116,7 @@ export const enUS = {
     "sidebar.field.description": "Description",
     "sidebar.field.persona": "Persona",
     "sidebar.field.interactionMode": "Interaction Mode",
+    "sidebar.field.language": "Language",
     "sidebar.action.startEdit": "Edit",
     "sidebar.action.create": "Create",
     "sidebar.confirmDeleteCharacter": "Delete character \"{name}\"? This cannot be undone.",

@@ -7,6 +7,19 @@ import type {
 import { ApiRequestError } from "./apiRequestError";
 import { parseErrorResponse } from "./parseErrorResponse";
 
+function buildApiUrl<TApi extends ApiDefine<unknown, unknown>>(api: TApi, request?: ApiRequestOf<TApi>): string {
+    if (api.method !== "GET" || request === undefined || request === null) {
+        return api.apiUrl;
+    }
+    const searchParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(request as Record<string, unknown>)) {
+        if (value === undefined || value === null) continue;
+        searchParams.set(key, String(value));
+    }
+    const query = searchParams.toString();
+    return query ? `${api.apiUrl}?${query}` : api.apiUrl;
+}
+
 async function parseJson<T>(response: Response): Promise<T> {
     if (response.status === 204) {
         return undefined as T;
@@ -33,7 +46,7 @@ export async function callApi<TApi extends ApiDefine<unknown, unknown>>(
     request?: ApiRequestOf<TApi>
 ): Promise<ApiResponseOf<TApi>> {
     const isGet = api.method === "GET";
-    const response = await fetch(api.apiUrl, {
+    const response = await fetch(buildApiUrl(api, request), {
         method: api.method,
         credentials: "same-origin",
         headers: isGet ? undefined : { "Content-Type": "application/json" },

@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from "vue";
 import { useLocalStorage } from "../../shared/ui/useLocalStorage";
 import { useToast } from "../../shared/ui/useToast";
 import CharacterPickerPopup from "../character/CharacterPickerPopup.vue";
+import CharacterCreatePopup from "../character/CharacterCreatePopup.vue";
 import {
   activeCharacter,
   activeCharacterId,
@@ -52,7 +53,7 @@ const {
 } = useActorViewModel();
 
 const showPicker = ref(false);
-const newCharacterName = ref("");
+const showCreatePopup = ref(false);
 const toast = useToast();
 
 const characterOpen = useLocalStorage("ui.left.characterOpen", true);
@@ -68,24 +69,30 @@ function handleCharacterOpenPicker() {
   showPicker.value = true;
 }
 
-function handleCharacterUpdateNewName(value: string) {
-  newCharacterName.value = value;
-}
-
 async function handleCharacterCreate() {
-  const created = await createCharacter(newCharacterName.value, "", "", "", "");
-  if (created) {
-    newCharacterName.value = "";
-    isCharacterEditing.value = true;
-    await loadConversations();
-    await loadActors();
-  }
+  showCreatePopup.value = true;
 }
 
-async function handleCharacterPickerCreate() {
-  const created = await createCharacter(t("character.defaultName"), "", "", "", "");
-  showPicker.value = false;
+async function handleCharacterCreateFromPopup(payload: {
+  name: string;
+  displayName: string;
+  description: string;
+  personaPrompt: string;
+  greetingMessage: string;
+  interactionMode: "single_character_chat" | "group_chat" | "dm_narrator";
+  language: "zh-CN" | "en-US" | "ja-JP";
+}) {
+  const created = await createCharacter(
+    payload.name,
+    payload.displayName,
+    payload.description,
+    payload.personaPrompt,
+    payload.greetingMessage,
+    payload.interactionMode,
+    payload.language,
+  );
   if (created) {
+    showCreatePopup.value = false;
     isCharacterEditing.value = true;
     await loadConversations();
     await loadActors();
@@ -196,10 +203,8 @@ watch(activeConversationId, () => {
       :edit-draft="editDraft"
       :is-dirty="isDirty"
       :is-saving-character="isSavingCharacter"
-      :new-character-name="newCharacterName"
       @character:toggle-open="handleCharacterToggleOpen"
       @character:open-picker="handleCharacterOpenPicker"
-      @character:update-new-name="handleCharacterUpdateNewName"
       @character:create="handleCharacterCreate"
       @character:start-edit="handleCharacterStartEdit"
       @character:cancel-edit="handleCharacterCancelEdit"
@@ -234,7 +239,16 @@ watch(activeConversationId, () => {
     />
   </div>
 
-  <CharacterPickerPopup v-model="showPicker" @new-character="handleCharacterPickerCreate" />
+  <CharacterPickerPopup
+    v-model="showPicker"
+    @new-character="showPicker = false; handleCharacterCreate()"
+  />
+  <CharacterCreatePopup
+    v-model="showCreatePopup"
+    :interaction-modes="interactionModes"
+    :is-saving="isSavingCharacter"
+    @create-character="handleCharacterCreateFromPopup"
+  />
 </template>
 
 <style scoped>

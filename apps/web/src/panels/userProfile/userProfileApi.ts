@@ -6,10 +6,13 @@ import {
     ApiGetActiveCharacter,
     ApiSetActiveCharacter,
     ApiListCharacterInteractionModes,
+    ApiListCharacterTemplates,
 } from "@ss-ai/contracts";
 import type {
     Character,
     CharacterModelConfig,
+    CharacterTemplate,
+    PromptLanguage,
     InteractionModesResponse,
     ListCharactersResponse,
     SetActiveCharacterResponse,
@@ -45,13 +48,14 @@ export async function apiCreateCharacter(
     personaPrompt = "",
     greetingMessage?: string,
     interactionMode?: Character["interactionMode"],
+    language?: PromptLanguage,
 ): Promise<Character> {
-    return callApi(ApiCreateCharacter, { name, displayName, description, personaPrompt, greetingMessage, interactionMode });
+    return callApi(ApiCreateCharacter, { name, displayName, description, personaPrompt, greetingMessage, interactionMode, language });
 }
 
 export async function apiUpdateCharacter(
     id: string,
-    patch: { name?: string; displayName?: string; description?: string; personaPrompt?: string; greetingMessage?: string; interactionMode?: Character["interactionMode"]; modelConfig?: CharacterModelConfig },
+    patch: { name?: string; displayName?: string; description?: string; personaPrompt?: string; greetingMessage?: string; language?: PromptLanguage; modelConfig?: CharacterModelConfig },
 ): Promise<Character> {
     const res = await fetch(`/v1/characters/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -63,6 +67,11 @@ export async function apiUpdateCharacter(
         await throwApiRequestError(res);
     }
     return res.json() as Promise<Character>;
+}
+
+export async function apiListCharacterTemplates(language: PromptLanguage): Promise<CharacterTemplate[]> {
+    const data = await callApi(ApiListCharacterTemplates, { language });
+    return data.templates;
 }
 
 export async function apiDeleteCharacter(id: string): Promise<void> {

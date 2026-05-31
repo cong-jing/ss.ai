@@ -118,6 +118,7 @@ export const zhCN: MessageSchema = {
     "sidebar.field.description": "描述",
     "sidebar.field.persona": "Persona",
     "sidebar.field.interactionMode": "交互模式",
+    "sidebar.field.language": "语言",
     "sidebar.action.startEdit": "编辑",
     "sidebar.action.create": "创建",
     "sidebar.confirmDeleteCharacter": "删除角色 \"{name}\"？此操作不可撤销。",

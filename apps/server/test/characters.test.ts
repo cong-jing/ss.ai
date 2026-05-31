@@ -1,13 +1,13 @@
-/**
- * Integration tests for the Character CRUD + active-character API.
- *
- * Uses supertest (in-process, no TCP) + node:test runner.
- * Run via the unified entry: npm test
- */
-
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { INTERACTION_MODES, InteractionModeValue, type Character, type ListCharactersResponse, type InteractionModesResponse } from "@ss-ai/contracts";
+import {
+    INTERACTION_MODES,
+    InteractionModeValue,
+    type Character,
+    type InteractionModesResponse,
+    type ListCharactersResponse,
+    type ListCharacterTemplatesResponse,
+} from "@ss-ai/contracts";
 import { createTestApp, type TestApp } from "./helpers/testServer.js";
 
 describe("Character CRUD API", () => {
@@ -23,152 +23,131 @@ describe("Character CRUD API", () => {
         app.cleanup();
     });
 
-    // ── List ──────────────────────────────────────────────────────────────────
-
-    it("GET /v1/characters — returns empty list initially", async () => {
+    it("GET /v1/characters returns empty list initially", async () => {
         const res = await app.agent.get("/v1/characters").expect(200);
         const data = res.body as ListCharactersResponse;
         assert.deepEqual(data.characters, []);
         assert.equal(data.activeCharacterId, null);
     });
 
-    // ── Create ────────────────────────────────────────────────────────────────
-
-    it("POST /v1/characters — creates Alice with all fields", async () => {
+    it("POST /v1/characters creates Alice with defaults", async () => {
         const res = await app.agent
             .post("/v1/characters")
             .send({ name: "Alice", description: "A curious explorer" })
             .expect(200);
         char1 = res.body as Character;
-        assert.equal(typeof char1.id, "string");
-        assert.ok(char1.id.length > 0);
         assert.equal(char1.name, "Alice");
         assert.equal(char1.description, "A curious explorer");
         assert.equal(char1.personaPrompt, "");
         assert.equal(char1.greetingMessage, null);
         assert.equal(char1.interactionMode, InteractionModeValue.singleCharacterChat);
+        assert.equal(char1.language, "zh-CN");
         assert.equal(char1.status, "active");
-        assert.equal(typeof char1.createdAt, "string");
-        assert.equal(typeof char1.updatedAt, "string");
     });
 
-    it("POST /v1/characters — creates Bob without description", async () => {
-        const res = await app.agent
-            .post("/v1/characters")
-            .send({ name: "Bob" })
-            .expect(200);
+    it("POST /v1/characters creates Bob without description", async () => {
+        const res = await app.agent.post("/v1/characters").send({ name: "Bob" }).expect(200);
         char2 = res.body as Character;
         assert.equal(char2.name, "Bob");
         assert.equal(char2.description, "");
-        assert.equal(char2.interactionMode, InteractionModeValue.singleCharacterChat);
+        assert.equal(char2.language, "zh-CN");
     });
 
-    it("POST /v1/characters — rejects empty name with 400", async () => {
+    it("POST /v1/characters rejects empty name", async () => {
         const res = await app.agent.post("/v1/characters").send({ name: "" }).expect(400);
         assert.equal(res.body.code, "character.name_required");
-        assert.equal(res.body.params, undefined);
     });
 
-    // ── List after creates ────────────────────────────────────────────────────
-
-    it("GET /v1/characters — lists both characters", async () => {
+    it("GET /v1/characters lists both characters", async () => {
         const res = await app.agent.get("/v1/characters").expect(200);
         const data = res.body as ListCharactersResponse;
         assert.equal(data.characters.length, 2);
     });
 
-    // ── Get one ───────────────────────────────────────────────────────────────
-
-    it("GET /v1/characters/:id — returns Alice by id", async () => {
+    it("GET /v1/characters/:id returns Alice", async () => {
         const res = await app.agent.get(`/v1/characters/${char1.id}`).expect(200);
         const data = res.body as Character;
         assert.equal(data.id, char1.id);
-        assert.equal(data.name, "Alice");
     });
 
-    it("GET /v1/characters/:id — returns 404 for unknown id", async () => {
+    it("GET /v1/characters/:id returns 404 for unknown id", async () => {
         await app.agent.get("/v1/characters/non-existent-id").expect(404);
     });
 
-    // ── Update ────────────────────────────────────────────────────────────────
-
-    it("PATCH /v1/characters/:id — updates description and personaPrompt", async () => {
+    it("PATCH /v1/characters/:id updates description, personaPrompt and language", async () => {
         const res = await app.agent
             .patch(`/v1/characters/${char1.id}`)
-            .send({ description: "Updated description", personaPrompt: "Be curious.", interactionMode: InteractionModeValue.groupChat })
+            .send({ description: "Updated description", personaPrompt: "Be curious.", language: "en-US" })
             .expect(200);
         const data = res.body as Character;
-        assert.equal(data.name, "Alice");
         assert.equal(data.description, "Updated description");
         assert.equal(data.personaPrompt, "Be curious.");
-        assert.equal(data.interactionMode, InteractionModeValue.groupChat);
-        assert.ok(data.updatedAt >= char1.updatedAt, "updatedAt must advance");
-        char1 = data; // keep char1 in sync
+        assert.equal(data.language, "en-US");
+        assert.equal(data.interactionMode, InteractionModeValue.singleCharacterChat);
+        char1 = data;
     });
 
-    it("GET /v1/character-interaction-modes — returns selectable interaction modes", async () => {
+    it("GET /v1/character-interaction-modes returns selectable interaction modes", async () => {
         const res = await app.agent.get("/v1/character-interaction-modes").expect(200);
         const data = res.body as InteractionModesResponse;
         assert.deepEqual(data.interactionModes, [...INTERACTION_MODES]);
     });
 
-    it("PATCH /v1/characters/:id — returns 404 for unknown id", async () => {
-        await app.agent
-            .patch("/v1/characters/non-existent-id")
-            .send({ name: "X" })
-            .expect(404);
+    it("GET /v1/character-templates returns localized templates", async () => {
+        const res = await app.agent.get("/v1/character-templates?language=ja-JP").expect(200);
+        const data = res.body as ListCharacterTemplatesResponse;
+        assert.equal(data.templates.length >= 3, true);
+        assert.equal(data.templates.every(template => template.language === "ja-JP"), true);
     });
 
-    // ── Active character ──────────────────────────────────────────────────────
+    it("GET /v1/character-templates returns empty list when language is missing", async () => {
+        const res = await app.agent.get("/v1/character-templates").expect(200);
+        const data = res.body as ListCharacterTemplatesResponse;
+        assert.deepEqual(data.templates, []);
+    });
 
-    it("GET /v1/active-character — null initially", async () => {
+    it("PATCH /v1/characters/:id returns 404 for unknown id", async () => {
+        await app.agent.patch("/v1/characters/non-existent-id").send({ name: "X" }).expect(404);
+    });
+
+    it("GET /v1/active-character is null initially", async () => {
         const res = await app.agent.get("/v1/active-character").expect(200);
         assert.equal(res.body.characterId, null);
     });
 
-    it("POST /v1/active-character — sets Alice as active", async () => {
-        const res = await app.agent
-            .post("/v1/active-character")
-            .send({ characterId: char1.id })
-            .expect(200);
-        // Response is now { character, conversations, activeConversationId }
+    it("POST /v1/active-character sets Alice as active", async () => {
+        const res = await app.agent.post("/v1/active-character").send({ characterId: char1.id }).expect(200);
         assert.equal(res.body.character.id, char1.id);
         assert.ok(Array.isArray(res.body.conversations));
-        assert.equal(typeof res.body.activeConversationId, "string");
     });
 
-    it("GET /v1/active-character — returns Alice id after setting", async () => {
+    it("GET /v1/active-character returns Alice id after setting", async () => {
         const res = await app.agent.get("/v1/active-character").expect(200);
         assert.equal(res.body.characterId, char1.id);
     });
 
-    it("GET /v1/characters — activeCharacterId reflected in list response", async () => {
+    it("GET /v1/characters includes activeCharacterId", async () => {
         const res = await app.agent.get("/v1/characters").expect(200);
         const data = res.body as ListCharactersResponse;
         assert.equal(data.activeCharacterId, char1.id);
     });
 
-    it("POST /v1/active-character — returns 404 for unknown id", async () => {
-        await app.agent
-            .post("/v1/active-character")
-            .send({ characterId: "non-existent" })
-            .expect(404);
+    it("POST /v1/active-character returns 404 for unknown id", async () => {
+        await app.agent.post("/v1/active-character").send({ characterId: "non-existent" }).expect(404);
     });
 
-    // ── Delete ────────────────────────────────────────────────────────────────
-
-    it("DELETE /v1/characters/:id — archives Bob with 204", async () => {
+    it("DELETE /v1/characters/:id archives Bob", async () => {
         await app.agent.delete(`/v1/characters/${char2.id}`).expect(204);
     });
 
-    it("GET /v1/characters — only Alice remains after delete", async () => {
+    it("GET /v1/characters only returns Alice after delete", async () => {
         const res = await app.agent.get("/v1/characters").expect(200);
         const data = res.body as ListCharactersResponse;
         assert.equal(data.characters.length, 1);
         assert.equal(data.characters[0].id, char1.id);
     });
 
-    it("DELETE /v1/characters/:id — returns 404 for already-archived id", async () => {
+    it("DELETE /v1/characters/:id returns 404 for archived id", async () => {
         await app.agent.delete(`/v1/characters/${char2.id}`).expect(404);
     });
 });

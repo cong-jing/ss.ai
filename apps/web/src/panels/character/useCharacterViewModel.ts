@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import type { Character, CharacterModelConfig, InteractionMode } from '@ss-ai/contracts'
+import type { Character, CharacterModelConfig, InteractionMode, PromptLanguage } from '@ss-ai/contracts'
 import { MODEL_CALL_PURPOSES, DEFAULT_INTERACTION_MODE, type ModelCallPurpose } from '@ss-ai/contracts'
 import {
     apiListCharacters, apiListCharacterInteractionModes, apiCreateCharacter, apiUpdateCharacter,
@@ -31,9 +31,9 @@ function emptyOverrides(): Record<ModelCallPurpose, FnOverride> {
 }
 
 export const editDraft = ref<{
-    name: string; displayName: string; description: string; personaPrompt: string; greetingMessage: string; interactionMode: InteractionMode
+    name: string; displayName: string; description: string; personaPrompt: string; greetingMessage: string; interactionMode: InteractionMode; language: PromptLanguage
     modelOverrides: Record<ModelCallPurpose, FnOverride>
-}>({ name: '', displayName: '', description: '', personaPrompt: '', greetingMessage: '', interactionMode: DEFAULT_INTERACTION_MODE, modelOverrides: emptyOverrides() })
+}>({ name: '', displayName: '', description: '', personaPrompt: '', greetingMessage: '', interactionMode: DEFAULT_INTERACTION_MODE, language: "zh-CN", modelOverrides: emptyOverrides() })
 
 const savedDraftJson = ref('')
 export const isDirty = computed(() => JSON.stringify(editDraft.value) !== savedDraftJson.value)
@@ -59,6 +59,7 @@ function syncDraft(): void {
         personaPrompt: c?.personaPrompt ?? '',
         greetingMessage: c?.greetingMessage ?? '',
         interactionMode: c?.interactionMode ?? defaultInteractionMode,
+        language: c?.language ?? "zh-CN",
         modelOverrides: overrides,
     }
     savedDraftJson.value = JSON.stringify(editDraft.value)
@@ -100,7 +101,13 @@ export function useCharacterViewModel() {
     }
 
     async function create(
-        name: string, displayName: string, description: string, personaPrompt: string, greetingMessage: string,
+        name: string,
+        displayName: string,
+        description: string,
+        personaPrompt: string,
+        greetingMessage: string,
+        interactionMode: InteractionMode,
+        language: PromptLanguage,
     ): Promise<Character | null> {
         if (!name.trim()) return null
         isSavingCharacter.value = true
@@ -108,7 +115,8 @@ export function useCharacterViewModel() {
             const created = await apiCreateCharacter(
                 name.trim(), displayName.trim(), description.trim(), personaPrompt.trim(),
                 greetingMessage.trim() || undefined,
-                editDraft.value.interactionMode,
+                interactionMode,
+                language,
             )
             characters.value.push(created)
             await apiSetActiveCharacter(created.id)
@@ -141,7 +149,7 @@ export function useCharacterViewModel() {
                 description: editDraft.value.description,
                 personaPrompt: editDraft.value.personaPrompt,
                 greetingMessage: editDraft.value.greetingMessage,
-                interactionMode: editDraft.value.interactionMode,
+                language: editDraft.value.language,
                 modelConfig,
             })
             const idx = characters.value.findIndex(c => c.id === updated.id)

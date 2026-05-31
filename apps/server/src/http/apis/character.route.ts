@@ -7,19 +7,23 @@ import {
     ApiGetActiveCharacter,
     ApiSetActiveCharacter,
     ApiListCharacterInteractionModes,
+    ApiListCharacterTemplates,
     DEFAULT_INTERACTION_MODE,
     INTERACTION_MODES,
     type CreateCharacterRequest,
+    type ListCharacterTemplatesRequest,
     type UpdateCharacterRequest,
     type ListCharactersResponse,
     type Character as ContractCharacter,
     type ConversationInfo,
     type InteractionMode as ContractInteractionMode,
+    type PromptLanguage,
 } from "@ss-ai/contracts";
 import type { Character as PFCharacter, Conversation } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
 import { resolveRequestUserId, toErrorResponse, type HttpApiContext } from "./apiContext.js";
 import { AppHttpError, getAppErrorStatusCode } from "../errors/appHttpError.js";
+import { isPromptLanguage, listCharacterTemplates } from "../../characterTemplates/characterTemplateService.js";
 
 // ── Projections ────────────────────────────────────────────────────────────────
 
@@ -43,6 +47,7 @@ function toContractCharacter(c: PFCharacter): ContractCharacter {
         greetingMessage: c.greetingMessage ?? null,
         modelConfig,
         interactionMode: c.interactionMode ?? DEFAULT_INTERACTION_MODE,
+        language: (c.language ?? "zh-CN") as PromptLanguage,
         status: c.status,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
@@ -93,6 +98,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 interactionMode: normalizeInteractionMode(body.interactionMode) ?? DEFAULT_INTERACTION_MODE,
                 generationConfig: {},
                 memoryConfig: {},
+                language: isPromptLanguage(body.language) ? body.language : "zh-CN",
                 status: "active",
                 createdAt: now,
                 updatedAt: now,
@@ -163,9 +169,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                     ? body.greetingMessage.trim() || null
                     : null;
             }
-            if (Object.prototype.hasOwnProperty.call(body, "interactionMode")) {
-                patch.interactionMode = normalizeInteractionMode(body.interactionMode) ?? DEFAULT_INTERACTION_MODE;
-            }
+            if (isPromptLanguage(body?.language)) patch.language = body.language;
             if (Object.prototype.hasOwnProperty.call(body, "modelConfig")
                 && body.modelConfig !== null && typeof body.modelConfig === "object") {
                 patch.modelConfig = body.modelConfig as Record<string, unknown>;
@@ -228,6 +232,12 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
 
     registerApi(context.app, ApiListCharacterInteractionModes, {
         handleRequest: async () => ({ interactionModes: [...INTERACTION_MODES] }),
+    });
+
+    registerApi(context.app, ApiListCharacterTemplates, {
+        handleRequest: async (_req, body: ListCharacterTemplatesRequest) => {
+            return { templates: listCharacterTemplates(body?.language) };
+        },
     });
 
 }

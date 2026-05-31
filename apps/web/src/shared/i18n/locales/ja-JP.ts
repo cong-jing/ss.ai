@@ -118,6 +118,7 @@ export const jaJP: MessageSchema = {
     "sidebar.field.description": "説明",
     "sidebar.field.persona": "Persona",
     "sidebar.field.interactionMode": "Interaction Mode",
+    "sidebar.field.language": "Language",
     "sidebar.action.startEdit": "編集",
     "sidebar.action.create": "作成",
     "sidebar.confirmDeleteCharacter": "キャラクター \"{name}\" を削除しますか？この操作は元に戻せません。",
