@@ -1,9 +1,9 @@
-import type { ErrorResponse } from "@ss-ai/contracts";
 import { ApiRequestError } from "./apiRequestError";
+import { parseErrorResponse } from "./parseErrorResponse";
 
 export async function throwApiRequestError(response: Response): Promise<never> {
     const text = await response.text();
-    const payload = (text ? JSON.parse(text) : undefined) as ErrorResponse | undefined;
+    const payload = parseErrorResponse(text);
     throw new ApiRequestError({
         status: response.status,
         message: payload?.message ?? `Request failed: ${response.status}`,

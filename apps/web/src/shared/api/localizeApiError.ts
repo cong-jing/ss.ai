@@ -30,8 +30,10 @@ const ERROR_MESSAGE_KEYS: Record<AppErrorCode, MessageKey> = {
 
 export function localizeApiError(error: unknown): string {
     if (error instanceof ApiRequestError && error.code) {
-        const key = ERROR_MESSAGE_KEYS[error.code];
-        return t(key, error.params);
+        const key = ERROR_MESSAGE_KEYS[error.code as AppErrorCode];
+        if (typeof key === "string") {
+            return t(key, error.params);
+        }
     }
     return error instanceof Error ? error.message : String(error);
 }
