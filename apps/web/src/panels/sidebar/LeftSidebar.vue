@@ -7,8 +7,10 @@ import CharacterCreatePopup from "../character/CharacterCreatePopup.vue";
 import {
   activeCharacter,
   activeCharacterId,
+  characters,
   editDraft,
   isDirty,
+  isLoadingCharacters,
   isSavingCharacter,
   interactionModes,
   useCharacterViewModel,
@@ -30,6 +32,12 @@ import CharacterSection from "./sections/CharacterSection.vue";
 import ConversationSection from "./sections/ConversationSection.vue";
 import ActorSection from "./sections/ActorSection.vue";
 import { t } from "../../shared/i18n/i18n";
+
+const props = withDefaults(defineProps<{
+  autoOpenCreateWhenEmpty?: boolean;
+}>(), {
+  autoOpenCreateWhenEmpty: false,
+});
 
 const {
   load: loadCharacters,
@@ -60,6 +68,7 @@ const characterOpen = useLocalStorage("ui.left.characterOpen", true);
 const conversationOpen = useLocalStorage("ui.left.conversationOpen", true);
 const actorOpen = useLocalStorage("ui.left.actorOpen", true);
 const isCharacterEditing = ref(false);
+const hasHandledInitialEmptyState = ref(false);
 
 function handleCharacterToggleOpen() {
   characterOpen.value = !characterOpen.value;
@@ -191,6 +200,19 @@ watch(activeCharacterId, (id) => {
 watch(activeConversationId, () => {
   void loadActors();
 });
+
+watch(
+  [() => props.autoOpenCreateWhenEmpty, isLoadingCharacters, () => characters.value.length],
+  ([autoOpenEnabled, loading, characterCount]) => {
+    if (!autoOpenEnabled || loading || hasHandledInitialEmptyState.value) return;
+    hasHandledInitialEmptyState.value = true;
+    if (characterCount > 0) return;
+    characterOpen.value = true;
+    showPicker.value = false;
+    showCreatePopup.value = true;
+  },
+  { immediate: true },
+);
 </script>
 
 <template>

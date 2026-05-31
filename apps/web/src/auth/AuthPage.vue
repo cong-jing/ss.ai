@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import type { Locale } from "../shared/i18n/messages";
 import Button from "../shared/ui/Button.vue";
 import TextInput from "../shared/ui/TextInput.vue";
 import { useAuthState } from "./useAuthState";
 import { localizeApiError } from "../shared/api/localizeApiError";
 import { useToast } from "../shared/ui/useToast";
-import { t } from "../shared/i18n/i18n";
+import { locale, setLocale, t } from "../shared/i18n/i18n";
 
 const { allowRegistration, login, register } = useAuthState();
 const toast = useToast();
@@ -19,8 +20,13 @@ const isSubmitting = ref(false);
 const usernameInputId = "auth-username";
 const displayNameInputId = "auth-display-name";
 const passwordInputId = "auth-password";
+const registerLanguageInputId = "auth-language";
 
 const canSwitchToRegister = computed(() => allowRegistration.value);
+const registerLanguage = computed<Locale>({
+    get: () => locale.value,
+    set: (value) => setLocale(value),
+});
 
 async function onSubmit(): Promise<void> {
     if (isSubmitting.value) return;
@@ -63,6 +69,13 @@ function switchTab(next: "login" | "register"): void {
 
         <label v-if="tab === 'register'" class="auth-label" :for="displayNameInputId">{{ t("auth.displayName") }}</label>
         <TextInput v-if="tab === 'register'" :id="displayNameInputId" v-model="displayName" autocomplete="nickname" />
+
+        <label v-if="tab === 'register'" class="auth-label" :for="registerLanguageInputId">{{ t("settings.language") }}</label>
+        <select v-if="tab === 'register'" :id="registerLanguageInputId" v-model="registerLanguage" class="auth-select">
+          <option value="zh-CN">{{ t("settings.language.zh-CN") }}</option>
+          <option value="en-US">{{ t("settings.language.en-US") }}</option>
+          <option value="ja-JP">{{ t("settings.language.ja-JP") }}</option>
+        </select>
 
         <label class="auth-label" :for="passwordInputId">{{ t("auth.password") }}</label>
         <TextInput :id="passwordInputId" v-model="password" type="password" autocomplete="current-password" />
@@ -111,5 +124,15 @@ function switchTab(next: "login" | "register"): void {
 .auth-label {
   font-size: 13px;
   color: #374151;
+}
+
+.auth-select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  background: #fff;
 }
 </style>
