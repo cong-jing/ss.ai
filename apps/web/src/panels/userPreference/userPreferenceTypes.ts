@@ -1,13 +1,13 @@
-import type { ModelCallPurpose } from "@ss-ai/contracts";
+import type { ApiKeySource, ModelAssignment, ModelAssignmentSource, ModelCallPurpose } from "@ss-ai/contracts";
 
 export interface ProviderState {
     provider: string;
-    /** true = already stored on server */
-    apiKeySet: boolean;
-    /** editing state on frontend — null means not editing */
+    userApiKeySet: boolean;
+    defaultApiKeySet: boolean;
+    effectiveApiKeySource: ApiKeySource;
+    defaultApiKeyWarning: string;
     apiKeyInput: string | null;
     availableModels: string[];
-    /** per-provider UI state */
     isSavingKey: boolean;
     isTestingKey: boolean;
     isLoadingModels: boolean;
@@ -17,6 +17,10 @@ export interface ProviderState {
 
 export type ModelAssignmentState = {
     purpose: ModelCallPurpose;
+    userAssignment: ModelAssignment | null;
+    defaultAssignment: ModelAssignment | null;
+    effectiveAssignment: ModelAssignment | null;
+    effectiveSource: ModelAssignmentSource;
     provider: string;
     model: string;
 };

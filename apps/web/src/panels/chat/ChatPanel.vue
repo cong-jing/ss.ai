@@ -9,7 +9,7 @@ import { useActorViewModel } from "../sidebar/viewmodels/useActorViewModel";
 import { t } from "../../shared/i18n/i18n";
 
 const vm = useChatViewModel();
-const { messages, isSending, isLoading, error, showDebug, chatDraftInput, sendMessage, clearMessages, loadHistory, removeMessage } = vm;
+const { messages, isSending, isLoading, error, chatReplyNotice, showDebug, chatDraftInput, sendMessage, clearMessages, loadHistory, removeMessage } = vm;
 const { actors, selectedActorId, select: selectActor } = useActorViewModel();
 
 onMounted(() => {
@@ -39,6 +39,7 @@ onMounted(() => {
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
+      <p v-if="chatReplyNotice" class="reply-notice">{{ chatReplyNotice }}</p>
 
       <ChatInputBox
         :disabled="isSending"
@@ -89,6 +90,16 @@ onMounted(() => {
   font-size: 12px;
   color: #b91c1c;
   background: #fee2e2;
+}
+
+.reply-notice {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #9a3412;
+  background: #fff7ed;
+  border-top: 1px solid #fed7aa;
 }
 
 .loading-history {

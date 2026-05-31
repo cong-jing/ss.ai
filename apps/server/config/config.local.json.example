@@ -20,5 +20,20 @@
     "runtimeFiles": {
         "tempDir": "./.runtime/temp-dev",
         "userDataDir": "./.runtime/user-data-dev"
+    },
+    "models": {
+        "mistral.ai": {
+            "apiKey": "your api key"
+        }
+    },
+    "defaultModelAssignments": {
+        "chat.main": {
+            "provider": "mistral.ai",
+            "model": "mistral-large-latest"
+        },
+        "memory.summarize": {
+            "provider": "mistral.ai",
+            "model": "mistral-small-latest"
+        }
     }
 }

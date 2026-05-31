@@ -56,7 +56,7 @@ export async function apiStreamChatMessage(
     includeAssembledMessages = false,
     onAssembledMessages?: (messages: { role: string; content: string }[]) => void,
     interactionMode?: InteractionMode
-): Promise<{ requestId: string; model: string }> {
+): Promise<{ requestId: string; model: string; apiKeySource: "user" | "default" }> {
     const response = await fetch(ApiChatStream.apiUrl, {
         method: ApiChatStream.method,
         credentials: "same-origin",
@@ -75,7 +75,11 @@ export async function apiStreamChatMessage(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    let result = { requestId: "", model: "" };
+    let result: { requestId: string; model: string; apiKeySource: "user" | "default" } = {
+        requestId: "",
+        model: "",
+        apiKeySource: "user",
+    };
 
     while (true) {
         const { done, value } = await reader.read();
@@ -91,7 +95,7 @@ export async function apiStreamChatMessage(
             if (event.type === "chunk") {
                 onChunk(event.content);
             } else if (event.type === "done") {
-                result = { requestId: event.requestId, model: event.model };
+                result = { requestId: event.requestId, model: event.model, apiKeySource: event.apiKeySource };
             } else if (event.type === "assembledMessages") {
                 onAssembledMessages?.(event.messages);
             }

@@ -21,6 +21,7 @@ const MOCK_MODELS: Record<string, RuntimeModelEntry> = {
     mistral: {
         provider: "mistral",
         apiUrl: "https://api.mistral.ai",
+        apiKey: "",
         defaultModel: "mistral-large-latest",
         availableModels: ["mistral-small-latest", "mistral-large-latest"],
     },
@@ -47,13 +48,15 @@ describe("UserPreference API", () => {
         assert.equal(data.providers.length, 1);
         const mistral = data.providers[0];
         assert.equal(mistral.provider, "mistral");
-        assert.equal(mistral.apiKeySet, false);
+        assert.equal(mistral.userApiKeySet, false);
+        assert.equal(mistral.defaultApiKeySet, false);
+        assert.equal(mistral.effectiveApiKeySource, "missing");
         // availableModels pre-filled because MOCK_MODELS.availableModels is non-empty
         assert.deepEqual(mistral.availableModels, ["mistral-large-latest", "mistral-small-latest"]);
 
         assert.ok(data.modelAssignments, "modelAssignments must be present");
-        assert.equal(data.modelAssignments["chat.main"], null);
-        assert.equal(data.modelAssignments["memory.summarize"], null);
+        assert.equal(data.modelAssignments["chat.main"]?.effectiveAssignment, null);
+        assert.equal(data.modelAssignments["memory.summarize"]?.effectiveAssignment, null);
     });
 
     // ── POST /v1/user-preference/api-key ────────────────────────────────────────
@@ -73,7 +76,8 @@ describe("UserPreference API", () => {
         const data = res.body as GetUserPreferenceResponse;
         const mistral = data.providers.find((p) => p.provider === "mistral");
         assert.ok(mistral);
-        assert.equal(mistral.apiKeySet, true);
+        assert.equal(mistral.userApiKeySet, true);
+        assert.equal(mistral.effectiveApiKeySource, "user");
     });
 
     it("POST /v1/user-preference/api-key — rejects unknown provider with 400", async () => {
@@ -99,16 +103,16 @@ describe("UserPreference API", () => {
             .expect(200);
         const data = res.body as UpsertModelAssignmentResponse;
         assert.ok(data.modelAssignments["chat.main"]);
-        assert.equal(data.modelAssignments["chat.main"]!.provider, "mistral");
-        assert.equal(data.modelAssignments["chat.main"]!.model, "mistral-large-latest");
+        assert.equal(data.modelAssignments["chat.main"]!.userAssignment?.provider, "mistral");
+        assert.equal(data.modelAssignments["chat.main"]!.userAssignment?.model, "mistral-large-latest");
     });
 
     it("GET /v1/user-preference — modelAssignments chat.main persists", async () => {
         const res = await app.agent.get("/v1/user-preference").expect(200);
         const data = res.body as GetUserPreferenceResponse;
         assert.ok(data.modelAssignments["chat.main"]);
-        assert.equal(data.modelAssignments["chat.main"]!.provider, "mistral");
-        assert.equal(data.modelAssignments["chat.main"]!.model, "mistral-large-latest");
+        assert.equal(data.modelAssignments["chat.main"]!.effectiveAssignment?.provider, "mistral");
+        assert.equal(data.modelAssignments["chat.main"]!.effectiveAssignment?.model, "mistral-large-latest");
     });
 
     it("POST /v1/user-preference/model-assignment — rejects invalid model call purpose with 400", async () => {
@@ -156,6 +160,56 @@ describe("UserPreference API", () => {
         const data = res.body as GetUserPreferenceResponse;
         const mistral = data.providers.find((p) => p.provider === "mistral");
         assert.ok(mistral);
-        assert.equal(mistral.apiKeySet, false);
+        assert.equal(mistral.userApiKeySet, false);
+        assert.equal(mistral.effectiveApiKeySource, "missing");
+    });
+});
+
+describe("UserPreference API defaults", () => {
+    let app: TestApp;
+
+    before(() => {
+        app = createTestApp({
+            mistral: {
+                provider: "mistral",
+                apiUrl: "https://api.mistral.ai",
+                apiKey: "shared-default-key",
+                defaultModel: "mistral-large-latest",
+                availableModels: ["mistral-small-latest", "mistral-large-latest"],
+            },
+        }, {
+            defaultModelAssignments: {
+                "chat.main": { provider: "mistral", model: "mistral-large-latest" },
+            },
+        });
+    });
+
+    after(() => {
+        app.cleanup();
+    });
+
+    it("GET /v1/user-preference returns default key and assignment state", async () => {
+        const res = await app.agent.get("/v1/user-preference").expect(200);
+        const data = res.body as GetUserPreferenceResponse;
+
+        const mistral = data.providers[0];
+        assert.equal(mistral.userApiKeySet, false);
+        assert.equal(mistral.defaultApiKeySet, true);
+        assert.equal(mistral.effectiveApiKeySource, "default");
+        assert.match(mistral.defaultApiKeyWarning ?? "", /default API key/i);
+
+        assert.equal(data.modelAssignments["chat.main"]?.effectiveSource, "default");
+        assert.equal(data.modelAssignments["chat.main"]?.effectiveAssignment?.provider, "mistral");
+        assert.equal(data.modelAssignments["chat.main"]?.effectiveAssignment?.model, "mistral-large-latest");
+    });
+
+    it("POST /v1/user-preference/test-api-key can use default api key", async () => {
+        const res = await app.agent
+            .post("/v1/user-preference/test-api-key")
+            .send({ provider: "mistral" })
+            .expect(200);
+
+        assert.equal(res.body.ok, true);
+        assert.equal(res.body.source, "default");
     });
 });

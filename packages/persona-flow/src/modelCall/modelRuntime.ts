@@ -8,7 +8,7 @@ import type {
     ModelStreamResult,
 } from "../llm/modelClient.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "../chatTurn/personaFlowLogger.js";
-import type { ModelCallPurpose } from "@ss-ai/contracts";
+import type { ModelAssignmentMap, ModelCallPurpose } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
 
 export interface PersonaModelRequest {
@@ -24,6 +24,7 @@ export interface PersonaModelResponse {
     output: string;
     model: string;
     requestId: string;
+    apiKeySource: "user" | "default";
     llmResponseMode: LlmResponseMode;
     structuredOutput?: unknown;
     toolCalls: ModelToolCall[];
@@ -37,6 +38,8 @@ export interface PersonaModelRuntimeDependencies {
     appStores: AppStores;
     promptLogger: PersonaFlowPromptLogger;
     logger?: PersonaFlowLogger;
+    defaultModelAssignments?: ModelAssignmentMap;
+    defaultProviderApiKeys?: Record<string, string>;
 }
 
 function extractStructuredOutputText(output: unknown): string {
@@ -61,6 +64,7 @@ export class ModelRuntime {
             provider: string;
             model: string;
             encryptedApiKey: string;
+            apiKeySource: "user" | "default";
         }> {
         this.logger.verbose("persona-flow/model: resolving runtime", {
             userId: userId,
@@ -68,7 +72,9 @@ export class ModelRuntime {
             modelCallPurpose,
         });
         const prefs = await this.deps.appStores.userPreferences.getUserPreferences(userId);
-        const { provider, model } = prefs?.modelAssignments?.[modelCallPurpose] ?? {};
+        const userAssignment = prefs?.modelAssignments?.[modelCallPurpose];
+        const defaultAssignment = this.deps.defaultModelAssignments?.[modelCallPurpose];
+        const { provider, model } = userAssignment ?? defaultAssignment ?? {};
 
         if (!provider || !model) {
             throw new Error(`${this.toPurposeLabel(modelCallPurpose)} model is not configured. Please set it in Settings -> Model Assignment.`);
@@ -78,9 +84,12 @@ export class ModelRuntime {
             userId: userId,
             provider: provider,
         });
-        if (!credential) {
+        const fallbackApiKey = this.deps.defaultProviderApiKeys?.[provider.toLowerCase()]?.trim() ?? "";
+        const encryptedApiKey = credential?.encryptedApiKey ?? fallbackApiKey;
+        if (!encryptedApiKey) {
             throw new Error(`API key is not set for provider: ${provider}. userId: ${userId}`);
         }
+        const apiKeySource = credential?.encryptedApiKey ? "user" : "default";
 
         this.logger.debug("persona-flow/model: runtime resolved", {
             userId: userId,
@@ -93,7 +102,8 @@ export class ModelRuntime {
         return {
             provider,
             model,
-            encryptedApiKey: credential.encryptedApiKey,
+            encryptedApiKey,
+            apiKeySource,
         };
     }
 
@@ -145,7 +155,7 @@ export class ModelRuntime {
         const requestId = crypto.randomUUID();
         const llmResponseMode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
         const isStructuredResponse = llmResponseMode === "structured";
-        const { provider, model, encryptedApiKey } = await this.resolveProviderModelRuntime(
+        const { provider, model, encryptedApiKey, apiKeySource } = await this.resolveProviderModelRuntime(
             request.userId,
             request.characterId,
             request.modelCallPurpose,
@@ -239,6 +249,7 @@ export class ModelRuntime {
             output,
             model: model,
             requestId,
+            apiKeySource,
             llmResponseMode: llmResponseMode,
             toolCalls,
             usage,
@@ -250,7 +261,7 @@ export class ModelRuntime {
         const requestId = crypto.randomUUID();
         const mode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
         const modelCallPurpose = request.modelCallPurpose ?? "chat.main";
-        const { provider, model, encryptedApiKey } = await this.resolveProviderModelRuntime(
+        const { provider, model, encryptedApiKey, apiKeySource } = await this.resolveProviderModelRuntime(
             request.userId,
             request.characterId,
             modelCallPurpose as ModelCallPurpose,
@@ -347,6 +358,7 @@ export class ModelRuntime {
             output: streamResult.output ?? "",
             model: model,
             requestId,
+            apiKeySource,
             llmResponseMode: mode,
             toolCalls: streamResult.toolCalls,
             usage: streamResult.usage,

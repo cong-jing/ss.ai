@@ -141,6 +141,25 @@
                     }
                 }
             }
+        },
+        "defaultModelAssignments": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "required": [
+                    "provider",
+                    "model"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                    "provider": {
+                        "type": "string"
+                    },
+                    "model": {
+                        "type": "string"
+                    }
+                }
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-import type { InteractionMode, LlmResponseMode } from "@ss-ai/contracts";
+import type { InteractionMode, LlmResponseMode, ModelAssignmentMap } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
 import { prepareChatTurnContext } from "./chatTurnPreparation.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "./personaFlowLogger.js";
@@ -11,6 +11,8 @@ export interface PersonaFlowChatTurnServiceDependencies {
     logger?: PersonaFlowLogger;
     promptLogger: PersonaFlowPromptLogger;
     modelClient: ModelClient;
+    defaultModelAssignments?: ModelAssignmentMap;
+    defaultProviderApiKeys?: Record<string, string>;
 }
 
 export interface PersonaChatTurnRequest {
@@ -58,6 +60,8 @@ export class PersonaFlowChatTurnService {
             appStores: deps.stores,
             logger: this.logger,
             promptLogger: deps.promptLogger,
+            defaultModelAssignments: deps.defaultModelAssignments,
+            defaultProviderApiKeys: deps.defaultProviderApiKeys,
         });
     }
 
@@ -107,6 +111,7 @@ export class PersonaFlowChatTurnService {
     async chatTurn(input: PersonaChatTurnRequest): Promise<{
         requestId: string;
         model: string;
+        apiKeySource: "user" | "default";
         output: string;
         userMessageId: string;
         assistantMessageId?: string;
@@ -165,6 +170,7 @@ export class PersonaFlowChatTurnService {
             return {
                 requestId: callResult.llmResponse.requestId,
                 model: callResult.llmResponse.model,
+                apiKeySource: callResult.llmResponse.apiKeySource,
                 output: "",
                 userMessageId: prepared.userMessage.id,
                 structuredOutput: callResult.parsedModelOutput,
@@ -194,6 +200,7 @@ export class PersonaFlowChatTurnService {
         return {
             requestId: callResult.llmResponse.requestId,
             model: callResult.llmResponse.model,
+            apiKeySource: callResult.llmResponse.apiKeySource,
             output: normalizedAssistantOutput,
             userMessageId: prepared.userMessage.id,
             assistantMessageId,
@@ -205,6 +212,7 @@ export class PersonaFlowChatTurnService {
     async streamTurn(input: PersonaStreamTurnRequest): Promise<{
         requestId: string;
         model: string;
+        apiKeySource: "user" | "default";
         output: string;
         userMessageId: string;
         assistantMessageId: string;
@@ -276,6 +284,7 @@ export class PersonaFlowChatTurnService {
         return {
             requestId: callResult.llmResponse.requestId,
             model: callResult.llmResponse.model,
+            apiKeySource: callResult.llmResponse.apiKeySource,
             output: fullResponse,
             userMessageId: prepared.userMessage.id,
             assistantMessageId,

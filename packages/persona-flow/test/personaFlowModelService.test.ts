@@ -116,6 +116,7 @@ describe("model runtime", () => {
         });
 
         assert.equal(response.output, "structured");
+        assert.equal(response.apiKeySource, "user");
         assert.equal(capturedInputs[0].model, "sum-model");
         assert.equal(capturedInputs[0].provider, "mistral");
         assert.equal(capturedInputs[0].encryptedApiKey, "k");
@@ -158,5 +159,47 @@ describe("model runtime", () => {
             }),
             /Chat\.main model is not configured/i,
         );
+    });
+
+    it("falls back to default model assignment and default provider api key", async () => {
+        const capturedInputs: Array<{
+            provider: string;
+            model: string;
+            encryptedApiKey: string;
+        }> = [];
+
+        const fakeClient: ModelClient = {
+            generate: async (input) => {
+                capturedInputs.push(input);
+                return { output: "ok", toolCalls: [] };
+            },
+            generateStream: async () => ({ output: "", toolCalls: [], completed: true }),
+            listModels: async () => [],
+        };
+
+        const executor = new ModelRuntime({
+            modelClient: fakeClient,
+            appStores: createStores({ preferences: null, credential: null }),
+            promptLogger: { writePromptLog: async () => { } },
+            defaultModelAssignments: {
+                "chat.main": { provider: "mistral", model: "shared-model" },
+            },
+            defaultProviderApiKeys: {
+                mistral: "shared-key",
+            },
+        });
+
+        const response = await executor.chat({
+            userId: "u1",
+            characterId: "c1",
+            messages: [{ role: "user", content: "hello" }],
+            modelCallPurpose: "chat.main",
+        });
+
+        assert.equal(response.output, "ok");
+        assert.equal(response.apiKeySource, "default");
+        assert.equal(capturedInputs[0].provider, "mistral");
+        assert.equal(capturedInputs[0].model, "shared-model");
+        assert.equal(capturedInputs[0].encryptedApiKey, "shared-key");
     });
 });
