@@ -9,7 +9,7 @@ import { hashPassword, verifyPassword } from "./passwordHasher.js";
 import { generateSessionToken, hashSessionToken } from "./sessionToken.js";
 
 const COOKIE_MAX_AGE_MS_MULTIPLIER = 24 * 60 * 60 * 1000;
-const USERNAME_PATTERN = /^[a-z0-9._-]{3,32}$/;
+const USERNAME_PATTERN = /^[a-z0-9._-]{2,32}$/;
 const PASSWORD_MIN_LENGTH = 8;
 const DISPLAY_NAME_MAX_LENGTH = 80;
 const REQUEST_USER_CACHE_KEY = Symbol.for("ss-ai.auth.request-user");
@@ -108,17 +108,17 @@ export function createAuthRuntime(input: {
     async function requireUser(req: Request): Promise<RequestUser> {
         const user = await getOptionalUser(req);
         if (!user) {
-            throw new AuthHttpError(401, "Authentication required.");
+            throw new AuthHttpError(401, "auth.authentication_required", "Authentication required.");
         }
         return user;
     }
 
     async function register(payload: { username: string; password: string; displayName?: string | null }): Promise<SessionIssueResult> {
         if (mode !== "local-password") {
-            throw new AuthHttpError(400, "Registration is only available in local-password mode.");
+            throw new AuthHttpError(400, "auth.registration_not_available", "Registration is only available in local-password mode.");
         }
         if (!allowRegistration) {
-            throw new AuthHttpError(403, "Registration is disabled.");
+            throw new AuthHttpError(403, "auth.registration_disabled", "Registration is disabled.");
         }
 
         const username = normalizeUsername(payload.username);
@@ -126,10 +126,15 @@ export function createAuthRuntime(input: {
         const displayName = normalizeDisplayName(payload.displayName);
 
         if (!USERNAME_PATTERN.test(username)) {
-            throw new AuthHttpError(400, "username must match [a-z0-9._-] and be 3-32 chars.");
+            throw new AuthHttpError(
+                400,
+                "auth.username_invalid",
+                "username must match [a-z0-9._-] and be 2-32 chars.",
+                { minLength: 2, maxLength: 32 }
+            );
         }
         if (store.getUserByUsername(username)) {
-            throw new AuthHttpError(409, "username already exists");
+            throw new AuthHttpError(409, "auth.username_taken", "username already exists");
         }
 
         const now = new Date();
@@ -154,19 +159,19 @@ export function createAuthRuntime(input: {
 
     async function login(payload: { username: string; password: string }): Promise<SessionIssueResult> {
         if (mode !== "local-password") {
-            throw new AuthHttpError(400, "Login is only available in local-password mode.");
+            throw new AuthHttpError(400, "auth.login_not_available", "Login is only available in local-password mode.");
         }
 
         const username = normalizeUsername(payload.username);
         const password = validatePassword(payload.password);
         const user = store.getUserByUsername(username);
         if (!user) {
-            throw new AuthHttpError(401, "Invalid username or password.");
+            throw new AuthHttpError(401, "auth.invalid_credentials", "Invalid username or password.");
         }
 
         const ok = await verifyPassword(password, user.passwordHash);
         if (!ok) {
-            throw new AuthHttpError(401, "Invalid username or password.");
+            throw new AuthHttpError(401, "auth.invalid_credentials", "Invalid username or password.");
         }
 
         return issueSessionForUser({
@@ -283,14 +288,24 @@ function normalizeDisplayName(value: string | null | undefined): string | null {
     const trimmed = value.trim();
     if (!trimmed) return null;
     if (trimmed.length > DISPLAY_NAME_MAX_LENGTH) {
-        throw new AuthHttpError(400, `displayName must be <= ${DISPLAY_NAME_MAX_LENGTH} chars.`);
+        throw new AuthHttpError(
+            400,
+            "auth.display_name_too_long",
+            `displayName must be <= ${DISPLAY_NAME_MAX_LENGTH} chars.`,
+            { maxLength: DISPLAY_NAME_MAX_LENGTH }
+        );
     }
     return trimmed;
 }
 
 function validatePassword(value: string): string {
     if (value.length < PASSWORD_MIN_LENGTH) {
-        throw new AuthHttpError(400, `password must be at least ${PASSWORD_MIN_LENGTH} chars.`);
+        throw new AuthHttpError(
+            400,
+            "auth.password_too_short",
+            `password must be at least ${PASSWORD_MIN_LENGTH} chars.`,
+            { minLength: PASSWORD_MIN_LENGTH }
+        );
     }
     return value;
 }

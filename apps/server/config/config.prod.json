@@ -2,13 +2,13 @@
     "$schema": "../schemas/config.schema.json",
     "logger": {
         "level": "info",
-        "logFilePath": ".runtime/prod/logs/ss-ai.log",
+        "logFilePath": "runtime/logs/ss-ai.log",
         "includeSourceLocation": false,
         "includeStackTrace": false
     },
     "runtimeFiles": {
-        "tempDir": ".runtime/prod/temp",
-        "userDataDir": ".runtime/prod/user-data"
+        "tempDir": "runtime/temp",
+        "userDataDir": "runtime/user-data"
     },
     "auth": {
         "mode": "local-password",
@@ -16,6 +16,6 @@
     },
     "promptLog": {
         "enabled": false,
-        "filePath": ".runtime/prod/logs/ss-ai.prompt.log"
+        "filePath": "runtime/logs/ss-ai.prompt.log"
     }
 }

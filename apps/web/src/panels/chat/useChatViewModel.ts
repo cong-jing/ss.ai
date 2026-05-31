@@ -9,8 +9,10 @@ import { actors, selectedActorId } from "../sidebar/viewmodels/useActorViewModel
 import { useToast } from "../../shared/ui/useToast";
 import { useLocalStorage } from "../../shared/ui/useLocalStorage";
 import { t } from "../../shared/i18n/i18n";
+import { localizeApiError } from "../../shared/api/localizeApiError";
 
 export const chatDraftInput = ref("");
+export const chatReplyNotice = ref<string | null>(null);
 
 function createId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -65,6 +67,7 @@ export function useChatViewModel() {
 
         isSending.value = true;
         error.value = null;
+        chatReplyNotice.value = null;
 
         if (stream) {
             const msgId = createId("assistant");
@@ -102,8 +105,11 @@ export function useChatViewModel() {
                     msg.id = result.requestId || msgId;
                     if (capturedAssembledMessages) msg.assembledMessages = capturedAssembledMessages;
                 }
+                if (result.apiKeySource === "default") {
+                    chatReplyNotice.value = t("chat.defaultApiKeyReplyNotice");
+                }
             } catch (e) {
-                const message = e instanceof Error ? e.message : String(e);
+                const message = localizeApiError(e);
                 console.error("[chat/stream] error:", e);
                 error.value = message;
                 const msg = messages.value.find(m => m.id === msgId);
@@ -152,8 +158,11 @@ export function useChatViewModel() {
                     ...(response.assembledMessages ? { assembledMessages: response.assembledMessages } : {}),
                 });
             }
+            if (response.apiKeySource === "default") {
+                chatReplyNotice.value = t("chat.defaultApiKeyReplyNotice");
+            }
         } catch (e) {
-            const message = e instanceof Error ? e.message : String(e);
+            const message = localizeApiError(e);
             console.error("[chat] error:", e);
             error.value = message;
             messages.value.push({
@@ -170,6 +179,7 @@ export function useChatViewModel() {
 
     function clearMessages() {
         messages.value = [];
+        chatReplyNotice.value = null;
     }
 
     async function removeMessage(messageId: string) {
@@ -188,7 +198,7 @@ export function useChatViewModel() {
             messages.value = messages.value.filter(message => message.id !== messageId);
         } catch (e) {
             target.deleting = false;
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         }
     }
 
@@ -233,6 +243,7 @@ export function useChatViewModel() {
     watch(contextVersion, () => {
         void loadHistory();
         error.value = null;
+        chatReplyNotice.value = null;
     })
 
     async function loadHistory() {
@@ -255,7 +266,7 @@ export function useChatViewModel() {
                 status: "normal" as const,
             }));
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
             messages.value = [];
         } finally {
             isLoading.value = false;
@@ -267,6 +278,7 @@ export function useChatViewModel() {
         isSending,
         isLoading,
         error,
+        chatReplyNotice,
         showDebug,
         chatDraftInput,
         sendMessage,

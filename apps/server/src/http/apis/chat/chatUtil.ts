@@ -73,6 +73,10 @@ export async function createChatTurnService(context: HttpApiContext): Promise<Pe
         stores: context.stores,
         logger: context.logger,
         promptLogger: promptLogger,
+        defaultModelAssignments: context.config.defaultModelAssignments,
+        defaultProviderApiKeys: Object.fromEntries(
+            Object.entries(context.config.models).map(([provider, entry]) => [provider.toLowerCase(), entry.apiKey])
+        ),
         modelClient: new DefaultModelClient({
             providerConfigs: context.config.models,
             timeoutMs: context.config.agent.timeoutMs,

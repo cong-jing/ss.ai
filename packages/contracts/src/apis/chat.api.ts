@@ -23,6 +23,7 @@ export interface ChatResponse {
     output: string;
     model: string;
     requestId: string;
+    apiKeySource: "user" | "default";
     /** ID of the appended user message. */
     userMessageId: string;
     /** ID of the appended assistant message. Undefined when no assistant message was appended. */
@@ -56,7 +57,7 @@ export interface ChatStreamRequest {
 /** SSE stream event — one per `data:` line */
 export type ChatStreamEvent =
     | { type: "chunk"; content: string }
-    | { type: "done"; requestId: string; model: string }
+    | { type: "done"; requestId: string; model: string; apiKeySource?: "user" | "default" }
     | { type: "assembledMessages"; messages: ChatDryRunMessage[] };
 
 export const ApiChat = new ApiDefine<ChatRequest, ChatResponse>("/v1/chat", "POST");

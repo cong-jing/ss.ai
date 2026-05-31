@@ -1,4 +1,5 @@
 export * from "./apiBase.js";
+export * from "./errorCode.js";
 export * from "./interactionMode.js";
 export * from "./apis/userPreference.api.js";
 export * from "./apis/userProfile.api.js";

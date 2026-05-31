@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 
+const DEV_SERVER_TARGET = "http://127.0.0.2:8999";
+
 export default defineConfig({
     plugins: [vue()],
     resolve: {
@@ -11,7 +13,7 @@ export default defineConfig({
         port: 5173,
         proxy: {
             "/v1/chat/stream": {
-                target: "http://127.0.0.1:8999",
+                target: DEV_SERVER_TARGET,
                 changeOrigin: true,
                 // Disable Vite's response buffering so SSE chunks are forwarded immediately
                 configure(proxy) {
@@ -22,11 +24,11 @@ export default defineConfig({
                 }
             },
             "/v1": {
-                target: "http://127.0.0.1:8999",
+                target: DEV_SERVER_TARGET,
                 changeOrigin: true
             },
             "/health": {
-                target: "http://127.0.0.1:8999",
+                target: DEV_SERVER_TARGET,
                 changeOrigin: true
             }
         }

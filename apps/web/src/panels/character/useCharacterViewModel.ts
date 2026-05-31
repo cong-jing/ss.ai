@@ -5,6 +5,7 @@ import {
     apiListCharacters, apiListCharacterInteractionModes, apiCreateCharacter, apiUpdateCharacter,
     apiDeleteCharacter, apiSetActiveCharacter,
 } from '../userProfile/userProfileApi'
+import { localizeApiError } from '../../shared/api/localizeApiError'
 import { useToast } from '../../shared/ui/useToast'
 import { bumpContextVersion } from '../../shared/state/appState'
 import { t } from "../../shared/i18n/i18n";
@@ -80,7 +81,7 @@ export function useCharacterViewModel() {
             activeCharacterId.value = currentId
             syncDraft()
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e))
+            toast.error(localizeApiError(e))
         } finally {
             isLoadingCharacters.value = false
         }
@@ -94,7 +95,7 @@ export function useCharacterViewModel() {
             syncDraft()
             bumpContextVersion()
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e))
+            toast.error(localizeApiError(e))
         }
     }
 
@@ -116,7 +117,7 @@ export function useCharacterViewModel() {
             bumpContextVersion()
             return created
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e))
+            toast.error(localizeApiError(e))
             return null
         } finally {
             isSavingCharacter.value = false
@@ -147,7 +148,7 @@ export function useCharacterViewModel() {
             if (idx !== -1) characters.value[idx] = updated
             syncDraft()
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e))
+            toast.error(localizeApiError(e))
         } finally {
             isSavingCharacter.value = false
         }
@@ -174,7 +175,7 @@ export function useCharacterViewModel() {
             syncDraft()
             bumpContextVersion()
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e))
+            toast.error(localizeApiError(e))
         } finally {
             isSavingCharacter.value = false
         }

@@ -6,6 +6,7 @@ import {
     apiUpdateConversationActor,
     apiDeleteConversationActor,
 } from "../../conversation/conversationApi";
+import { localizeApiError } from "../../../shared/api/localizeApiError";
 import { activeConversationId } from "./useConversationViewModel";
 import { useToast } from "../../../shared/ui/useToast";
 import { currentUserId } from "../../../auth/useAuthState";
@@ -54,7 +55,7 @@ export function useActorViewModel() {
         } catch (e) {
             actors.value = [];
             selectedActorId.value = null;
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             isLoadingActors.value = false;
         }
@@ -87,7 +88,7 @@ export function useActorViewModel() {
             selectedActorId.value = actor.id;
             expandedActorIds.value = [...expandedActorIds.value, actor.id];
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             isSavingActor.value = false;
         }
@@ -109,7 +110,7 @@ export function useActorViewModel() {
             });
             actors.value = actors.value.map((item) => (item.id === actor.id ? actor : item));
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             isSavingActor.value = false;
         }
@@ -130,7 +131,7 @@ export function useActorViewModel() {
                 ensureSelectedActor();
             }
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
+            toast.error(localizeApiError(e));
         } finally {
             isSavingActor.value = false;
         }

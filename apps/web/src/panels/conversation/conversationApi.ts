@@ -3,6 +3,7 @@ import {
     apiListConversations, apiCreateConversation,
     apiSelectConversation, apiDeleteConversation,
 } from '../userProfile/userProfileApi'
+import { throwApiRequestError } from '../../shared/api/throwApiRequestError'
 
 export type { ConversationInfo }
 export { apiListConversations, apiCreateConversation, apiSelectConversation, apiDeleteConversation }
@@ -25,8 +26,7 @@ export async function apiUpdateConversationTitle(
         },
     )
     if (!res.ok) {
-        const err = await res.json() as { message?: string }
-        throw new Error(err.message ?? `Request failed: ${res.status}`)
+        await throwApiRequestError(res)
     }
 }
 
@@ -35,8 +35,7 @@ export async function apiListConversationActors(conversationId: string): Promise
         credentials: "same-origin",
     })
     if (!res.ok) {
-        const err = await res.json() as { message?: string }
-        throw new Error(err.message ?? `Request failed: ${res.status}`)
+        await throwApiRequestError(res)
     }
     return res.json() as Promise<{ actors: ConversationActor[] }>
 }
@@ -52,8 +51,7 @@ export async function apiCreateConversationActor(
         body: JSON.stringify(input),
     })
     if (!res.ok) {
-        const err = await res.json() as { message?: string }
-        throw new Error(err.message ?? `Request failed: ${res.status}`)
+        await throwApiRequestError(res)
     }
     return res.json() as Promise<{ actor: ConversationActor }>
 }
@@ -70,8 +68,7 @@ export async function apiUpdateConversationActor(
         body: JSON.stringify(input),
     })
     if (!res.ok) {
-        const err = await res.json() as { message?: string }
-        throw new Error(err.message ?? `Request failed: ${res.status}`)
+        await throwApiRequestError(res)
     }
     return res.json() as Promise<{ actor: ConversationActor }>
 }
@@ -82,7 +79,6 @@ export async function apiDeleteConversationActor(conversationId: string, actorId
         credentials: "same-origin",
     })
     if (!res.ok) {
-        const err = await res.json() as { message?: string }
-        throw new Error(err.message ?? `Request failed: ${res.status}`)
+        await throwApiRequestError(res)
     }
 }

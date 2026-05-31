@@ -5,13 +5,13 @@
     },
     "logger": {
         "level": "debug",
-        "logFilePath": ".runtime/staging/logs/ss-ai.log",
+        "logFilePath": "runtime/logs/ss-ai.log",
         "includeSourceLocation": true,
         "includeStackTrace": false
     },
     "runtimeFiles": {
-        "tempDir": ".runtime/staging/temp",
-        "userDataDir": ".runtime/staging/user-data"
+        "tempDir": "runtime/temp",
+        "userDataDir": "runtime/user-data"
     },
     "auth": {
         "mode": "local-password",
@@ -19,6 +19,6 @@
     },
     "promptLog": {
         "enabled": true,
-        "filePath": ".runtime/staging/logs/ss-ai.prompt.log"
+        "filePath": "runtime/logs/ss-ai.prompt.log"
     }
 }

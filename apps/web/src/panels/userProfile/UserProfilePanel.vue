@@ -6,6 +6,7 @@ import TextInput from "../../shared/ui/TextInput.vue";
 import { useUserProfileViewModel } from "./useUserProfileViewModel";
 import { t } from "../../shared/i18n/i18n";
 import { useAuthState } from "../../auth/useAuthState";
+import { localizeApiError } from "../../shared/api/localizeApiError";
 import { useToast } from "../../shared/ui/useToast";
 
 const { userInfo, isLoadingUser, isSavingUser, loadUserInfo, saveUserInfo } = useUserProfileViewModel();
@@ -24,7 +25,7 @@ async function onLogout(): Promise<void> {
   try {
     await logout();
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : String(error));
+    toast.error(localizeApiError(error));
   } finally {
     isLoggingOut.value = false;
   }

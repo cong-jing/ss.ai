@@ -4,9 +4,6 @@
     "title": "ss.ai config",
     "type": "object",
     "additionalProperties": false,
-    "required": [
-        "models"
-    ],
     "properties": {
         "$schema": {
             "type": "string"
@@ -139,6 +136,44 @@
                     "availableModels": {
                         "type": "array",
                         "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "defaultModelAssignments": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "chat.main": {
+                    "type": "object",
+                    "required": [
+                        "provider",
+                        "model"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                        "provider": {
+                            "type": "string"
+                        },
+                        "model": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "memory.summarize": {
+                    "type": "object",
+                    "required": [
+                        "provider",
+                        "model"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                        "provider": {
+                            "type": "string"
+                        },
+                        "model": {
                             "type": "string"
                         }
                     }

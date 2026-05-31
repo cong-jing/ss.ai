@@ -8,10 +8,11 @@ import {
 import type { ConversationActor as StoreConversationActor } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
 import { resolveRequestUserId, toErrorResponse, type HttpApiContext } from "./apiContext.js";
+import { AppHttpError, getAppErrorStatusCode } from "../errors/appHttpError.js";
 
 function requireNonEmptyString(value: unknown, fieldName: string, endpoint: string): string {
     if (typeof value !== "string" || value.trim().length === 0) {
-        throw new Error(`${endpoint}: ${fieldName} is required.`);
+        throw new AppHttpError(400, "conversation_actor.display_name_required", `${endpoint}: ${fieldName} is required.`);
     }
     return value;
 }
@@ -22,7 +23,7 @@ async function ensureConversation(context: HttpApiContext, userId: string, conve
         conversationId,
     });
     if (!conversation) {
-        throw new Error(`Conversation not found: ${conversationId}`);
+        throw new AppHttpError(404, "conversation.not_found", `Conversation not found: ${conversationId}`);
     }
     return conversation;
 }
@@ -54,7 +55,7 @@ export function registerConversationActorRoutes(context: HttpApiContext): void {
             });
             return { actors: actors.map(toActor) };
         },
-        handleError: (error) => ({ status: 404, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 404), body: toErrorResponse(error) }),
     });
 
     registerApi(context.app, ApiCreateConversationActor, {
@@ -76,7 +77,7 @@ export function registerConversationActorRoutes(context: HttpApiContext): void {
             });
             return { actor: toActor(actor) };
         },
-        handleError: (error) => ({ status: 400, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 400), body: toErrorResponse(error) }),
     });
 
     registerApi(context.app, ApiUpdateConversationActor, {
@@ -87,23 +88,23 @@ export function registerConversationActorRoutes(context: HttpApiContext): void {
             await ensureConversation(context, userId, conversationId);
             const actor = await context.stores.conversationActor.getActorById(actorId);
             if (!actor || actor.conversationId !== conversationId || actor.leftAt) {
-                throw new Error(`Actor not found: ${actorId}`);
+                throw new AppHttpError(404, "conversation_actor.not_found", `Actor not found: ${actorId}`);
             }
             if (actor.sourceType !== "local_actor") {
-                throw new Error(`Actor cannot be edited: ${actorId}`);
+                throw new AppHttpError(400, "conversation_actor.not_editable", `Actor cannot be edited: ${actorId}`);
             }
 
             const patch: { displayName?: string; profileSnapshotJson?: string | null } = {};
             if (typeof body?.displayName === "string") {
                 const name = body.displayName.trim();
                 if (!name) {
-                    throw new Error("update actor: displayName cannot be empty.");
+                    throw new AppHttpError(400, "conversation_actor.display_name_required", "update actor: displayName cannot be empty.");
                 }
                 patch.displayName = name;
             }
             if (body && Object.prototype.hasOwnProperty.call(body, "profileSnapshotJson")) {
                 if (body.profileSnapshotJson !== null && typeof body.profileSnapshotJson !== "string") {
-                    throw new Error("update actor: profileSnapshotJson must be a string or null.");
+                    throw new AppHttpError(400, "conversation_actor.profile_snapshot_invalid", "update actor: profileSnapshotJson must be a string or null.");
                 }
                 patch.profileSnapshotJson = body.profileSnapshotJson as string | null;
             }
@@ -114,11 +115,11 @@ export function registerConversationActorRoutes(context: HttpApiContext): void {
             });
             const updated = await context.stores.conversationActor.getActorById(actorId);
             if (!updated) {
-                throw new Error(`Actor not found: ${actorId}`);
+                throw new AppHttpError(404, "conversation_actor.not_found", `Actor not found: ${actorId}`);
             }
             return { actor: toActor(updated) };
         },
-        handleError: (error) => ({ status: 400, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 400), body: toErrorResponse(error) }),
     });
 
     registerApi(context.app, ApiDeleteConversationActor, {
@@ -129,10 +130,10 @@ export function registerConversationActorRoutes(context: HttpApiContext): void {
             await ensureConversation(context, userId, conversationId);
             const actor = await context.stores.conversationActor.getActorById(actorId);
             if (!actor || actor.conversationId !== conversationId || actor.leftAt) {
-                throw new Error(`Actor not found: ${actorId}`);
+                throw new AppHttpError(404, "conversation_actor.not_found", `Actor not found: ${actorId}`);
             }
             if (actor.sourceType !== "local_actor" && actor.sourceType !== "logged_user") {
-                throw new Error(`Actor cannot be deleted: ${actorId}`);
+                throw new AppHttpError(400, "conversation_actor.not_deletable", `Actor cannot be deleted: ${actorId}`);
             }
 
             await context.stores.conversationActor.updateConversationActor({
@@ -141,6 +142,6 @@ export function registerConversationActorRoutes(context: HttpApiContext): void {
             });
             return { actorId };
         },
-        handleError: (error) => ({ status: 400, body: toErrorResponse(error) }),
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 400), body: toErrorResponse(error) }),
     });
 }

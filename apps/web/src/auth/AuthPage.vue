@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import Button from "../shared/ui/Button.vue";
 import TextInput from "../shared/ui/TextInput.vue";
 import { useAuthState } from "./useAuthState";
+import { localizeApiError } from "../shared/api/localizeApiError";
 import { useToast } from "../shared/ui/useToast";
 import { t } from "../shared/i18n/i18n";
 
@@ -32,8 +33,7 @@ async function onSubmit(): Promise<void> {
         }
         password.value = "";
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        toast.error(message);
+      toast.error(localizeApiError(error));
     } finally {
         isSubmitting.value = false;
     }

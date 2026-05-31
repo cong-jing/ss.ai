@@ -13,6 +13,7 @@ import { InMemoryConversationStore } from "./inMemoryConversationStore.js";
 import { InMemoryChatStore } from "./inMemoryChatStore.js";
 import { InMemoryConversationActorStore } from "./inMemoryConversationActorStore.js";
 import type { AppStores } from "@ss-ai/persona-flow";
+import type { ModelAssignmentMap } from "@ss-ai/contracts";
 
 export interface TestApp {
     /** supertest agent — call `.get()`, `.post()`, `.patch()`, `.delete()` on this. */
@@ -25,6 +26,7 @@ export interface TestApp {
 
 interface TestAppOptions {
     auth?: RuntimeConfig["auth"];
+    defaultModelAssignments?: ModelAssignmentMap;
 }
 
 /**
@@ -56,6 +58,7 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}, op
             userDataDir: tmpDir,
         },
         models,
+        defaultModelAssignments: options.defaultModelAssignments ?? {},
         agent: { timeoutMs: 30000, maxRetries: 2 },
         promptLog: { enabled: false, filePath: "" },
         auth: {

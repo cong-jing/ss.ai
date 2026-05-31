@@ -104,6 +104,15 @@ describe("Auth API", () => {
             .expect(200);
     });
 
+    it("returns auth error code for invalid credentials", async () => {
+        const response = await app.agent
+            .post("/v1/auth/login")
+            .send({ username: "alice", password: "wrong-password" })
+            .expect(401);
+
+        assert.equal(response.body.code, "auth.invalid_credentials");
+    });
+
     it("marks session cookies as secure when cookieSecure is enabled", async () => {
         const stagingApp = createTestApp({}, {
             auth: {

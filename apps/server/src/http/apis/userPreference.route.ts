@@ -4,6 +4,36 @@ import { MODEL_CALL_PURPOSES } from "@ss-ai/contracts";
 import { DefaultModelClient } from "@ss-ai/persona-flow-model-client";
 import { registerApi } from "../registerApi.js";
 import { toErrorResponse, resolveRequestUserId, type HttpApiContext } from "./apiContext.js";
+import { AppHttpError, getAppErrorStatusCode } from "../errors/appHttpError.js";
+
+function getDefaultProviderApiKey(context: HttpApiContext, provider: string): string {
+    return context.config.models[provider]?.apiKey?.trim() ?? "";
+}
+
+function getEffectiveProviderApiKeySource(
+    context: HttpApiContext,
+    provider: string,
+    hasUserCredential: boolean,
+): UserPreferenceApi.ApiKeySource {
+    if (hasUserCredential) return "user";
+    return getDefaultProviderApiKey(context, provider) ? "default" : "missing";
+}
+
+function getEffectiveApiKey(context: HttpApiContext, provider: string, encryptedApiKey?: string): {
+    encryptedApiKey: string | null;
+    source: UserPreferenceApi.ApiKeySource;
+} {
+    if (encryptedApiKey?.trim()) {
+        return { encryptedApiKey, source: "user" };
+    }
+
+    const defaultApiKey = getDefaultProviderApiKey(context, provider);
+    if (defaultApiKey) {
+        return { encryptedApiKey: defaultApiKey, source: "default" };
+    }
+
+    return { encryptedApiKey: null, source: "missing" };
+}
 
 async function listModelsForProvider(context: HttpApiContext, provider: string, userId: string): Promise<string[]> {
     const modelEntry = context.config.models[provider];
@@ -14,7 +44,8 @@ async function listModelsForProvider(context: HttpApiContext, provider: string, 
     }
 
     const credential = await context.stores.providerCredential.getCredential({ userId, provider });
-    if (!credential) return [];
+    const resolvedApiKey = getEffectiveApiKey(context, provider, credential?.encryptedApiKey);
+    if (!resolvedApiKey.encryptedApiKey) return [];
 
     const client = new DefaultModelClient({
         providerConfigs: context.config.models,
@@ -22,7 +53,7 @@ async function listModelsForProvider(context: HttpApiContext, provider: string, 
         maxRetries: context.config.agent.maxRetries,
         logger: context.logger,
     });
-    const models = await client.listModels(provider, credential.encryptedApiKey);
+    const models = await client.listModels(provider, resolvedApiKey.encryptedApiKey);
     return models.sort();
 }
 
@@ -35,15 +66,27 @@ async function getUserPreference(context: HttpApiContext, userId: string): Promi
     const providers: UserPreferenceApi.ProviderStatus[] = await Promise.all(
         providerKeys.map(async (p) => ({
             provider: p,
-            apiKeySet: credsByProvider.has(p),
+            userApiKeySet: credsByProvider.has(p),
+            defaultApiKeySet: !!getDefaultProviderApiKey(context, p),
+            effectiveApiKeySource: getEffectiveProviderApiKeySource(context, p, credsByProvider.has(p)),
+            defaultApiKeyWarning: getDefaultProviderApiKey(context, p)
+                ? "Shared default API key may be rate-limited, quota-limited, or less stable. Add your own API key for better reliability."
+                : undefined,
             availableModels: await listModelsForProvider(context, p, userId),
         }))
     );
 
     const modelAssignments: UserPreferenceApi.UserModelAssignmentMap = {};
     for (const purpose of MODEL_CALL_PURPOSES) {
-        const assignment = prefs?.modelAssignments?.[purpose];
-        modelAssignments[purpose] = assignment ?? null;
+        const userAssignment = prefs?.modelAssignments?.[purpose] ?? null;
+        const defaultAssignment = context.config.defaultModelAssignments?.[purpose] ?? null;
+        const effectiveAssignment = userAssignment ?? defaultAssignment ?? null;
+        modelAssignments[purpose] = {
+            userAssignment,
+            defaultAssignment,
+            effectiveAssignment,
+            effectiveSource: userAssignment ? "user" : (defaultAssignment ? "default" : "missing"),
+        };
     }
 
     return { providers, modelAssignments };
@@ -57,9 +100,9 @@ async function upsertApiKey(
     const provider = (body?.provider ?? "").trim().toLowerCase();
     const apiKey = (body?.apiKey ?? "").trim();
 
-    if (!provider) throw new Error("provider is required");
-    if (!context.config.models[provider]) throw new Error(`Unsupported provider: ${provider}`);
-    if (!apiKey) throw new Error("apiKey is required");
+    if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
+    if (!context.config.models[provider]) throw new AppHttpError(400, "user_preference.provider_unsupported", `Unsupported provider: ${provider}`);
+    if (!apiKey) throw new AppHttpError(400, "user_preference.api_key_required", "apiKey is required");
 
     const now = new Date().toISOString();
     const existing = await context.stores.providerCredential.getCredential({ userId, provider });
@@ -81,7 +124,7 @@ async function deleteApiKey(
     body: UserPreferenceApi.DeleteApiKeyRequest
 ): Promise<UserPreferenceApi.DeleteApiKeyResponse> {
     const provider = (body?.provider ?? "").trim().toLowerCase();
-    if (!provider) throw new Error("provider is required");
+    if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
 
     await context.stores.providerCredential.deleteCredential({ userId, provider });
     return { provider, apiKeySet: false };
@@ -93,16 +136,15 @@ async function testApiKey(
     body: UserPreferenceApi.TestApiKeyRequest
 ): Promise<UserPreferenceApi.TestApiKeyResponse> {
     const provider = (body?.provider ?? "").trim().toLowerCase();
-    if (!provider) throw new Error("provider is required");
+    if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
 
-    const modelEntry = context.config.models[provider];
-    if (!modelEntry) throw new Error(`Unsupported provider: ${provider}`);
+    if (!context.config.models[provider]) throw new AppHttpError(400, "user_preference.provider_unsupported", `Unsupported provider: ${provider}`);
 
     const credential = await context.stores.providerCredential.getCredential({ userId, provider });
-    if (!credential) {
-        return { provider, ok: false, message: "API key not set" };
+    const resolvedApiKey = getEffectiveApiKey(context, provider, credential?.encryptedApiKey);
+    if (!resolvedApiKey.encryptedApiKey) {
+        return { provider, ok: false, source: "missing", message: "API key not set" };
     }
-
     try {
         const client = new DefaultModelClient({
             providerConfigs: context.config.models,
@@ -110,11 +152,16 @@ async function testApiKey(
             maxRetries: context.config.agent.maxRetries,
             logger: context.logger,
         });
-        const models = await client.listModels(provider, credential.encryptedApiKey);
-        return { provider, ok: true, message: `${models.length} model(s) available` };
+        const models = await client.listModels(provider, resolvedApiKey.encryptedApiKey);
+        return {
+            provider,
+            ok: true,
+            source: resolvedApiKey.source,
+            message: `${models.length} model(s) available`,
+        };
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        return { provider, ok: false, message };
+        return { provider, ok: false, source: resolvedApiKey.source, message };
     }
 }
 
@@ -128,10 +175,10 @@ async function upsertModelAssignment(
     const model = (body?.model ?? "").trim();
 
     if (!modelCallPurpose || !(MODEL_CALL_PURPOSES as readonly string[]).includes(modelCallPurpose)) {
-        throw new Error(`Invalid model call purpose: ${modelCallPurpose}`);
+        throw new AppHttpError(400, "user_preference.model_call_purpose_invalid", `Invalid model call purpose: ${modelCallPurpose}`);
     }
-    if (!provider) throw new Error("provider is required");
-    if (!model) throw new Error("model is required");
+    if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
+    if (!model) throw new AppHttpError(400, "user_preference.model_required", "model is required");
 
     const now = new Date().toISOString();
     await context.stores.userPreferences.setModelAssignment({
@@ -144,7 +191,15 @@ async function upsertModelAssignment(
     const prefs = await context.stores.userPreferences.getUserPreferences(userId);
     const modelAssignments: UserPreferenceApi.UserModelAssignmentMap = {};
     for (const purpose of MODEL_CALL_PURPOSES) {
-        modelAssignments[purpose] = prefs?.modelAssignments?.[purpose] ?? null;
+        const userAssignment = prefs?.modelAssignments?.[purpose] ?? null;
+        const defaultAssignment = context.config.defaultModelAssignments?.[purpose] ?? null;
+        const effectiveAssignment = userAssignment ?? defaultAssignment ?? null;
+        modelAssignments[purpose] = {
+            userAssignment,
+            defaultAssignment,
+            effectiveAssignment,
+            effectiveSource: userAssignment ? "user" : (defaultAssignment ? "default" : "missing"),
+        };
     }
     return { modelAssignments };
 }
@@ -155,8 +210,8 @@ async function listModels(
     body: UserPreferenceApi.ListModelsRequest
 ): Promise<UserPreferenceApi.ListModelsResponse> {
     const provider = (body?.provider ?? "").trim().toLowerCase();
-    if (!provider) throw new Error("provider is required");
-    if (!context.config.models[provider]) throw new Error(`Unsupported provider: ${provider}`);
+    if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
+    if (!context.config.models[provider]) throw new AppHttpError(400, "user_preference.provider_unsupported", `Unsupported provider: ${provider}`);
 
     const models = await listModelsForProvider(context, provider, userId);
     return { provider, models };
@@ -168,7 +223,7 @@ function handleError(message: string, context: HttpApiContext, error: unknown): 
 } {
     const response = toErrorResponse(error);
     context.logger.error(message, { message: response.message });
-    return { status: 400, body: response };
+    return { status: getAppErrorStatusCode(error, 400), body: response };
 }
 
 export function registerUserPreferenceRoutes(context: HttpApiContext): void {

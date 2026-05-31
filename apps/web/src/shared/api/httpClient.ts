@@ -4,6 +4,8 @@ import type {
     ApiResponseOf,
     ErrorResponse
 } from "@ss-ai/contracts";
+import { ApiRequestError } from "./apiRequestError";
+import { parseErrorResponse } from "./parseErrorResponse";
 
 async function parseJson<T>(response: Response): Promise<T> {
     if (response.status === 204) {
@@ -11,10 +13,17 @@ async function parseJson<T>(response: Response): Promise<T> {
     }
 
     const text = await response.text();
-    const data = (text ? JSON.parse(text) : undefined) as T | ErrorResponse | undefined;
     if (!response.ok) {
-        throw new Error((data as ErrorResponse)?.message ?? `Request failed: ${response.status}`);
+        const payload = parseErrorResponse(text);
+        throw new ApiRequestError({
+            status: response.status,
+            message: payload?.message ?? `Request failed: ${response.status}`,
+            code: payload?.code,
+            params: payload?.params,
+        });
     }
+
+    const data = (text ? JSON.parse(text) : undefined) as T | ErrorResponse | undefined;
 
     return (data ?? undefined) as T;
 }

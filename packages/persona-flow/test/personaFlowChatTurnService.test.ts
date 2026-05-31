@@ -141,6 +141,7 @@ describe("persona-flow chat turn service", () => {
         });
 
         assert.equal(result.output, "hello back");
+        assert.equal(result.apiKeySource, "user");
         assert.ok(result.assistantMessageId);
 
         const messages = fixture.inspect.messages(base.conversationId);
@@ -204,6 +205,7 @@ describe("persona-flow chat turn service", () => {
         });
 
         assert.equal(result.model, "m1");
+        assert.equal(result.apiKeySource, "user");
         assert.equal(result.output, "Hello World");
         assert.equal(seenChunks.join(""), "Hello World");
         assert.equal(seenPrompts.length, 1);

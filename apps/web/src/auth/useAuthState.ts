@@ -1,6 +1,7 @@
 import { computed, ref } from "vue";
 import type { AuthMode, AuthUserInfo } from "@ss-ai/contracts";
 import { apiAuthLogin, apiAuthLogout, apiAuthMe, apiAuthRegister } from "./authApi";
+import { localizeApiError } from "../shared/api/localizeApiError";
 
 const isAuthLoading = ref(true);
 const authMode = ref<AuthMode | null>(null);
@@ -22,7 +23,7 @@ export function useAuthState() {
             isAuthenticated.value = me.authenticated;
             currentUser.value = me.user;
         } catch (error) {
-            authLoadError.value = error instanceof Error ? error.message : String(error);
+            authLoadError.value = localizeApiError(error);
             isAuthenticated.value = false;
             currentUser.value = null;
         } finally {

@@ -55,7 +55,14 @@ function createBaseConfig() {
         models: {
             "mistral.ai": {
                 apiUrl: "https://api.mistral.ai",
+                apiKey: "shared-key",
                 availableModels: ["mistral-large-latest"],
+            },
+        },
+        defaultModelAssignments: {
+            "chat.main": {
+                provider: "mistral.ai",
+                model: "mistral-large-latest",
             },
         },
     };
@@ -122,6 +129,8 @@ describe("loadRuntimeConfig", () => {
         assert.equal(config.runtimeFiles.tempDir, path.join(runtimeHome, ".runtime/temp-dev"));
         assert.equal(config.runtimeFiles.userDataDir, path.join(runtimeHome, ".runtime/user-data-dev"));
         assert.equal(config.promptLog.filePath, path.join(runtimeHome, ".runtime/logs/dev.prompt.log"));
+        assert.equal(config.models["mistral.ai"].apiKey, "shared-key");
+        assert.equal(config.defaultModelAssignments["chat.main"]?.model, "mistral-large-latest");
     });
 
     it("merges default, env, and local config in order while resolving relative runtime home from cwd", async () => {

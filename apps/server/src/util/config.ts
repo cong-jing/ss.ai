@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import type { LogLevel } from "@ss-ai/persona-flow-logger";
+import type { ModelAssignmentMap } from "@ss-ai/contracts";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(moduleDir, "..", "..");
@@ -11,6 +12,7 @@ const serverRoot = path.resolve(moduleDir, "..", "..");
 export interface RuntimeModelEntry {
     provider: string;
     apiUrl: string;
+    apiKey: string;
     defaultModel: string;
     availableModels: string[];
 }
@@ -33,6 +35,7 @@ export interface RuntimeConfig {
         userDataDir: string;
     };
     models: Record<string, RuntimeModelEntry>;
+    defaultModelAssignments: ModelAssignmentMap;
     agent: {
         timeoutMs: number;
         maxRetries: number;
@@ -68,6 +71,7 @@ interface RuntimeConfigContext {
 interface RawModelConfig {
     provider?: string;
     apiUrl: string;
+    apiKey?: string;
     model?: string;
     availableModels?: string[];
 }
@@ -86,6 +90,7 @@ interface RawConfig {
         includeStackTrace?: boolean;
     };
     models?: Record<string, RawModelConfig>;
+    defaultModelAssignments?: ModelAssignmentMap;
     runtimeFiles?: {
         tempDir?: string;
         userDataDir?: string;
@@ -154,6 +159,7 @@ function buildRuntimeModels(modelsRaw: RawConfig["models"]): Record<string, Runt
         runtimeModels[modelName] = {
             provider,
             apiUrl,
+            apiKey: normalizeOptionalString(modelValue.apiKey) ?? "",
             defaultModel: normalizeOptionalString(modelValue.model) ?? "",
             availableModels: resolveAvailableModels(modelValue)
         };
@@ -370,6 +376,7 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
             userDataDir
         },
         models,
+        defaultModelAssignments: fileConfig.defaultModelAssignments ?? {},
         agent: {
             timeoutMs: fileConfig.agent?.timeoutMs ?? 30000,
             maxRetries: fileConfig.agent?.maxRetries ?? 2
