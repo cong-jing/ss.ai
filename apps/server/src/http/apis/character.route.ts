@@ -169,6 +169,9 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                     ? body.greetingMessage.trim() || null
                     : null;
             }
+            if (Object.prototype.hasOwnProperty.call(body, "interactionMode")) {
+                throw new AppHttpError(400, "character.interaction_mode_immutable", "interactionMode can only be set at character creation");
+            }
             if (isPromptLanguage(body?.language)) patch.language = body.language;
             if (Object.prototype.hasOwnProperty.call(body, "modelConfig")
                 && body.modelConfig !== null && typeof body.modelConfig === "object") {

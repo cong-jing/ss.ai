@@ -15,6 +15,7 @@ export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];
 export const CHARACTER_ERROR_CODES = [
     "character.name_required",
     "character.not_found",
+    "character.interaction_mode_immutable",
 ] as const;
 
 export type CharacterErrorCode = (typeof CHARACTER_ERROR_CODES)[number];

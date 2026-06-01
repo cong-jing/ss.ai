@@ -73,6 +73,7 @@ function syncDraftFromSelection(): void {
 
 async function loadTemplates(): Promise<void> {
     isLoading.value = true;
+    templates.value = [];
     try {
         templates.value = await apiListCharacterTemplates(locale.value);
         syncDraftFromSelection();

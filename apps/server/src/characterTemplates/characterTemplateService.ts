@@ -31,9 +31,15 @@ function readTemplateFiles(): TemplateFile[] {
         .sort();
     const templates: TemplateFile[] = [];
     for (const filePath of files) {
-        const raw = fs.readFileSync(filePath, "utf8");
-        const parsed = JSON.parse(raw) as TemplateFile;
-        templates.push(parsed);
+        try {
+            const raw = fs.readFileSync(filePath, "utf8");
+            const parsed = JSON.parse(raw) as TemplateFile;
+            templates.push(parsed);
+        } catch (error) {
+            console.warn(`[character-templates] Skipping invalid template file: ${filePath}`, {
+                message: error instanceof Error ? error.message : String(error),
+            });
+        }
     }
     cachedTemplates = templates;
     return cachedTemplates;

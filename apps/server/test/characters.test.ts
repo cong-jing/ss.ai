@@ -77,12 +77,7 @@ describe("Character CRUD API", () => {
     it("PATCH /v1/characters/:id updates description, personaPrompt and language", async () => {
         const res = await app.agent
             .patch(`/v1/characters/${char1.id}`)
-            .send({
-                description: "Updated description",
-                personaPrompt: "Be curious.",
-                language: "en-US",
-                interactionMode: InteractionModeValue.groupChat,
-            })
+            .send({ description: "Updated description", personaPrompt: "Be curious.", language: "en-US" })
             .expect(200);
         const data = res.body as Character;
         assert.equal(data.description, "Updated description");
@@ -90,6 +85,14 @@ describe("Character CRUD API", () => {
         assert.equal(data.language, "en-US");
         assert.equal(data.interactionMode, InteractionModeValue.singleCharacterChat);
         char1 = data;
+    });
+
+    it("PATCH /v1/characters/:id rejects interactionMode updates", async () => {
+        const res = await app.agent
+            .patch(`/v1/characters/${char1.id}`)
+            .send({ interactionMode: InteractionModeValue.groupChat })
+            .expect(400);
+        assert.equal(res.body.code, "character.interaction_mode_immutable");
     });
 
     it("GET /v1/character-interaction-modes returns selectable interaction modes", async () => {

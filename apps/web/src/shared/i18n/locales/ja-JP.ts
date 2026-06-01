@@ -21,6 +21,7 @@ export const jaJP: MessageSchema = {
     "serverError.auth.passwordTooShort": "パスワードは最低 {minLength} 文字必要です。",
     "serverError.character.nameRequired": "キャラクター名は必須です。",
     "serverError.character.notFound": "キャラクターが見つかりません。",
+    "serverError.character.interactionModeImmutable": "Interaction Mode はキャラクター作成時のみ設定できます。",
     "serverError.conversation.notFound": "会話が見つかりません。",
     "serverError.conversationActor.displayNameRequired": "Actor の表示名は必須です。",
     "serverError.conversationActor.notFound": "Actor が見つかりません。",
