@@ -17,7 +17,6 @@ import {
     type Character as ContractCharacter,
     type ConversationInfo,
     type InteractionMode as ContractInteractionMode,
-    type PromptLanguage,
 } from "@ss-ai/contracts";
 import type { Character as PFCharacter, Conversation } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
