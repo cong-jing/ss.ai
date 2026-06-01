@@ -1,17 +1,37 @@
 # ss.ai
 
-`ss.ai` is a TypeScript monorepo for roleplay/persona chat. The center of the project is `packages/persona-flow`: it assembles prompt context, renders prompt templates, chooses a model for a specific model-call purpose, calls the LLM through an injected client, then persists the resulting chat turn through injected stores.
+English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-This README is meant as a project map for future maintenance sessions. If you are opening the repo cold, read this first, then inspect the files listed in "Key Files".
+`ss.ai` is an experimental TypeScript project for LLM-driven character chat and TRPG-style interaction. Its center is `packages/persona-flow`: it builds prompt context, renders prompt templates, selects a model for each model-call purpose, calls the LLM through an injected client, and persists the resulting chat turn through injected stores.
+
+This README is a project map for future maintenance sessions. If you are opening the repo cold, start here, then inspect the files listed in "Key Files".
+
+## Project Status
+
+This repository is a personal portfolio and research project.
+
+Its main purpose is to demonstrate experience in the following areas:
+
+- application design with TypeScript and Node.js
+- LLM API integration
+- SSE-based streaming chat
+- prompt template composition and management
+- structured output and tool-call-style event design
+- SQLite-backed persistence for conversations and character data
+- character chat and TRPG-style interaction design
+- LLM provider abstraction layer
+
+At this stage, it is not intended to be used as a general-purpose OSS framework.
+API stability, backward compatibility, production-grade quality, and ongoing external support are not guaranteed.
 
 ## Workspace
 
-The repo uses a pnpm workspace, declared in `pnpm-workspace.yaml`:
+The repo uses a pnpm workspace declared in `pnpm-workspace.yaml`:
 
 - `packages/*`
 - `apps/*`
 
-Useful root scripts:
+Common commands:
 
 ```bash
 npm run setup
@@ -27,11 +47,11 @@ pnpm run test
 pnpm run prompt:debug -- --help
 ```
 
-Current local default HTTP port is `8999` from `apps/server/config/config.default.json`.
+The local default HTTP port is `8999` from `apps/server/config/config.default.json`.
 
 ## Install And Deploy
 
-First-time setup (installs and activates the pinned pnpm version):
+First-time setup installs and activates the pinned pnpm version:
 
 ```bash
 npm run setup
@@ -51,12 +71,12 @@ pnpm run deploy:web:staging
 pnpm run deploy:web:prod
 ```
 
-Deployment output root is `.deploy-staging` or `.deploy-prod`.
+Deployment output roots are `.deploy-staging` and `.deploy-prod`.
 
-Fixed subdirectories under each deploy root:
+Each deploy root contains:
 
 - `server`: Node.js server package, including `config/*` and `schemas/config.schema.json`
-- `web`: static web assets built from `apps/web/dist`
+- `web`: static assets built from `apps/web/dist`
 
 The deployed server reads config assets from the server package root:
 
@@ -69,28 +89,21 @@ The deployed server reads config assets from the server package root:
 - `.deploy-prod/server/config/config.local.json.example`
 - `.deploy-prod/server/schemas/config.schema.json`
 
-Lightsail deployment can also create `server/config/config.local.json` at release activation time. The current workflow uses CI secret `LIGHTSAIL_DEFAULT_API_KEY` and `scripts/activate-lightsail-release.mjs` to write a machine-local override file on the target host.
+Lightsail deployment can also create `server/config/config.local.json` during release activation. The current workflow uses CI secret `LIGHTSAIL_DEFAULT_API_KEY` and `scripts/activate-lightsail-release.mjs` to write a machine-local override file on the target host.
 
-Web deploy output:
+Web deploy output lives under:
 
 - `.deploy-staging/web/*`
 - `.deploy-prod/web/*`
 
-Run the deployed server:
+Run the deployed server with either of these commands:
 
 ```bash
 pnpm run start:server:staging
 pnpm run start:server:prod
 ```
 
-Manual startup still works:
-
-```bash
-pnpm run start:server:staging
-pnpm run start:server:prod
-```
-
-Local development commands are intended to be started from the repo root. `pnpm run dev:server`, `pnpm run dev:web`, and `pnpm run dev:qq-bot` therefore use the repo root as `process.cwd()`, so runtime files land under `./.runtime/`. In the deployed layout, `pnpm run start:server:staging`, `pnpm run start:server:prod`, or `pnpm --dir ./.deploy-prod/server start` run with `.deploy-*/server` as the working directory, so runtime files land under that server package.
+Local development commands are meant to run from the repo root. `pnpm run dev:server`, `pnpm run dev:web`, and `pnpm run dev:qq-bot` therefore use the repo root as `process.cwd()`, so runtime files land under `./.runtime/`. In the deployed layout, `pnpm run start:server:staging`, `pnpm run start:server:prod`, or `pnpm --dir ./.deploy-prod/server start` run with `.deploy-*/server` as the working directory, so runtime files land under that server package.
 
 Examples:
 
@@ -99,7 +112,7 @@ pnpm --filter @ss-ai/server start
 pnpm --dir ./.deploy-prod/server start
 ```
 
-If you need to override the runtime file root manually, set `RUNTIME_HOME`. The default commands should cover normal development and deployment flows.
+If you need to override the runtime file root, set `RUNTIME_HOME`.
 
 If dependency declarations change in any workspace package (`dependencies`, `devDependencies`, `peerDependencies`, or workspace links), run `pnpm install` again so `pnpm-lock.yaml` and the deploy dependency graph stay in sync.
 
@@ -122,29 +135,29 @@ Responsibilities:
 
 Main chat flow:
 
-1. `PersonaFlowChatTurnService.chatTurn()` receives user/character/conversation/message input.
+1. `PersonaFlowChatTurnService.chatTurn()` receives user, character, conversation, and message input.
 2. `prepareChatTurnContext()` validates character and conversation, resolves the sender actor, optionally appends the user message, and builds `PromptContext`.
 3. `resolveModelCall()` selects the registered handler for the requested purpose and interaction mode. Today that is `chat.main:single_character_chat`.
-4. The handler assembles LLM messages, and `ModelRuntime.chat()` resolves provider/model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves API key from `providerCredential`, then calls `ModelClient`.
+4. The handler assembles LLM messages, and `ModelRuntime.chat()` resolves provider and model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves the API key from `providerCredential`, then calls `ModelClient`.
 5. Structured replies are normalized. Empty structured output avoids appending an assistant message.
 6. Non-skipped replies are appended to the chat store as the conversation self actor.
 
-Streaming is not complete for `single_character_chat` yet. The `/v1/chat/stream` endpoint and frontend SSE path exist, but the current `single_character_chat` implementation still falls back to a structured model call and emits the full reply as one SSE chunk.
+Streaming is not complete for `single_character_chat` yet. The `/v1/chat/stream` endpoint and frontend SSE path exist, but the current implementation still falls back to a structured model call and emits the full reply as one SSE chunk.
 
-Interaction modes are shared from `@ss-ai/contracts`. Only `single_character_chat` is currently registered for runtime use. Other modes exist in contracts/UI as placeholders but are not wired into prompt/model-call dispatch yet.
+Interaction modes are shared from `@ss-ai/contracts`. Only `single_character_chat` is currently registered for runtime use. Other modes exist in contracts and UI as placeholders but are not wired into prompt or model-call dispatch yet.
 
 ### `packages/contracts`
 
-Shared frontend/backend contracts.
+Shared frontend and backend contracts.
 
 Responsibilities:
 
 - HTTP API definitions through `ApiDefine`.
-- API request/response types under `src/apis/*.api.ts`.
+- API request and response types under `src/apis/*.api.ts`.
 - `INTERACTION_MODES`, `DEFAULT_INTERACTION_MODE`, and `InteractionMode`.
 - `MODEL_CALL_PURPOSES`, `ModelCallPurpose`, and model assignment types.
 
-Important note: model-call configuration uses `MODEL_CALL_PURPOSES` / `ModelCallPurpose` plus `ModelAssignment` / `ModelAssignmentMap`.
+Model-call configuration uses `MODEL_CALL_PURPOSES` / `ModelCallPurpose` plus `ModelAssignment` / `ModelAssignmentMap`.
 
 ### `packages/persona-flow-sqlite`
 
@@ -181,7 +194,7 @@ Responsibilities:
 - Mistral is the current concrete provider via `MistralModelClient`.
 - Supports non-structured generation, non-structured streaming, structured generation, and model listing.
 
-The provider list and API URLs come from runtime config. API keys are stored per user/provider in the credential store. SQLite currently runs them through no-op encrypt/decrypt helpers, so the stored value is still plaintext until real encryption is added.
+The provider list and API URLs come from runtime config. API keys are stored per user and provider in the credential store. SQLite currently runs them through no-op encrypt/decrypt helpers, so the stored value remains plaintext until real encryption is added.
 
 ### `packages/persona-flow-logger`
 
@@ -202,7 +215,7 @@ Express HTTP server.
 Responsibilities:
 
 - Loads runtime config from `apps/server/config/config.default.json`, optional `apps/server/config/config.{APP_ENV}.json`, and optional `apps/server/config/config.local.json`.
-- Opens SQLite DB under `runtimeFiles.userDataDir/app.db`.
+- Opens the SQLite DB under `runtimeFiles.userDataDir/app.db`.
 - Creates `AppStores` through `createSqliteStores`.
 - Registers HTTP routes for chat, user preferences, profiles, characters, conversations, and conversation actors.
 - Creates `PersonaFlowChatTurnService` per chat request with stores, logger, prompt logger, and `DefaultModelClient`.
@@ -212,28 +225,28 @@ Important behavior:
 - The app is effectively single-user right now: API code uses `DEFAULT_USER_ID = "default"` unless a request supplies `userId` in selected chat paths.
 - Auth supports two modes through `config.auth.mode`: `default-user` and `local-password`.
 - `default-user` skips real sign-in and treats every request as the configured default user.
-- `local-password` enables a small built-in username/password + session-cookie auth flow.
+- `local-password` enables a small built-in username/password plus session-cookie auth flow.
 - `/v1/chat` defaults to structured output.
-- `/v1/chat/stream` keeps the SSE response shape and rejects structured mode at the HTTP layer, but the current `single_character_chat` implementation still emits a full reply once rather than token-by-token streaming.
+- `/v1/chat/stream` keeps the SSE response shape and rejects structured mode at the HTTP layer, but the current `single_character_chat` implementation still emits a full reply once rather than token by token.
 - `/v1/chat/dry-run` assembles prompt messages without LLM calls or persistence.
 - Prompt logs are controlled by `promptLog` config.
 
 ### `apps/web`
 
-Vue 3 + Vite frontend.
+Vue 3 plus Vite frontend.
 
 Responsibilities:
 
-- Main three-panel UI: left workspace sidebar, center chat panel, right context inspector/settings.
+- Main three-panel UI: left workspace sidebar, center chat panel, right context inspector and settings.
 - Uses `@ss-ai/contracts` for API types and constants.
-- Lets user configure provider API keys and model assignments.
+- Lets the user configure provider API keys and model assignments.
 - Sends chat requests, stream requests, dry-run requests, and message deletion requests.
 
 Important UI state:
 
-- `contextVersion` in `src/shared/state/appState.ts` triggers chat history reload when character/conversation context changes.
-- Active character/conversation/actor state lives in panel view-model modules.
-- Chat can run structured non-streaming mode. The non-structured streaming UI path exists, but the current `single_character_chat` backend path still returns one full reply chunk.
+- `contextVersion` in `src/shared/state/appState.ts` triggers chat history reload when character or conversation context changes.
+- Active character, conversation, and actor state lives in panel view-model modules.
+- Chat can run in structured non-streaming mode. The non-structured streaming UI path exists, but the current `single_character_chat` backend path still returns one full reply chunk.
 
 Current settings behavior:
 
@@ -263,9 +276,9 @@ QQ bot integration.
 
 Responsibilities:
 
-- Receives QQ private/group messages.
+- Receives QQ private and group messages.
 - Resolves or creates a server conversation.
-- Calls server chat API and logs/skips replies based on server output.
+- Calls the server chat API and logs or skips replies based on server output.
 
 It depends on the HTTP server being available and configured.
 
@@ -281,9 +294,9 @@ Load order:
 
 The merged config is validated by `apps/server/schemas/config.schema.json`.
 
-Config files are always read from `apps/server/config` in source mode or from `server/config` in the deployed package. Relative runtime paths such as `logger.logFilePath`, `runtimeFiles.tempDir`, `runtimeFiles.userDataDir`, and `promptLog.filePath` are resolved from the current working directory by default. If you ever need to override that, set `RUNTIME_HOME`.
+Config files are always read from `apps/server/config` in source mode or from `server/config` in the deployed package. Relative runtime paths such as `logger.logFilePath`, `runtimeFiles.tempDir`, `runtimeFiles.userDataDir`, and `promptLog.filePath` are resolved from the current working directory by default. Set `RUNTIME_HOME` if you need to override that.
 
-`apps/server/config/config.local.json` is intended for machine-local overrides and is not committed. `apps/server/config/config.local.json.example` is the template to copy when you need local development overrides.
+`apps/server/config/config.local.json` is meant for machine-local overrides and is not committed. `apps/server/config/config.local.json.example` is the template to copy when you need local development overrides.
 
 In the current Lightsail deploy flow, `config.local.json` does not need to exist in the release archive ahead of time. It can be created on the server during release activation and used as the highest-precedence runtime override.
 
@@ -294,19 +307,19 @@ Committed environment overlays currently live in `apps/server/config/config.stag
 Important sections:
 
 - `http`: host and port.
-- `logger`: file path, level, source/stack options.
+- `logger`: file path, level, source and stack options.
 - `runtimeFiles`: temp and user data directories.
 - `agent`: timeout and retry settings for model clients.
-- `promptLog`: prompt logging enablement/path.
+- `promptLog`: prompt logging enablement and path.
 - `models`: provider config, API URL, optional default API key, default model, and optional static `availableModels`.
-- `defaultModelAssignments`: per-`ModelCallPurpose` fallback provider/model mapping.
+- `defaultModelAssignments`: per-`ModelCallPurpose` fallback provider and model mapping.
 - `auth`: auth mode, default user id, registration flag, session lifetime, and cookie settings.
 
-The default config currently defines provider key `mistral.ai` with Mistral API URL and a static model list.
+The default config currently defines provider key `mistral.ai` with the Mistral API URL and a static model list.
 
 ## Data And Actor Model
 
-Conversations are not just user/assistant transcripts. They have explicit actors:
+Conversations are not simple user and assistant transcripts. They have explicit actors:
 
 - `self`: the AI character replying in the conversation.
 - `other`: logged-in user or local actors.
@@ -376,19 +389,19 @@ Start here when reviewing or changing behavior:
 
 ## Current Maintenance Notes
 
-- The `AI_FUNCTIONS` / `AiFunction` to `MODEL_CALL_PURPOSES` / `ModelCallPurpose` rename is complete in the contracts/web/server/store layers.
+- The `AI_FUNCTIONS` / `AiFunction` to `MODEL_CALL_PURPOSES` / `ModelCallPurpose` rename is complete in the contracts, web, server, and store layers.
 - The SQLite model assignment column is `model_assignments_json`; old model-assignment storage compatibility has been removed.
 - API key encryption hooks exist in the SQLite credential store, but currently return the input unchanged.
-- Low-priority TODO: replace the current no-op API key encryption/decryption with a real at-rest protection scheme once deployment and key-management expectations are settled.
-- Tool calls are detected/logged as TODO and not executed.
+- Low-priority TODO: replace the current no-op API key encryption and decryption with a real at-rest protection scheme once deployment and key-management expectations are settled.
+- Tool calls are detected and logged as TODO, but not executed.
 - `single_character_chat` streaming is not complete yet. The SSE route exists, but it currently falls back to one full reply chunk.
 - Interaction modes other than `single_character_chat` are declared but not registered in runtime model-call dispatch yet.
 - Speaker-tag helpers and richer multi-actor prompt shaping are reserved for later interaction modes; the current `single_character_chat` path intentionally stays simpler.
-- TODO: i18n access currently relies on shared module-level helpers in web components; migrate to a `useI18n`-style hook/provider when SSR, per-app instances, or stricter test isolation become requirements.
+- TODO: i18n access currently relies on shared module-level helpers in web components; migrate to a `useI18n`-style hook or provider when SSR, per-app instances, or stricter test isolation become requirements.
 
 ## Quick Smoke Paths
 
-After the current rename refactor is complete, these are the useful checks:
+Useful checks:
 
 ```bash
 pnpm run build
@@ -403,7 +416,7 @@ HTTP health check:
 curl http://127.0.0.1:8999/health
 ```
 
-Dry-run prompt assembly is useful before debugging model behavior:
+Dry-run prompt assembly before debugging model behavior:
 
 ```bash
 curl -X POST http://127.0.0.1:8999/v1/chat/dry-run \
