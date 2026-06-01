@@ -32,6 +32,7 @@ const toast = useToast();
 const templates = ref<CharacterTemplate[]>([]);
 const selectedTemplateId = ref<string>("custom");
 const isLoading = ref(false);
+const selectedTemplate = computed(() => templates.value.find((item) => item.id === selectedTemplateId.value));
 const customDraft = ref<CreateDraft>({
     name: "",
     displayName: "",
