@@ -19,7 +19,7 @@ export const enUS = {
     "serverError.auth.passwordTooShort": "Password must be at least {minLength} characters.",
     "serverError.character.nameRequired": "Character name is required.",
     "serverError.character.notFound": "Character was not found.",
-    "serverError.character.interactionModeImmutable": "Interaction mode can only be changed when creating a character.",
+    "serverError.character.interactionModeImmutable": "Interaction mode can only be set when creating a character.",
     "serverError.conversation.notFound": "Conversation was not found.",
     "serverError.conversationActor.displayNameRequired": "Actor display name is required.",
     "serverError.conversationActor.notFound": "Actor was not found.",
