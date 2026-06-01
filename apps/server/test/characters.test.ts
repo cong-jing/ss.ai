@@ -95,6 +95,17 @@ describe("Character CRUD API", () => {
         assert.equal(res.body.code, "character.interaction_mode_immutable");
     });
 
+    it("PATCH /v1/characters/:id tolerates an empty request body", async () => {
+        const res = await app.agent
+            .patch(`/v1/characters/${char1.id}`)
+            .set("Content-Type", "application/json")
+            .send()
+            .expect(200);
+        const data = res.body as Character;
+        assert.equal(data.id, char1.id);
+        assert.equal(data.interactionMode, char1.interactionMode);
+    });
+
     it("GET /v1/character-interaction-modes returns selectable interaction modes", async () => {
         const res = await app.agent.get("/v1/character-interaction-modes").expect(200);
         const data = res.body as InteractionModesResponse;

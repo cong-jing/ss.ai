@@ -154,25 +154,28 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
             if (!existing || existing.status === "archived") {
                 throw new AppHttpError(404, "character.not_found", `Character not found: ${req.params.id}`);
             }
+            const hasBodyProperty = (key: keyof UpdateCharacterRequest): boolean => (
+                body != null && Object.prototype.hasOwnProperty.call(body, key)
+            );
             const patch: Partial<Omit<PFCharacter, "id" | "userId" | "createdAt">> = {
                 updatedAt: new Date().toISOString(),
             };
             if (typeof body?.name === "string") patch.name = body.name.trim();
-            if (Object.prototype.hasOwnProperty.call(body, "displayName")) {
+            if (hasBodyProperty("displayName")) {
                 patch.displayName = typeof body.displayName === "string" ? body.displayName.trim() || null : null;
             }
             if (typeof body?.description === "string") patch.description = body.description.trim() || null;
             if (typeof body?.personaPrompt === "string") patch.personaPrompt = body.personaPrompt.trim();
-            if (Object.prototype.hasOwnProperty.call(body, "greetingMessage")) {
+            if (hasBodyProperty("greetingMessage")) {
                 patch.greetingMessage = typeof body.greetingMessage === "string"
                     ? body.greetingMessage.trim() || null
                     : null;
             }
-            if (Object.prototype.hasOwnProperty.call(body, "interactionMode")) {
+            if (hasBodyProperty("interactionMode")) {
                 throw new AppHttpError(400, "character.interaction_mode_immutable", "interactionMode can only be set at character creation");
             }
             if (isPromptLanguage(body?.language)) patch.language = body.language;
-            if (Object.prototype.hasOwnProperty.call(body, "modelConfig")
+            if (hasBodyProperty("modelConfig")
                 && body.modelConfig !== null && typeof body.modelConfig === "object") {
                 patch.modelConfig = body.modelConfig as Record<string, unknown>;
             }
