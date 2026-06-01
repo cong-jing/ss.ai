@@ -112,20 +112,22 @@ pnpm --dir ./.deploy-prod/server start
 - 定义角色、对话、消息、用户设置等 store interface。
 - 定义 `AppStores`，作为应用层注入的存储边界。
 - 用 `PromptContextBuilder` 从 stores 构建 prompt 上下文。
-- 用 `promptRenderer` 渲染最终发给模型的 messages。
+- 通过 `modelCallRegistry` 解析当前可用的 model-call handler。
+- 实现当前 `chat.main / single_character_chat` 的 prompt 组装与输出归一化。
 - 用 `PersonaFlowChatTurnService` 编排一轮聊天。
-- 用 `ModelCallExecutor` 解析模型运行时配置并调用注入的 `ModelClient`。
+- 用 `ModelRuntime` 解析模型运行时配置并调用注入的 `ModelClient`。
 - 定义 `ModelClient` 接口，具体供应商由其他包实现。
 
 聊天主流程：
 
 1. `PersonaFlowChatTurnService.chatTurn()` 接收用户、角色、对话和消息输入。
-2. `prepareChatTurnContext()` 校验角色和对话，解析 sender actor，按需写入用户消息，构建 `PromptContext`，渲染 LLM messages。
-3. `ModelCallExecutor.chat()` 根据 `modelCallPurpose` 读取用户模型配置，再读取 provider credential，最后调用 `ModelClient`。
-4. structured 输出如果是 `skip` 或空回复，就不写入 assistant 消息。
-5. 正常回复会作为当前 conversation 的 `self` actor 消息写入 chat store。
+2. `prepareChatTurnContext()` 校验角色和对话，解析 sender actor，按需写入用户消息，并构建 `PromptContext`。
+3. `resolveModelCall()` 根据 `purpose + interactionMode` 选择当前注册的 handler。现在实际可用的是 `chat.main:single_character_chat`。
+4. handler 组装 LLM messages，`ModelRuntime.chat()` 根据 `modelCallPurpose` 读取用户模型配置，再读取 provider credential，最后调用 `ModelClient`。
+5. structured 输出如果是空回复，就不写入 assistant 消息。
+6. 正常回复会作为当前 conversation 的 `self` actor 消息写入 chat store。
 
-流式流程类似，但目前只支持 `llmResponseMode = "non-structured"`。
+流式聊天接口和 SSE 事件形状已经存在，但 `single_character_chat` 的真实 streaming 还未完成。当前 `/v1/chat/stream` 在实现上仍会回退到一次 structured 调用，然后把完整回复作为一个 chunk 发回。
 
 ### `packages/contracts`
 
@@ -224,7 +226,7 @@ Vue 3 + Vite 前端。
 
 - `contextVersion` 用于角色或对话切换后刷新聊天历史。
 - active character / conversation / actor 分别在各 panel view-model 中维护。
-- 当前聊天支持 structured 非流式与 non-structured 流式两种路径。
+- 当前稳定可用的是 structured 非流式路径。stream 开关与 SSE 路径已经接好，但 `single_character_chat` 后端暂时仍返回单次完整回复。
 
 ### `apps/prompt-debug-cli`
 
@@ -287,7 +289,7 @@ Conversation 不是简单的 user/assistant transcript，而是由 actor 驱动�
 - `system` -> `system`
 - 其他 -> `user`
 
-渲染时会生成 `p1[Name]` 这类 speaker tag，并写入消息内容。为了避免模型输出重复名字，assistant 历史和模型输出都会做前缀清理。
+当前主聊天路径会把 actor role 映射到 LLM role，但不会把 `p1[Name]` 这类 speaker tag 直接写入发给模型的消息内容。仓库里保留了 speaker tag helper，主要给后续其他 interaction mode 和更复杂的 prompt shaping 预留。为了避免模型输出重复名字，assistant 历史和模型输出仍会做前缀清理。
 
 ## 模型分配
 
@@ -310,8 +312,11 @@ Conversation 不是简单的 user/assistant transcript，而是由 actor 驱动�
 - 配置层类型已统一使用 `ModelAssignment` / `ModelAssignmentMap`。
 - SQLite 模型分配列已改为 `model_assignments_json`，旧模型分配存储兼容已移除。
 - API key 加密/解密 hook 已放在 SQLite credential store，目前为空实现。
+- 低优先级 TODO：当前 API key 的加密/解密仍是空实现，后续等部署方式和密钥管理预期稳定后，再补真实的静态存储保护。
 - 实现或移除尚未接入的 tool call TODO。
-- 补齐非 `single_character_chat` prompt mode 的 renderer。
+- 补齐 `single_character_chat` 的真实 streaming，而不是当前单 chunk fallback。
+- 补齐非 `single_character_chat` interaction mode 的 runtime 注册与 prompt/model-call 实现。
+- 决定 speaker tag 和多 actor prompt 信息何时接入主流程。
 
 
 ## Supplemental Notes

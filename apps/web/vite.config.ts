@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 
-const DEV_SERVER_TARGET = "http://127.0.0.2:8999";
+const DEV_SERVER_TARGET = "http://127.0.0.1:8999";
 
 export default defineConfig({
     plugins: [vue()],
