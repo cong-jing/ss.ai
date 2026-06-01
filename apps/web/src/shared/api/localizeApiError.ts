@@ -15,6 +15,7 @@ const ERROR_MESSAGE_KEYS: Record<AppErrorCode, MessageKey> = {
     "auth.password_too_short": "serverError.auth.passwordTooShort",
     "character.name_required": "serverError.character.nameRequired",
     "character.not_found": "serverError.character.notFound",
+    "character.interaction_mode_immutable": "serverError.character.interactionModeImmutable",
     "conversation.not_found": "serverError.conversation.notFound",
     "conversation_actor.display_name_required": "serverError.conversationActor.displayNameRequired",
     "conversation_actor.not_found": "serverError.conversationActor.notFound",

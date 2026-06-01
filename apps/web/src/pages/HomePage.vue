@@ -62,7 +62,7 @@ onBeforeUnmount(() => {
 
     <!-- LEFT: Workspace sidebar -->
     <aside class="conversations-area" :style="{ width: leftWidth + 'px', minWidth: leftWidth + 'px' }">
-      <LeftSidebar />
+      <LeftSidebar :auto-open-create-when-empty="true" />
     </aside>
 
     <!-- LEFT resize handle -->

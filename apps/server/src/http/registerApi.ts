@@ -18,7 +18,7 @@ export function registerApi<TRequest, TResponse>(
 ): void {
     const wrappedHandler: RequestHandler = async (request, response) => {
         try {
-            const body = (api.method === "GET" ? undefined : request.body) as TRequest;
+            const body = (api.method === "GET" ? request.query : request.body) as TRequest;
             const result = await handler.handleRequest(request, body);
             if (result === undefined || result === null) {
                 response.status(204).send();
@@ -37,7 +37,7 @@ export function registerApi<TRequest, TResponse>(
             };
 
             const errorResult = handler.handleError ? handler.handleError(
-                error, request, (api.method === "GET" ? undefined : request.body) as TRequest) : fallback;
+                error, request, (api.method === "GET" ? request.query : request.body) as TRequest) : fallback;
             response.status(errorResult.status).json(errorResult.body);
         }
     };
