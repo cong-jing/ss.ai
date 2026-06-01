@@ -154,7 +154,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
             if (!existing || existing.status === "archived") {
                 throw new AppHttpError(404, "character.not_found", `Character not found: ${req.params.id}`);
             }
-            const hasBodyProperty = (key: keyof UpdateCharacterRequest): boolean => (
+            const hasBodyProperty = (key: PropertyKey): boolean => (
                 body != null && Object.prototype.hasOwnProperty.call(body, key)
             );
             const patch: Partial<Omit<PFCharacter, "id" | "userId" | "createdAt">> = {
