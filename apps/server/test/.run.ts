@@ -16,3 +16,4 @@ import "./chat.test.js";
 import "./actors.test.js";
 import "./config.test.js";
 import "./auth.test.js";
+import "./registerApi.test.js";

@@ -114,23 +114,24 @@ Responsibilities:
 - Defines domain store interfaces in `src/stores/**`.
 - Defines `AppStores`, the aggregate dependency boundary used by apps.
 - Builds prompt context from stores via `PromptContextBuilder`.
-- Renders prompts via `promptRenderer`.
+- Resolves model-call handlers via `modelCallRegistry`.
+- Implements the current `chat.main/single_character_chat` prompt assembly and output normalization flow.
 - Owns chat-turn orchestration via `PersonaFlowChatTurnService`.
-- Resolves model runtime and calls the injected `ModelClient` via `ModelCallExecutor`.
+- Resolves model runtime and calls the injected `ModelClient` via `ModelRuntime`.
 - Defines LLM client interfaces in `src/llm/modelClient.ts`.
-- Exports structured roleplay output shape in `src/structuredOutput/commonRoleplayTurnOutput.ts`.
 
 Main chat flow:
 
 1. `PersonaFlowChatTurnService.chatTurn()` receives user/character/conversation/message input.
-2. `prepareChatTurnContext()` validates character and conversation, resolves the sender actor, optionally appends the user message, builds `PromptContext`, then renders LLM messages.
-3. `ModelCallExecutor.chat()` resolves provider/model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves API key from `providerCredential`, then calls `ModelClient`.
-4. Structured replies are normalized. `skip` or empty structured output avoids appending an assistant message.
-5. Non-skipped replies are appended to the chat store as the conversation self actor.
+2. `prepareChatTurnContext()` validates character and conversation, resolves the sender actor, optionally appends the user message, and builds `PromptContext`.
+3. `resolveModelCall()` selects the registered handler for the requested purpose and interaction mode. Today that is `chat.main:single_character_chat`.
+4. The handler assembles LLM messages, and `ModelRuntime.chat()` resolves provider/model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves API key from `providerCredential`, then calls `ModelClient`.
+5. Structured replies are normalized. Empty structured output avoids appending an assistant message.
+6. Non-skipped replies are appended to the chat store as the conversation self actor.
 
-Streaming flow is similar but currently supports only `llmResponseMode = "non-structured"`.
+Streaming is not complete for `single_character_chat` yet. The `/v1/chat/stream` endpoint and frontend SSE path exist, but the current `single_character_chat` implementation still falls back to a structured model call and emits the full reply as one SSE chunk.
 
-Interaction modes are shared from `@ss-ai/contracts`. Only `single_character_chat` is currently implemented by `promptRenderer`; other modes exist as contract/template placeholders and fall back to single-character rendering.
+Interaction modes are shared from `@ss-ai/contracts`. Only `single_character_chat` is currently registered for runtime use. Other modes exist in contracts/UI as placeholders but are not wired into prompt/model-call dispatch yet.
 
 ### `packages/contracts`
 
@@ -213,7 +214,7 @@ Important behavior:
 - `default-user` skips real sign-in and treats every request as the configured default user.
 - `local-password` enables a small built-in username/password + session-cookie auth flow.
 - `/v1/chat` defaults to structured output.
-- `/v1/chat/stream` defaults to non-structured SSE output and rejects structured mode.
+- `/v1/chat/stream` keeps the SSE response shape and rejects structured mode at the HTTP layer, but the current `single_character_chat` implementation still emits a full reply once rather than token-by-token streaming.
 - `/v1/chat/dry-run` assembles prompt messages without LLM calls or persistence.
 - Prompt logs are controlled by `promptLog` config.
 
@@ -232,7 +233,7 @@ Important UI state:
 
 - `contextVersion` in `src/shared/state/appState.ts` triggers chat history reload when character/conversation context changes.
 - Active character/conversation/actor state lives in panel view-model modules.
-- Chat can run structured non-streaming mode or non-structured streaming mode.
+- Chat can run structured non-streaming mode. The non-structured streaming UI path exists, but the current `single_character_chat` backend path still returns one full reply chunk.
 
 Current settings behavior:
 
@@ -317,7 +318,7 @@ Messages store only `senderActorId`, `conversationId`, content, and timestamp. P
 - `system` -> `system`
 - everything else -> `user`
 
-Speaker tags such as `p1[Name]` are generated for actors and prepended to rendered message content. Assistant prefixes are stripped during prompt rendering and output normalization to avoid repeated labels.
+There is a shared speaker-tag helper in `packages/persona-flow/src/prompt/speakerTag.ts`, intended for richer interaction modes. The current `single_character_chat` prompt path does not prepend speaker tags to outgoing LLM messages. Assistant-style name prefixes are still stripped during output normalization to avoid repeated labels in replies.
 
 ## Model Assignment
 
@@ -357,12 +358,14 @@ Start here when reviewing or changing behavior:
 - `packages/contracts/src/apis/*.api.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnService.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnPreparation.ts`
-- `packages/persona-flow/src/chatTurn/modelCallExecutor.ts`
-- `packages/persona-flow/src/prompt/promptRenderer.ts`
-- `packages/persona-flow/src/prompt/modes/singleCharacterChat/renderPrompt.ts`
-- `packages/persona-flow/src/prompt/modes/singleCharacterChat/buildPromptViewModel.ts`
+- `packages/persona-flow/src/modelCall/modelRuntime.ts`
+- `packages/persona-flow/src/modelCall/modelCallRegistry.ts`
+- `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.ts`
+- `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/promptViewModel.ts`
+- `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatOutput.ts`
 - `packages/persona-flow/src/stores/appStores.ts`
 - `packages/persona-flow-sqlite/src/db/schema.ts`
+- `packages/persona-flow-sqlite/src/db/CharacterDbRouter.ts`
 - `packages/persona-flow-sqlite/src/createSqliteStores.ts`
 - `packages/persona-flow-model-client/src/defaultModelClient.ts`
 - `packages/persona-flow-model-client/src/mistral/mistralModelClient.ts`
@@ -376,9 +379,11 @@ Start here when reviewing or changing behavior:
 - The `AI_FUNCTIONS` / `AiFunction` to `MODEL_CALL_PURPOSES` / `ModelCallPurpose` rename is complete in the contracts/web/server/store layers.
 - The SQLite model assignment column is `model_assignments_json`; old model-assignment storage compatibility has been removed.
 - API key encryption hooks exist in the SQLite credential store, but currently return the input unchanged.
+- Low-priority TODO: replace the current no-op API key encryption/decryption with a real at-rest protection scheme once deployment and key-management expectations are settled.
 - Tool calls are detected/logged as TODO and not executed.
-- Interaction modes other than `single_character_chat` are declared but not implemented in renderer dispatch yet.
-- The server opens SQLite even when test overrides provide stores; this may matter for test/runtime isolation.
+- `single_character_chat` streaming is not complete yet. The SSE route exists, but it currently falls back to one full reply chunk.
+- Interaction modes other than `single_character_chat` are declared but not registered in runtime model-call dispatch yet.
+- Speaker-tag helpers and richer multi-actor prompt shaping are reserved for later interaction modes; the current `single_character_chat` path intentionally stays simpler.
 - TODO: i18n access currently relies on shared module-level helpers in web components; migrate to a `useI18n`-style hook/provider when SSR, per-app instances, or stricter test isolation become requirements.
 
 ## Quick Smoke Paths
