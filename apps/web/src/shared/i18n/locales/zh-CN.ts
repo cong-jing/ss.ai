@@ -21,7 +21,7 @@ export const zhCN: MessageSchema = {
     "serverError.auth.passwordTooShort": "密码长度至少为 {minLength} 个字符。",
     "serverError.character.nameRequired": "角色名称不能为空。",
     "serverError.character.notFound": "未找到该角色。",
-    "serverError.character.interactionModeImmutable": "Interaction Mode 只能在创建角色时设置。",
+    "serverError.character.interactionModeImmutable": "交互模式只能在创建角色时设置。", 
     "serverError.conversation.notFound": "未找到该对话。",
     "serverError.conversationActor.displayNameRequired": "Actor 显示名不能为空。",
     "serverError.conversationActor.notFound": "未找到该 Actor。",
