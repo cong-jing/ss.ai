@@ -77,7 +77,12 @@ describe("Character CRUD API", () => {
     it("PATCH /v1/characters/:id updates description, personaPrompt and language", async () => {
         const res = await app.agent
             .patch(`/v1/characters/${char1.id}`)
-            .send({ description: "Updated description", personaPrompt: "Be curious.", language: "en-US" })
+            .send({
+                description: "Updated description",
+                personaPrompt: "Be curious.",
+                language: "en-US",
+                interactionMode: InteractionModeValue.groupChat,
+            })
             .expect(200);
         const data = res.body as Character;
         assert.equal(data.description, "Updated description");

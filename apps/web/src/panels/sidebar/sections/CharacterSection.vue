@@ -7,7 +7,7 @@ function interactionModeLabel(mode: InteractionMode): string {
   return t(INTERACTION_MODE_I18N_KEYS[mode]);
 }
 
-function languageLabel(language: "zh-CN" | "en-US" | "ja-JP"): string {
+function languageLabel(language: Character["language"]): string {
   return t(`settings.language.${language}` as const);
 }
 
@@ -22,7 +22,7 @@ const props = defineProps<{
     description: string;
     personaPrompt: string;
     interactionMode: InteractionMode;
-    language: "zh-CN" | "en-US" | "ja-JP";
+    language: Character["language"];
   };
   isDirty: boolean;
   isSavingCharacter: boolean;

@@ -69,6 +69,17 @@ const conversationOpen = useLocalStorage("ui.left.conversationOpen", true);
 const actorOpen = useLocalStorage("ui.left.actorOpen", true);
 const isCharacterEditing = ref(false);
 const hasHandledInitialEmptyState = ref(false);
+const hasCompletedInitialCharacterLoad = ref(false);
+
+type CharacterCreatePayload = {
+  name: typeof editDraft.value.name;
+  displayName: typeof editDraft.value.displayName;
+  description: typeof editDraft.value.description;
+  personaPrompt: typeof editDraft.value.personaPrompt;
+  greetingMessage: typeof editDraft.value.greetingMessage;
+  interactionMode: typeof editDraft.value.interactionMode;
+  language: typeof editDraft.value.language;
+};
 
 function handleCharacterToggleOpen() {
   characterOpen.value = !characterOpen.value;
@@ -82,15 +93,7 @@ async function handleCharacterCreate() {
   showCreatePopup.value = true;
 }
 
-async function handleCharacterCreateFromPopup(payload: {
-  name: string;
-  displayName: string;
-  description: string;
-  personaPrompt: string;
-  greetingMessage: string;
-  interactionMode: "single_character_chat" | "group_chat" | "dm_narrator";
-  language: "zh-CN" | "en-US" | "ja-JP";
-}) {
+async function handleCharacterCreateFromPopup(payload: CharacterCreatePayload) {
   const created = await createCharacter(
     payload.name,
     payload.displayName,
@@ -178,7 +181,9 @@ async function handleActorDelete(id: string) {
 }
 
 onMounted(() => {
-  void loadCharacters();
+  void loadCharacters().finally(() => {
+    hasCompletedInitialCharacterLoad.value = true;
+  });
   if (activeCharacterId.value) {
     void loadConversations();
     void loadActors();
@@ -204,7 +209,7 @@ watch(activeConversationId, () => {
 watch(
   [() => props.autoOpenCreateWhenEmpty, isLoadingCharacters, () => characters.value.length],
   ([autoOpenEnabled, loading, characterCount]) => {
-    if (!autoOpenEnabled || loading || hasHandledInitialEmptyState.value) return;
+    if (!autoOpenEnabled || loading || !hasCompletedInitialCharacterLoad.value || hasHandledInitialEmptyState.value) return;
     hasHandledInitialEmptyState.value = true;
     if (characterCount > 0) return;
     characterOpen.value = true;
