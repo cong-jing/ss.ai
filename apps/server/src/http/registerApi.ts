@@ -11,6 +11,26 @@ export interface RegisterApiOptions<TRequest, TResponse> {
     };
 }
 
+function getFallbackErrorStatus(error: unknown): number {
+    if (
+        error
+        && typeof error === "object"
+        && "status" in error
+        && typeof (error as { status?: unknown }).status === "number"
+    ) {
+        return (error as { status: number }).status;
+    }
+    if (
+        error
+        && typeof error === "object"
+        && "statusCode" in error
+        && typeof (error as { statusCode?: unknown }).statusCode === "number"
+    ) {
+        return (error as { statusCode: number }).statusCode;
+    }
+    return 500;
+}
+
 export function registerApi<TRequest, TResponse>(
     app: Express,
     api: ApiDefine<TRequest, TResponse>,
@@ -30,7 +50,7 @@ export function registerApi<TRequest, TResponse>(
             response.locals.routeError = error;
 
             const fallback = {
-                status: 400,
+                status: getFallbackErrorStatus(error),
                 body: {
                     message: error instanceof Error ? error.message : "Unknown error"
                 } satisfies ErrorResponse
