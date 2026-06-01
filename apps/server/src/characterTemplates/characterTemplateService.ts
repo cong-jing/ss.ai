@@ -19,8 +19,10 @@ const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const templatesDir = path.join(moduleDir, "templates");
 const supportedLanguages: readonly PromptLanguage[] = ["zh-CN", "en-US", "ja-JP"];
 const interactionModes = new Set<string>(INTERACTION_MODES);
+let cachedTemplates: TemplateFile[] | null = null;
 
 function readTemplateFiles(): TemplateFile[] {
+    if (cachedTemplates) return cachedTemplates;
     if (!fs.existsSync(templatesDir)) return [];
     const entries = fs.readdirSync(templatesDir, { withFileTypes: true });
     const files = entries
@@ -33,10 +35,11 @@ function readTemplateFiles(): TemplateFile[] {
         const parsed = JSON.parse(raw) as TemplateFile;
         templates.push(parsed);
     }
-    return templates;
+    cachedTemplates = templates;
+    return cachedTemplates;
 }
 
-export function listCharacterTemplates(languageInput: string | undefined): CharacterTemplate[] {
+export function listCharacterTemplates(languageInput: unknown): CharacterTemplate[] {
     if (!isPromptLanguage(languageInput)) return [];
     const language = languageInput;
     const templates = readTemplateFiles();

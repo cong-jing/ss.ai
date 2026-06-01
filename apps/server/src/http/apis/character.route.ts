@@ -47,7 +47,7 @@ function toContractCharacter(c: PFCharacter): ContractCharacter {
         greetingMessage: c.greetingMessage ?? null,
         modelConfig,
         interactionMode: c.interactionMode ?? DEFAULT_INTERACTION_MODE,
-        language: (c.language ?? "zh-CN") as PromptLanguage,
+        language: isPromptLanguage(c.language) ? c.language : "zh-CN",
         status: c.status,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
@@ -235,8 +235,8 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
     });
 
     registerApi(context.app, ApiListCharacterTemplates, {
-        handleRequest: async (_req, body: ListCharacterTemplatesRequest) => {
-            return { templates: listCharacterTemplates(body?.language) };
+        handleRequest: async (_req, query: ListCharacterTemplatesRequest) => {
+            return { templates: listCharacterTemplates(query?.language) };
         },
     });
 

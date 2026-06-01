@@ -63,7 +63,7 @@ export interface CharacterTemplate {
 }
 
 export interface ListCharacterTemplatesRequest {
-    language: PromptLanguage;
+    language?: PromptLanguage;
 }
 
 export interface ListCharacterTemplatesResponse {
