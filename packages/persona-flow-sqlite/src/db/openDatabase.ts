@@ -106,10 +106,10 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             ON conversation_actors(conversation_id)
     `);
 
-    // Prototype stage: force canonical credential table schema on every boot.
+    // Keep provider credentials durable across restarts. Older prototype builds
+    // recreated this table on boot, which erased user API keys.
     sqlite.exec(`
-        DROP TABLE IF EXISTS user_provider_credentials;
-        CREATE TABLE user_provider_credentials (
+        CREATE TABLE IF NOT EXISTS user_provider_credentials (
             user_id            TEXT NOT NULL,
             provider           TEXT NOT NULL,
             api_key_ciphertext TEXT NOT NULL,
@@ -153,7 +153,7 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN language TEXT DEFAULT 'zh-CN'`); } catch { /* already exists */ }
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN interaction_mode TEXT NOT NULL DEFAULT '${DEFAULT_INTERACTION_MODE}'`); } catch { /* already exists */ }
     try { sqlite.exec(`ALTER TABLE user_preferences ADD COLUMN model_assignments_json TEXT NOT NULL DEFAULT '{}'`); } catch { /* already exists */ }
-    // No compatibility migration for provider credentials in prototype mode.
+    // No compatibility migration for older provider credential shapes yet.
 
     // Recreate messages table when legacy columns exist or required columns are missing.
     const messageColumns = sqlite.prepare(`PRAGMA table_info('messages')`).all() as Array<{ name: string }>;
