@@ -55,18 +55,24 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
         next()
     })
 
-    const { sqlite, db } = openDatabase(
-        path.join(config.runtimeFiles.userDataDir, "app.db"),
-        (sql: unknown) => logger.verbose("[db]", { sql: String(sql) })
-    );
+    const sqliteRuntime = overrides?.stores
+        ? openDatabase(":memory:")
+        : openDatabase(
+            path.join(config.runtimeFiles.userDataDir, "app.db"),
+            (sql: unknown) => logger.verbose("[db]", { sql: String(sql) })
+        );
 
-    const characterDbDir = path.join(config.runtimeFiles.userDataDir, "characters");
-    fs.mkdirSync(characterDbDir, { recursive: true });
-    const stores = overrides?.stores ?? createSqliteStores({
-        db,
-        characterDbDir,
-        dblog: (sql: unknown) => logger.verbose("[db.character]", { sql: String(sql) }),
-    });
+    const { sqlite, db } = sqliteRuntime;
+    let stores = overrides?.stores;
+    if (!stores) {
+        const characterDbDir = path.join(config.runtimeFiles.userDataDir, "characters");
+        fs.mkdirSync(characterDbDir, { recursive: true });
+        stores = createSqliteStores({
+            db,
+            characterDbDir,
+            dblog: (sql: unknown) => logger.verbose("[db.character]", { sql: String(sql) }),
+        });
+    }
     const authRuntime = createAuthRuntime({
         config: config.auth,
         sqlite,
@@ -109,6 +115,7 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
     registerConversationActorRoutes(apiContext);
 
     (app as typeof app & { closeDatabase?: () => void }).closeDatabase = () => {
+        (stores as AppStores & { close?: () => void }).close?.();
         sqlite.close();
     };
 

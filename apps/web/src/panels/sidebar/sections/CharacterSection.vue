@@ -7,6 +7,10 @@ function interactionModeLabel(mode: InteractionMode): string {
   return t(INTERACTION_MODE_I18N_KEYS[mode]);
 }
 
+function languageLabel(language: Character["language"]): string {
+  return t(`settings.language.${language}` as const);
+}
+
 const props = defineProps<{
   isOpen: boolean;
   activeCharacter: Character | null;
@@ -18,16 +22,15 @@ const props = defineProps<{
     description: string;
     personaPrompt: string;
     interactionMode: InteractionMode;
+    language: Character["language"];
   };
   isDirty: boolean;
   isSavingCharacter: boolean;
-  newCharacterName: string;
 }>();
 
 const emit = defineEmits<{
   "character:toggle-open": [];
   "character:open-picker": [];
-  "character:update-new-name": [value: string];
   "character:create": [];
   "character:start-edit": [];
   "character:cancel-edit": [];
@@ -69,8 +72,15 @@ const showDebug = useLocalStorage("chat.showDebug", false);
           <label class="field-label">{{ t("sidebar.field.persona") }}</label>
           <textarea v-model="props.editDraft.personaPrompt" class="textarea" rows="3" :disabled="isSavingCharacter" />
 
+          <label class="field-label">{{ t("sidebar.field.language") }}</label>
+          <select v-model="props.editDraft.language" class="select" :disabled="isSavingCharacter">
+            <option value="zh-CN">{{ t("settings.language.zh-CN") }}</option>
+            <option value="en-US">{{ t("settings.language.en-US") }}</option>
+            <option value="ja-JP">{{ t("settings.language.ja-JP") }}</option>
+          </select>
+
           <label class="field-label">{{ t("sidebar.field.interactionMode") }}</label>
-          <select v-model="props.editDraft.interactionMode" class="select" :disabled="isSavingCharacter">
+          <select v-model="props.editDraft.interactionMode" class="select" :disabled="true">
             <option v-for="mode in interactionModes" :key="mode" :value="mode">
               {{ interactionModeLabel(mode) }}
             </option>
@@ -109,6 +119,10 @@ const showDebug = useLocalStorage("chat.showDebug", false);
             <span class="field-label">{{ t("sidebar.field.interactionMode") }}</span>
             <p class="read-value">{{ interactionModeLabel(activeCharacter.interactionMode) }}</p>
           </div>
+          <div class="read-row">
+            <span class="field-label">{{ t("sidebar.field.language") }}</span>
+            <p class="read-value">{{ languageLabel(activeCharacter.language) }}</p>
+          </div>
 
           <div class="actions">
             <button class="mini-btn primary" :disabled="isSavingCharacter" @click="emit('character:start-edit')">{{ t("sidebar.action.startEdit") }}</button>
@@ -118,15 +132,7 @@ const showDebug = useLocalStorage("chat.showDebug", false);
       </template>
 
       <template v-else>
-        <label class="field-label">{{ t("sidebar.newCharacterName") }}</label>
-        <input
-          :value="newCharacterName"
-          class="input"
-          :disabled="isSavingCharacter"
-          @input="emit('character:update-new-name', ($event.target as HTMLInputElement).value)"
-          @keydown.enter.prevent="emit('character:create')"
-        />
-        <button class="mini-btn primary" :disabled="isSavingCharacter || !newCharacterName.trim()" @click="emit('character:create')">{{ t("sidebar.action.create") }}</button>
+        <button class="mini-btn primary" :disabled="isSavingCharacter" @click="emit('character:create')">{{ t("sidebar.action.create") }}</button>
       </template>
     </div>
   </section>

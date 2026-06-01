@@ -7,9 +7,11 @@ import {
     ApiGetActiveCharacter,
     ApiSetActiveCharacter,
     ApiListCharacterInteractionModes,
+    ApiListCharacterTemplates,
     DEFAULT_INTERACTION_MODE,
     INTERACTION_MODES,
     type CreateCharacterRequest,
+    type ListCharacterTemplatesRequest,
     type UpdateCharacterRequest,
     type ListCharactersResponse,
     type Character as ContractCharacter,
@@ -20,6 +22,7 @@ import type { Character as PFCharacter, Conversation } from "@ss-ai/persona-flow
 import { registerApi } from "../registerApi.js";
 import { resolveRequestUserId, toErrorResponse, type HttpApiContext } from "./apiContext.js";
 import { AppHttpError, getAppErrorStatusCode } from "../errors/appHttpError.js";
+import { isPromptLanguage, listCharacterTemplates } from "../../characterTemplates/characterTemplateService.js";
 
 // ── Projections ────────────────────────────────────────────────────────────────
 
@@ -43,6 +46,7 @@ function toContractCharacter(c: PFCharacter): ContractCharacter {
         greetingMessage: c.greetingMessage ?? null,
         modelConfig,
         interactionMode: c.interactionMode ?? DEFAULT_INTERACTION_MODE,
+        language: isPromptLanguage(c.language) ? c.language : "zh-CN",
         status: c.status,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
@@ -93,6 +97,7 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
                 interactionMode: normalizeInteractionMode(body.interactionMode) ?? DEFAULT_INTERACTION_MODE,
                 generationConfig: {},
                 memoryConfig: {},
+                language: isPromptLanguage(body.language) ? body.language : "zh-CN",
                 status: "active",
                 createdAt: now,
                 updatedAt: now,
@@ -149,24 +154,28 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
             if (!existing || existing.status === "archived") {
                 throw new AppHttpError(404, "character.not_found", `Character not found: ${req.params.id}`);
             }
+            const hasBodyProperty = (key: PropertyKey): boolean => (
+                body != null && Object.prototype.hasOwnProperty.call(body, key)
+            );
             const patch: Partial<Omit<PFCharacter, "id" | "userId" | "createdAt">> = {
                 updatedAt: new Date().toISOString(),
             };
             if (typeof body?.name === "string") patch.name = body.name.trim();
-            if (Object.prototype.hasOwnProperty.call(body, "displayName")) {
+            if (hasBodyProperty("displayName")) {
                 patch.displayName = typeof body.displayName === "string" ? body.displayName.trim() || null : null;
             }
             if (typeof body?.description === "string") patch.description = body.description.trim() || null;
             if (typeof body?.personaPrompt === "string") patch.personaPrompt = body.personaPrompt.trim();
-            if (Object.prototype.hasOwnProperty.call(body, "greetingMessage")) {
+            if (hasBodyProperty("greetingMessage")) {
                 patch.greetingMessage = typeof body.greetingMessage === "string"
                     ? body.greetingMessage.trim() || null
                     : null;
             }
-            if (Object.prototype.hasOwnProperty.call(body, "interactionMode")) {
-                patch.interactionMode = normalizeInteractionMode(body.interactionMode) ?? DEFAULT_INTERACTION_MODE;
+            if (hasBodyProperty("interactionMode")) {
+                throw new AppHttpError(400, "character.interaction_mode_immutable", "interactionMode can only be set at character creation");
             }
-            if (Object.prototype.hasOwnProperty.call(body, "modelConfig")
+            if (isPromptLanguage(body?.language)) patch.language = body.language;
+            if (hasBodyProperty("modelConfig")
                 && body.modelConfig !== null && typeof body.modelConfig === "object") {
                 patch.modelConfig = body.modelConfig as Record<string, unknown>;
             }
@@ -228,6 +237,12 @@ export function registerCharacterRoutes(context: HttpApiContext): void {
 
     registerApi(context.app, ApiListCharacterInteractionModes, {
         handleRequest: async () => ({ interactionModes: [...INTERACTION_MODES] }),
+    });
+
+    registerApi(context.app, ApiListCharacterTemplates, {
+        handleRequest: async (_req, query: ListCharacterTemplatesRequest) => {
+            return { templates: listCharacterTemplates(query?.language) };
+        },
     });
 
 }

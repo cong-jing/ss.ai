@@ -11,6 +11,26 @@ export interface RegisterApiOptions<TRequest, TResponse> {
     };
 }
 
+function getFallbackErrorStatus(error: unknown): number {
+    if (
+        error
+        && typeof error === "object"
+        && "status" in error
+        && typeof (error as { status?: unknown }).status === "number"
+    ) {
+        return (error as { status: number }).status;
+    }
+    if (
+        error
+        && typeof error === "object"
+        && "statusCode" in error
+        && typeof (error as { statusCode?: unknown }).statusCode === "number"
+    ) {
+        return (error as { statusCode: number }).statusCode;
+    }
+    return 500;
+}
+
 export function registerApi<TRequest, TResponse>(
     app: Express,
     api: ApiDefine<TRequest, TResponse>,
@@ -18,7 +38,7 @@ export function registerApi<TRequest, TResponse>(
 ): void {
     const wrappedHandler: RequestHandler = async (request, response) => {
         try {
-            const body = (api.method === "GET" ? undefined : request.body) as TRequest;
+            const body = (api.method === "GET" ? request.query : request.body) as TRequest;
             const result = await handler.handleRequest(request, body);
             if (result === undefined || result === null) {
                 response.status(204).send();
@@ -30,14 +50,14 @@ export function registerApi<TRequest, TResponse>(
             response.locals.routeError = error;
 
             const fallback = {
-                status: 400,
+                status: getFallbackErrorStatus(error),
                 body: {
                     message: error instanceof Error ? error.message : "Unknown error"
                 } satisfies ErrorResponse
             };
 
             const errorResult = handler.handleError ? handler.handleError(
-                error, request, (api.method === "GET" ? undefined : request.body) as TRequest) : fallback;
+                error, request, (api.method === "GET" ? request.query : request.body) as TRequest) : fallback;
             response.status(errorResult.status).json(errorResult.body);
         }
     };

@@ -56,7 +56,6 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
         CREATE TABLE IF NOT EXISTS user_preferences (
             user_id                 TEXT PRIMARY KEY,
             current_character_id    TEXT,
-            current_conversation_id TEXT,
             model_assignments_json  TEXT NOT NULL DEFAULT '{}',
             created_at              TEXT NOT NULL,
             updated_at              TEXT NOT NULL
@@ -106,10 +105,10 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             ON conversation_actors(conversation_id)
     `);
 
-    // Prototype stage: force canonical credential table schema on every boot.
+    // Keep provider credentials durable across restarts. Older prototype builds
+    // recreated this table on boot, which erased user API keys.
     sqlite.exec(`
-        DROP TABLE IF EXISTS user_provider_credentials;
-        CREATE TABLE user_provider_credentials (
+        CREATE TABLE IF NOT EXISTS user_provider_credentials (
             user_id            TEXT NOT NULL,
             provider           TEXT NOT NULL,
             api_key_ciphertext TEXT NOT NULL,
@@ -153,7 +152,45 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN language TEXT DEFAULT 'zh-CN'`); } catch { /* already exists */ }
     try { sqlite.exec(`ALTER TABLE characters ADD COLUMN interaction_mode TEXT NOT NULL DEFAULT '${DEFAULT_INTERACTION_MODE}'`); } catch { /* already exists */ }
     try { sqlite.exec(`ALTER TABLE user_preferences ADD COLUMN model_assignments_json TEXT NOT NULL DEFAULT '{}'`); } catch { /* already exists */ }
-    // No compatibility migration for provider credentials in prototype mode.
+    // No compatibility migration for older provider credential shapes yet.
+
+    const userPreferenceColumns = sqlite.prepare(`PRAGMA table_info('user_preferences')`).all() as Array<{
+        name: string;
+    }>;
+    const userPreferenceColumnNames = new Set(userPreferenceColumns.map((column) => column.name));
+    const hasLegacyCurrentConversationColumn = userPreferenceColumnNames.has("current_conversation_id");
+    const hasModelAssignmentsColumn = userPreferenceColumnNames.has("model_assignments_json");
+
+    if (hasLegacyCurrentConversationColumn) {
+        const modelAssignmentsExpr = hasModelAssignmentsColumn
+            ? `COALESCE(model_assignments_json, '{}')`
+            : `'{}'`;
+        sqlite.exec(`
+            CREATE TABLE IF NOT EXISTS user_preferences_new (
+                user_id                TEXT PRIMARY KEY,
+                current_character_id   TEXT,
+                model_assignments_json TEXT NOT NULL DEFAULT '{}',
+                created_at             TEXT NOT NULL,
+                updated_at             TEXT NOT NULL
+            );
+            INSERT INTO user_preferences_new (
+                user_id,
+                current_character_id,
+                model_assignments_json,
+                created_at,
+                updated_at
+            )
+                SELECT
+                    user_id,
+                    current_character_id,
+                    ${modelAssignmentsExpr},
+                    created_at,
+                    updated_at
+                FROM user_preferences;
+            DROP TABLE user_preferences;
+            ALTER TABLE user_preferences_new RENAME TO user_preferences;
+        `);
+    }
 
     // Recreate messages table when legacy columns exist or required columns are missing.
     const messageColumns = sqlite.prepare(`PRAGMA table_info('messages')`).all() as Array<{ name: string }>;

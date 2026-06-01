@@ -105,6 +105,12 @@ export class SQLiteConversationActorStore implements ConversationActorStore {
     }
 
     async updateConversationActor(input: UpdateConversationActorInput): Promise<void> {
+        const actor = await this.getActorById(input.id);
+        if (!actor) {
+            return;
+        }
+
+        const db = await this.getDbForConversation(actor.conversationId);
         const now = new Date().toISOString();
         const updates: Partial<ConversationActorRow> = { updatedAt: now };
 
@@ -118,7 +124,7 @@ export class SQLiteConversationActorStore implements ConversationActorStore {
             updates.leftAt = input.leftAt;
         }
 
-        await this.db
+        await db
             .update(conversationActors)
             .set(updates)
             .where(eq(conversationActors.id, input.id));

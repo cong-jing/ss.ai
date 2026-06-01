@@ -24,7 +24,7 @@ export function createSqliteStores(options: {
     const { db, characterDbDir, dblog } = options;
     const characterDbRouter = characterDbDir ? new CharacterDbRouter(db, characterDbDir, dblog) : undefined;
     const conversationActor = new SQLiteConversationActorStore(db, characterDbRouter);
-    return {
+    const stores: AppStores & { close?: () => void } = {
         character: new SQLiteCharacterStore(db),
         userProfile: new SQLiteUserProfileStore(db),
         userPreferences: new SQLiteUserPreferencesStore(db),
@@ -33,4 +33,10 @@ export function createSqliteStores(options: {
         chat: new SQLiteChatStore(db, characterDbRouter),
         providerCredential: new SQLiteUserProviderCredentialStore(db),
     };
+    if (characterDbRouter) {
+        stores.close = () => {
+            characterDbRouter.closeAll();
+        };
+    }
+    return stores;
 }
