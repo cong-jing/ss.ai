@@ -50,6 +50,10 @@ function interactionModeLabel(mode: InteractionMode): string {
     return t(INTERACTION_MODE_I18N_KEYS[mode]);
 }
 
+function languageLabel(language: PromptLanguage): string {
+    return t(`settings.language.${language}` as const);
+}
+
 function syncDraftFromSelection(): void {
     if (selectedTemplateId.value === "custom") {
         draft.value = { ...customDraft.value };
@@ -103,9 +107,9 @@ watch(model, (open) => {
         displayName: "",
         description: "",
         personaPrompt: "",
-                greetingMessage: "",
-                interactionMode: props.interactionModes[0] ?? DEFAULT_INTERACTION_MODE,
-                language: locale.value,
+        greetingMessage: "",
+        interactionMode: props.interactionModes[0] ?? DEFAULT_INTERACTION_MODE,
+        language: locale.value,
     };
     draft.value = { ...customDraft.value };
     void loadTemplates();
@@ -113,7 +117,7 @@ watch(model, (open) => {
 </script>
 
 <template>
-  <PopupWindow v-model="model" title="Create Character" :modal="true" width="860px">
+  <PopupWindow v-model="model" :title="t('characterCreate.title')" :modal="true" width="860px">
     <div class="create-layout">
       <aside class="template-list">
         <button
@@ -125,11 +129,11 @@ watch(model, (open) => {
         >
           <p class="template-name">{{ item.name }}</p>
           <p class="template-desc">{{ item.description }}</p>
-          <p class="template-meta">{{ interactionModeLabel(item.interactionMode) }} / {{ item.language }}</p>
+          <p class="template-meta">{{ interactionModeLabel(item.interactionMode) }} / {{ languageLabel(item.language) }}</p>
         </button>
         <button class="template-item" :class="{ active: selectedTemplateId === 'custom' }" @click="selectTemplate('custom')">
-          <p class="template-name">Custom Character</p>
-          <p class="template-desc">Create from editable fields.</p>
+          <p class="template-name">{{ t("characterCreate.customName") }}</p>
+          <p class="template-desc">{{ t("characterCreate.customDescription") }}</p>
         </button>
       </aside>
 
@@ -148,7 +152,7 @@ watch(model, (open) => {
           <label class="field-label">{{ t("sidebar.field.persona") }}</label>
           <textarea v-model="draft.personaPrompt" class="textarea" rows="5" :disabled="isSaving" />
 
-          <label class="field-label">Greeting</label>
+          <label class="field-label">{{ t("characterCreate.field.greetingMessage") }}</label>
           <textarea v-model="draft.greetingMessage" class="textarea" rows="2" :disabled="isSaving" />
 
           <div class="row">

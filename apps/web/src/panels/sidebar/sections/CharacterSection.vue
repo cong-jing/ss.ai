@@ -7,6 +7,10 @@ function interactionModeLabel(mode: InteractionMode): string {
   return t(INTERACTION_MODE_I18N_KEYS[mode]);
 }
 
+function languageLabel(language: "zh-CN" | "en-US" | "ja-JP"): string {
+  return t(`settings.language.${language}` as const);
+}
+
 const props = defineProps<{
   isOpen: boolean;
   activeCharacter: Character | null;
@@ -117,7 +121,7 @@ const showDebug = useLocalStorage("chat.showDebug", false);
           </div>
           <div class="read-row">
             <span class="field-label">{{ t("sidebar.field.language") }}</span>
-            <p class="read-value">{{ activeCharacter.language }}</p>
+            <p class="read-value">{{ languageLabel(activeCharacter.language) }}</p>
           </div>
 
           <div class="actions">

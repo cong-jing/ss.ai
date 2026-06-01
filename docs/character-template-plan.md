@@ -31,18 +31,6 @@ Template identity:
 type CharacterTemplateId = string;
 ```
 
-Localized template:
-
-```ts
-interface CharacterTemplateLocalizedContent {
-  name: string;
-  displayName?: string | null;
-  description: string;
-  personaPrompt: string;
-  greetingMessage?: string | null;
-}
-```
-
 API-facing template:
 
 ```ts
@@ -58,40 +46,23 @@ interface CharacterTemplate {
 }
 ```
 
-Repository source format can either be one file per localized template, or one file per template concept with localized `content`. I prefer one file per concept:
+Repository source format should use one file per template and per language:
 
 ```json
 {
-  "id": "warm-companion",
+  "id": "neighbor-girl-zh-CN",
+  "language": "zh-CN",
   "interactionMode": "single_character_chat",
   "sortOrder": 10,
-  "content": {
-    "zh-CN": {
-      "name": "暖心同伴",
-      "displayName": "暖心同伴",
-      "description": "...",
-      "personaPrompt": "...",
-      "greetingMessage": "..."
-    },
-    "en-US": {
-      "name": "Warm Companion",
-      "displayName": "Warm Companion",
-      "description": "...",
-      "personaPrompt": "...",
-      "greetingMessage": "..."
-    },
-    "ja-JP": {
-      "name": "やさしい相棒",
-      "displayName": "やさしい相棒",
-      "description": "...",
-      "personaPrompt": "...",
-      "greetingMessage": "..."
-    }
-  }
+  "name": "邻家女孩",
+  "displayName": "小晴",
+  "description": "...",
+  "personaPrompt": "...",
+  "greetingMessage": "..."
 }
 ```
 
-This keeps the three language variants together and makes it harder to accidentally update only one locale.
+This keeps the runtime loader simple, makes language filtering explicit, and avoids mixing multiple locales in one asset file.
 
 ## Placement Options
 
@@ -156,7 +127,7 @@ Server behavior:
 
 - `GET /v1/character-templates?language=zh-CN`
   - Returns only templates localized to the requested language.
-  - If absent or unsupported, default to the current server/UI fallback language, likely `zh-CN`.
+  - If absent or unsupported, return an empty list.
 - `POST /v1/characters`
   - Accepts `language`.
   - Creates the character from submitted fields only; no `templateId`.
@@ -208,9 +179,9 @@ Character edit panel:
 
 Use three `single_character_chat` templates initially to avoid promising behavior that other modes do not fully implement yet:
 
-- Warm companion: supportive, calm daily conversation partner.
-- Creative writing partner: helps brainstorm stories, scenes, dialogue, and style.
-- Study coach: helps explain concepts, plan practice, and ask guiding questions.
+- Neighbor girl: warm, lively, close, and lightly playful.
+- Tsundere girl: proud and sharp on the surface, but obviously caring underneath.
+- Elf mage: a fantasy-style companion from a sword-and-sorcery world.
 
 Each concept should have `zh-CN`, `en-US`, and `ja-JP` localized content.
 
