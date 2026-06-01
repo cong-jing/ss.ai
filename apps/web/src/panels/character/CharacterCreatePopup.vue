@@ -43,8 +43,7 @@ const customDraft = ref<CreateDraft>({
 });
 const draft = ref<CreateDraft>({ ...customDraft.value });
 
-const selectedTemplate = computed(() => templates.value.find(item => item.id === selectedTemplateId.value) ?? null);
-const canCreate = computed(() => draft.value.name.trim().length > 0 && !props.isSaving);
+const canCreate = computed(() => !isLoading.value && draft.value.name.trim().length > 0 && !props.isSaving);
 
 function interactionModeLabel(mode: InteractionMode): string {
     return t(INTERACTION_MODE_I18N_KEYS[mode]);
