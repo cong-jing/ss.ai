@@ -21,7 +21,8 @@
     },
     "dependencies": {
         "@mistralai/mistralai": "^2.2.1",
-        "@ss-ai/persona-flow": "workspace:*"
+        "@ss-ai/persona-flow": "workspace:*",
+        "zod": "^4.3.6"
     },
     "devDependencies": {
         "@types/node": "^22.7.4",

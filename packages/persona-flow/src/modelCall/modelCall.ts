@@ -1,4 +1,4 @@
-import type { InteractionMode, LlmResponseMode, ModelCallPurpose } from "@ss-ai/contracts";
+import type { InteractionMode, LlmResponseMode, ModelCallPurpose, TurnEvent } from "@ss-ai/contracts";
 import type { PromptContext } from "../prompt/promptContext.js";
 import type { RenderedMessage } from "../prompt/promptTypes.js";
 import type { ModelToolCall, StructuredOutputSchema } from "../llm/modelClient.js";
@@ -14,6 +14,7 @@ export type ModelCallOutcome =
     | {
         kind: "assistantReply";
         text: string;
+        turnEvents?: TurnEvent[];
     }
     | {
         kind: "noReply";

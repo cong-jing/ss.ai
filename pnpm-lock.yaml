@@ -131,7 +131,11 @@ importers:
         specifier: ^2.1.10
         version: 2.2.12(typescript@5.9.3)
 
-  packages/contracts: {}
+  packages/contracts:
+    dependencies:
+      zod:
+        specifier: ^4.3.6
+        version: 4.4.3
 
   packages/persona-flow:
     dependencies:
@@ -172,6 +176,9 @@ importers:
       '@ss-ai/persona-flow':
         specifier: workspace:*
         version: link:../persona-flow
+      zod:
+        specifier: ^4.3.6
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^22.7.4

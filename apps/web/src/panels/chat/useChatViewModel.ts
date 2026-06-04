@@ -1,5 +1,5 @@
 import { ref, watch } from "vue";
-import { DEFAULT_INTERACTION_MODE, type ChatStructuredOutput } from "@ss-ai/contracts";
+import { DEFAULT_INTERACTION_MODE, type TurnEvent } from "@ss-ai/contracts";
 import { apiDryRunChat, apiSendChatMessage, apiStreamChatMessage, apiGetMessages, apiDeleteMessage } from "./chatApi";
 import type { ChatMessage } from "./chatTypes";
 import { contextVersion } from "../../shared/state/appState";
@@ -18,11 +18,11 @@ function createId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function toStructuredOutputDebugMessages(structuredOutput: ChatStructuredOutput): import("./chatTypes").DebugMessage[] {
+function toTurnEventsDebugMessages(turnEvents: TurnEvent[]): import("./chatTypes").DebugMessage[] {
     return [
         {
-            role: "structuredOutput",
-            content: JSON.stringify(structuredOutput, null, 2),
+            role: "turnEvents",
+            content: JSON.stringify(turnEvents, null, 2),
         },
     ];
 }
@@ -103,6 +103,7 @@ export function useChatViewModel() {
                 if (msg) {
                     msg.status = "normal";
                     msg.id = result.requestId || msgId;
+                    if (result.turnEvents) msg.turnEvents = result.turnEvents;
                     if (capturedAssembledMessages) msg.assembledMessages = capturedAssembledMessages;
                 }
                 if (result.apiKeySource === "default") {
@@ -134,14 +135,14 @@ export function useChatViewModel() {
                 activeCharacter.value?.interactionMode ?? DEFAULT_INTERACTION_MODE,
             );
 
-            if (response.structuredOutput) {
+            if (response.turnEvents) {
                 messages.value.push({
                     role: "debug",
                     content: "",
                     createdAt: new Date().toISOString(),
                     status: "normal",
-                    debugMessages: toStructuredOutputDebugMessages(response.structuredOutput),
-                    structuredOutput: response.structuredOutput,
+                    debugMessages: toTurnEventsDebugMessages(response.turnEvents),
+                    turnEvents: response.turnEvents,
                 });
                 showDebug.value = true;
             }
@@ -155,6 +156,7 @@ export function useChatViewModel() {
                     content: response.output,
                     createdAt: new Date().toISOString(),
                     status: "normal",
+                    ...(response.turnEvents ? { turnEvents: response.turnEvents } : {}),
                     ...(response.assembledMessages ? { assembledMessages: response.assembledMessages } : {}),
                 });
             }
@@ -263,6 +265,7 @@ export function useChatViewModel() {
                 senderSourceType: m.senderSourceType,
                 content: m.content,
                 createdAt: m.createdAt,
+                turnEvents: m.turnEvents,
                 status: "normal" as const,
             }));
         } catch (e) {

@@ -7,6 +7,7 @@ import type {
     ModelUsage,
     ModelStreamResult,
 } from "../llm/modelClient.js";
+import type { ModelToolChoice, ModelToolDefinition } from "../llm/tools/modelTool.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "../chatTurn/personaFlowLogger.js";
 import type { ModelAssignmentMap, ModelCallPurpose } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
@@ -18,6 +19,8 @@ export interface PersonaModelRequest {
     modelCallPurpose: ModelCallPurpose;
     llmResponseMode?: LlmResponseMode;
     structuredOutputSchema?: StructuredOutputSchema;
+    tools?: ModelToolDefinition[];
+    toolChoice?: ModelToolChoice;
 }
 
 export interface PersonaModelResponse {
@@ -137,6 +140,13 @@ export class ModelRuntime {
             output: JSON.stringify({
                 mode: request.llmResponseMode ?? "non-structured",
                 modelCallPurpose: request.modelCallPurpose ?? "chat.main",
+                tools: request.tools?.map(tool => ({
+                    kind: tool.kind,
+                    name: tool.name,
+                    terminal: tool.terminal,
+                    purpose: tool.purpose,
+                })),
+                toolChoice: request.toolChoice,
                 status: payload.status,
                 outputText: payload.outputText,
                 structuredOutput: payload.structuredOutput,
@@ -180,6 +190,8 @@ export class ModelRuntime {
                 encryptedApiKey,
                 messages: request.messages,
                 structuredOutputSchema: isStructuredResponse ? request.structuredOutputSchema : undefined,
+                tools: request.tools,
+                toolChoice: request.toolChoice,
             });
 
             if (isStructuredResponse) {
@@ -293,6 +305,8 @@ export class ModelRuntime {
                     model,
                     encryptedApiKey,
                     messages: request.messages,
+                    tools: request.tools,
+                    toolChoice: request.toolChoice,
                 },
                 {
                     onTextDelta: request.onTextDelta,

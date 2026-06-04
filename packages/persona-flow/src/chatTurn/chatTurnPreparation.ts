@@ -159,7 +159,8 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
         id: crypto.randomUUID(),
         conversationId: input.conversationId,
         senderActorId: resolvedSenderActorId,
-        content: input.userMessageText,
+        kind: "user_text",
+        displayText: input.userMessageText,
         createdAt: new Date().toISOString(),
     };
 

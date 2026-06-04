@@ -149,7 +149,8 @@ describe("persona-flow chat turn preparation", () => {
             id: crypto.randomUUID(),
             conversationId: base.conversationId,
             senderActorId: base.userActorId,
-            content: "seed user history",
+            kind: "user_text",
+            displayText: "seed user history",
             createdAt: nowIso(),
         });
         const assistantMessageContent = "seed assistant history";
@@ -157,7 +158,8 @@ describe("persona-flow chat turn preparation", () => {
             id: crypto.randomUUID(),
             conversationId: base.conversationId,
             senderActorId: base.selfActorId,
-            content: assistantMessageContent,
+            kind: "assistant_turn_events",
+            displayText: assistantMessageContent,
             createdAt: nowIso(),
         });
 

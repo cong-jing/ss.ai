@@ -17,6 +17,7 @@ import {
     normalizeToolCall,
     toSdkMessages,
 } from "./messageTransforms.js";
+import { toMistralToolRequest } from "./mistralToolAdapter.js";
 import { withTimeout } from "./timeout.js";
 import { ModelAdapter } from "../modelAdapter.js";
 
@@ -56,12 +57,14 @@ export class MistralModelClient implements ModelAdapter {
     async generate(input: ModelGenerationInput): Promise<ModelGenerationResult> {
         const client = await this.getClient();
         const responseFormat = input.structuredOutputSchema ?? { type: "text" };
+        const toolRequest = toMistralToolRequest(input);
 
         const response = await withTimeout(
             client.chat.complete({
                 model: input.model,
                 messages: toSdkMessages(input),
                 responseFormat,
+                ...toolRequest,
             }),
             this.options.timeoutMs,
             input.structuredOutputSchema ? "Mistral structured request" : "Mistral non-structured request",
@@ -81,21 +84,33 @@ export class MistralModelClient implements ModelAdapter {
             };
         }
 
+        const toolCalls = extractToolCallsFromMessage(firstMessage);
+        let output = "";
+        try {
+            output = extractText(response);
+        } catch (error: unknown) {
+            if (toolCalls.length === 0) {
+                throw error;
+            }
+        }
+
         return {
-            output: extractText(response),
-            toolCalls: extractToolCallsFromMessage(firstMessage),
+            output,
+            toolCalls,
             usage: extractUsage(response),
         };
     }
 
     async generateStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
         const client = await this.getClient();
+        const toolRequest = toMistralToolRequest(input);
 
         const stream = await withTimeout(
             client.chat.stream({
                 model: input.model,
                 messages: toSdkMessages(input),
                 responseFormat: { type: "text" },
+                ...toolRequest,
             }),
             this.options.timeoutMs,
             "Mistral non-structured stream request",

@@ -1,3 +1,4 @@
+import { DEFAULT_INTERACTION_MODE } from "@ss-ai/contracts";
 import type {
     Character,
     ListCharactersResponse,
@@ -30,6 +31,8 @@ function createMockCharacter(): Character {
         personaPrompt: "",
         greetingMessage: null,
         modelConfig: {},
+        interactionMode: DEFAULT_INTERACTION_MODE,
+        language: "zh-CN",
         status: "active",
         createdAt: now,
         updatedAt: now,
@@ -184,12 +187,14 @@ export async function chat(
         ...(senderActorId ? { senderActorId } : {}),
     });
 
-    if (res.structuredOutput?.action === "skip") {
-        return null;
-    }
+    const replyText = res.turnEvents
+        ?.filter(event => event.type === "replyText")
+        .map(event => event.text.trim())
+        .filter(Boolean)
+        .join("\n");
 
-    if (res.structuredOutput?.replyText?.trim()) {
-        return res.structuredOutput.replyText;
+    if (replyText) {
+        return replyText;
     }
 
     return res.output;

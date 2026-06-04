@@ -1,5 +1,6 @@
 import { ApiDefine } from "../apiBase.js";
 import type { InteractionMode } from "../interactionMode.js";
+import type { TurnEvent } from "../turnEvents.js";
 
 export type LlmResponseMode = "non-structured" | "structured";
 
@@ -28,14 +29,10 @@ export interface ChatResponse {
     userMessageId: string;
     /** ID of the appended assistant message. Undefined when no assistant message was appended. */
     assistantMessageId?: string;
-    /** Structured payload returned by the chat model call. */
-    structuredOutput?: ChatStructuredOutput;
+    /** Ordered events submitted by the assistant turn. */
+    turnEvents?: TurnEvent[];
     /** Assembled LLM input messages, only present when request included `includeAssembledMessages: true`. */
     assembledMessages?: ChatDryRunMessage[];
-}
-
-export interface ChatStructuredOutput {
-    replyText: string;
 }
 
 export interface ChatStreamRequest {
@@ -57,7 +54,7 @@ export interface ChatStreamRequest {
 /** SSE stream event — one per `data:` line */
 export type ChatStreamEvent =
     | { type: "chunk"; content: string }
-    | { type: "done"; requestId: string; model: string; apiKeySource?: "user" | "default" }
+    | { type: "done"; requestId: string; model: string; apiKeySource?: "user" | "default"; turnEvents?: TurnEvent[] }
     | { type: "assembledMessages"; messages: ChatDryRunMessage[] };
 
 export const ApiChat = new ApiDefine<ChatRequest, ChatResponse>("/v1/chat", "POST");

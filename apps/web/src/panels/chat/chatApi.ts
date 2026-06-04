@@ -1,4 +1,4 @@
-import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMessagesResponse, type LlmResponseMode, type InteractionMode } from "@ss-ai/contracts";
+import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMessagesResponse, type LlmResponseMode, type InteractionMode, type TurnEvent } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
 import { throwApiRequestError } from "../../shared/api/throwApiRequestError";
 
@@ -56,7 +56,7 @@ export async function apiStreamChatMessage(
     includeAssembledMessages = false,
     onAssembledMessages?: (messages: { role: string; content: string }[]) => void,
     interactionMode?: InteractionMode
-): Promise<{ requestId: string; model: string; apiKeySource: "user" | "default" | null }> {
+): Promise<{ requestId: string; model: string; apiKeySource: "user" | "default" | null; turnEvents?: TurnEvent[] }> {
     const response = await fetch(ApiChatStream.apiUrl, {
         method: ApiChatStream.method,
         credentials: "same-origin",
@@ -75,7 +75,7 @@ export async function apiStreamChatMessage(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    let result: { requestId: string; model: string; apiKeySource: "user" | "default" | null } = {
+    let result: { requestId: string; model: string; apiKeySource: "user" | "default" | null; turnEvents?: TurnEvent[] } = {
         requestId: "",
         model: "",
         apiKeySource: null,
@@ -95,7 +95,7 @@ export async function apiStreamChatMessage(
             if (event.type === "chunk") {
                 onChunk(event.content);
             } else if (event.type === "done") {
-                result = { requestId: event.requestId, model: event.model, apiKeySource: event.apiKeySource ?? null };
+                result = { requestId: event.requestId, model: event.model, apiKeySource: event.apiKeySource ?? null, turnEvents: event.turnEvents };
             } else if (event.type === "assembledMessages") {
                 onAssembledMessages?.(event.messages);
             }

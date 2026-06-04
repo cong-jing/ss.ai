@@ -182,11 +182,21 @@ class InMemoryChatStore {
         this.messages.push({ ...message });
     }
 
+    async appendAssistantTurn(input: { message: Message; events: NonNullable<Message["turnEvents"]> }): Promise<void> {
+        this.messages.push({
+            ...input.message,
+            turnEvents: input.events.map(event => ({ ...event })),
+        });
+    }
+
     async getRecentMessages(input: { userId?: string; conversationId: string; limit: number }): Promise<Message[]> {
         return this.messages
             .filter(message => message.conversationId === input.conversationId)
             .slice(-input.limit)
-            .map(message => ({ ...message }));
+            .map(message => ({
+                ...message,
+                ...(message.turnEvents ? { turnEvents: message.turnEvents.map(event => ({ ...event })) } : {}),
+            }));
     }
 
     async deleteMessage(input: { conversationId: string; messageId: string }): Promise<void> {
@@ -207,7 +217,12 @@ class InMemoryChatStore {
     }
 
     listByConversation(conversationId: string): Message[] {
-        return this.messages.filter(message => message.conversationId === conversationId).map(message => ({ ...message }));
+        return this.messages
+            .filter(message => message.conversationId === conversationId)
+            .map(message => ({
+                ...message,
+                ...(message.turnEvents ? { turnEvents: message.turnEvents.map(event => ({ ...event })) } : {}),
+            }));
     }
 }
 

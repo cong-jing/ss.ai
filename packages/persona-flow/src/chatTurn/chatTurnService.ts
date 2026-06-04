@@ -1,4 +1,4 @@
-import type { InteractionMode, LlmResponseMode, ModelAssignmentMap } from "@ss-ai/contracts";
+import type { InteractionMode, LlmResponseMode, ModelAssignmentMap, TurnEvent } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
 import { prepareChatTurnContext } from "./chatTurnPreparation.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "./personaFlowLogger.js";
@@ -115,7 +115,7 @@ export class PersonaFlowChatTurnService {
         output: string;
         userMessageId: string;
         assistantMessageId?: string;
-        structuredOutput?: unknown;
+        turnEvents?: TurnEvent[];
         assembledMessages?: Array<{ role: "system" | "user" | "assistant"; content: string }>;
     }> {
         this.logger.debug("persona-flow/chat-turn: chat requested", {
@@ -173,7 +173,6 @@ export class PersonaFlowChatTurnService {
                 apiKeySource: callResult.llmResponse.apiKeySource,
                 output: "",
                 userMessageId: prepared.userMessage.id,
-                structuredOutput: callResult.parsedModelOutput,
                 ...(input.includeAssembledMessages ? { assembledMessages: callResult.llmRequestSnapshot.messages } : {}),
             };
         }
@@ -181,14 +180,19 @@ export class PersonaFlowChatTurnService {
             throw new Error(`Unsupported outcome kind for chat.main: ${callResult.outcome.kind}`);
         }
         const normalizedAssistantOutput = callResult.outcome.text;
+        const turnEvents = callResult.outcome.turnEvents ?? [];
 
         const assistantMessageId = crypto.randomUUID();
-        await this.deps.stores.chat.appendMessage({
-            id: assistantMessageId,
-            conversationId: input.conversationId,
-            senderActorId: prepared.selfActorId,
-            content: normalizedAssistantOutput,
-            createdAt: new Date().toISOString(),
+        await this.deps.stores.chat.appendAssistantTurn({
+            message: {
+                id: assistantMessageId,
+                conversationId: input.conversationId,
+                senderActorId: prepared.selfActorId,
+                kind: "assistant_turn_events",
+                displayText: normalizedAssistantOutput,
+                createdAt: new Date().toISOString(),
+            },
+            events: turnEvents,
         });
 
         this.logger.verbose("persona-flow/chat-turn: assistant message appended", {
@@ -204,7 +208,7 @@ export class PersonaFlowChatTurnService {
             output: normalizedAssistantOutput,
             userMessageId: prepared.userMessage.id,
             assistantMessageId,
-            structuredOutput: callResult.parsedModelOutput,
+            turnEvents,
             ...(input.includeAssembledMessages ? { assembledMessages: callResult.llmRequestSnapshot.messages } : {}),
         };
     }
@@ -216,6 +220,7 @@ export class PersonaFlowChatTurnService {
         output: string;
         userMessageId: string;
         assistantMessageId: string;
+        turnEvents?: TurnEvent[];
         assembledMessages?: Array<{ role: "system" | "user" | "assistant"; content: string }>;
         streamCompleted: boolean;
         streamFinishReason?: string;
@@ -264,15 +269,20 @@ export class PersonaFlowChatTurnService {
             throw new Error(`Unsupported stream outcome kind for chat.main: ${callResult.outcome.kind}`);
         }
         const fullResponse = callResult.outcome.text;
+        const turnEvents = callResult.outcome.turnEvents ?? [];
         input.onChunk?.(fullResponse);
 
         const assistantMessageId = crypto.randomUUID();
-        await this.deps.stores.chat.appendMessage({
-            id: assistantMessageId,
-            conversationId: input.conversationId,
-            senderActorId: prepared.selfActorId,
-            content: fullResponse,
-            createdAt: new Date().toISOString(),
+        await this.deps.stores.chat.appendAssistantTurn({
+            message: {
+                id: assistantMessageId,
+                conversationId: input.conversationId,
+                senderActorId: prepared.selfActorId,
+                kind: "assistant_turn_events",
+                displayText: fullResponse,
+                createdAt: new Date().toISOString(),
+            },
+            events: turnEvents,
         });
 
         this.logger.verbose("persona-flow/chat-turn: structured fallback assistant message appended for stream request", {
@@ -288,6 +298,7 @@ export class PersonaFlowChatTurnService {
             output: fullResponse,
             userMessageId: prepared.userMessage.id,
             assistantMessageId,
+            turnEvents,
             ...(input.includeAssembledMessages ? { assembledMessages: callResult.llmRequestSnapshot.messages } : {}),
             streamCompleted: true,
         };

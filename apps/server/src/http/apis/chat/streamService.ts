@@ -91,6 +91,7 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
         requestId: streamResult.requestId,
         model: streamResult.model,
         apiKeySource: streamResult.apiKeySource,
+        turnEvents: streamResult.turnEvents,
     };
     res.write(`data: ${JSON.stringify(doneEvent)}\n\n`);
     res.end();
