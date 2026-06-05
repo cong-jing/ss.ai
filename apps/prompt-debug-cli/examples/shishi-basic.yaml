@@ -2,7 +2,7 @@ name: shishi-basic
 
 provider: mistral
 model: mistral-small-latest
-apiKey: UqD5VE7kunyUCA4fhGW0qtHz3eEVA5Ip
+
 
 character:
   name: 诗诗

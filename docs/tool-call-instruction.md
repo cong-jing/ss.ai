@@ -1,5 +1,34 @@
 # 实现任务：为 persona-flow 增加 submit_turn_events 工具调用路径
 
+## 实现状态（2026-06-05）
+
+本文档为原始实现计划，主线已经按设计落地。后续 contributor 阅读时请先看这一块再决定是否还需要参考下面的细节章节。
+
+### 已实现
+
+- **第 1 节 — 通用工具类型**：`ModelFunctionToolDefinition` / `ModelToolDefinition` 已落到 [packages/persona-flow/src/llm/tools/toolDefinition.ts](../packages/persona-flow/src/llm/tools/toolDefinition.ts)（provider-neutral，参数走 Zod schema）。
+- **第 2 节 — 共享 TurnEvent schema**：[packages/contracts/src/turnEvents.ts](../packages/contracts/src/turnEvents.ts) 作为唯一事实源，前后端 / 模型工具参数 / SQLite 持久化都从这里派生。
+- **第 3 节 — submitTurnEventsTool**：[packages/persona-flow/src/llm/tools/submitTurnEventsTool.ts](../packages/persona-flow/src/llm/tools/submitTurnEventsTool.ts) 已声明为 terminal tool。
+- **第 4 节 — ModelClient 输入扩展**：`ModelGenerationInput` 已接受 `tools` / `toolChoice` / `toolRequest`（[packages/persona-flow/src/llm/modelClient.ts](../packages/persona-flow/src/llm/modelClient.ts)）。
+- **第 5 节 — API contracts**：`/v1/chat` 与 `/v1/chat/stream` 响应已带上 `turnEvents`（[packages/contracts/src/apis/chat.api.ts](../packages/contracts/src/apis/chat.api.ts)）。
+- **第 6 节 — Mistral adapter**：non-stream 路径完整支持 tool call（[packages/persona-flow-model-client/src/mistral/mistralToolAdapter.ts](../packages/persona-flow-model-client/src/mistral/mistralToolAdapter.ts) + [mistralModelClient.ts](../packages/persona-flow-model-client/src/mistral/mistralModelClient.ts)）。
+- **第 8 节 — tool call arguments 解析**：[packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts](../packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts)。
+- **第 9 节 — singleCharacterChatCall**：已切换到强制 `submit_turn_events` 工具调用（[singleCharacterChatCall.ts](../packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.ts)）。
+- **第 10 节 — ModelRuntime**：`chat()` 透传 tool 相关字段并把 `toolCalls` 收集到 `ModelCallOutcome`。
+- **第 11 节 — ChatTurnService**：non-stream 路径解析 `submit_turn_events` 并把 `TurnEvent[]` 回到 service 输出。
+- **第 12 节（部分）— 上层 API/前端**：`/v1/chat` 与 `/v1/chat/stream` done event 里都会带 `turnEvents`；web 端 [useChatViewModel.ts](../apps/web/src/panels/chat/useChatViewModel.ts) 已经按 `replyText` 类型渲染。
+- **第 13 节（部分）— 持久化**：`messages` 表新增 `kind / display_text`，新建 `turn_events` 表，`appendAssistantTurn` / `deleteMessage` 走事务（[SQLiteMessageStore.ts](../packages/persona-flow-sqlite/src/db/SQLiteMessageStore.ts)）。
+- **第 14 节 — 中文 prompt**：[templates/system.zh-CN.md.hbs](../packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/templates/system.zh-CN.md.hbs)。
+
+### 跟进项 / 未实现
+
+- **第 7 节 — OpenAI adapter**：尚未实现。
+- **第 12 节 — 真正的 token stream**：目前 `/v1/chat/stream` 仍走 non-stream model call 后一次性 emit；`MistralModelClient.generateStream` 暂时直接抛 `Error("not implemented yet")`，等做真流时再补 tool-call delta 累积（按 `index` 合并 arguments 片段）。
+- **第 13 节 — stateUpdate 投影 / 状态快照查询**：当前只把 `stateUpdate` 写进 `turn_events`，没有"按事件类型查询当前 expression / sceneAtmosphere"的派生表或 cache。
+- **第 15 节 — 完整 agent loop / 非 terminal 工具**：当前只支持 terminal tool `submit_turn_events`，没有 `query_memory` / `query_knowledge` / `get_character_state` 等中间工具及其 loop。
+
+---
+
 ## 背景
 
 当前 `persona-flow` 需要支持多种 `ModelClient`，例如 Mistral、OpenAI，以及未来可能加入的其他 provider。

@@ -171,7 +171,7 @@ describe("persona-flow chat turn service", () => {
         assert.deepEqual(assistantMessages[0].turnEvents, result.turnEvents);
     });
 
-    it("streamTurn emits normalized chunks and persists assistant message", async () => {
+    it("streamTurn emits the full normalized reply once and persists assistant message", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);

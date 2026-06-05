@@ -17,8 +17,17 @@ function rowToMessage(row: MessageRow, events: NonNullable<Message["turnEvents"]
     };
 }
 
-function rowToTurnEvent(row: TurnEventRow): NonNullable<Message["turnEvents"]>[number] {
-    return TurnEventSchema.parse(JSON.parse(row.payloadJson));
+function rowToTurnEvent(row: TurnEventRow): NonNullable<Message["turnEvents"]>[number] | null {
+    if (row.schemaVersion !== 1) {
+        return null;
+    }
+
+    try {
+        const parsed = TurnEventSchema.safeParse(JSON.parse(row.payloadJson));
+        return parsed.success ? parsed.data : null;
+    } catch {
+        return null;
+    }
 }
 
 export class SQLiteMessageStore {
@@ -89,8 +98,12 @@ export class SQLiteMessageStore {
             : [];
         const eventsByMessageId = new Map<string, NonNullable<Message["turnEvents"]>>();
         for (const row of eventRows) {
+            const event = rowToTurnEvent(row);
+            if (!event) {
+                continue;
+            }
             const list = eventsByMessageId.get(row.messageId) ?? [];
-            list.push(rowToTurnEvent(row));
+            list.push(event);
             eventsByMessageId.set(row.messageId, list);
         }
 

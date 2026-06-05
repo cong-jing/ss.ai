@@ -4,6 +4,7 @@
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 import { openDatabase, SQLiteConversationStore, SQLiteChatStore } from "../src/index.js";
+import { turnEvents } from "../src/db/schema.js";
 import type { Conversation, Message } from "@ss-ai/persona-flow";
 
 function makeConversation(overrides?: Partial<Conversation>): Conversation {
@@ -131,6 +132,52 @@ describe("SQLiteChatStore — message operations", () => {
         assert.equal(result[0].kind, "assistant_turn_events");
         assert.equal(result[0].displayText, "hello");
         assert.deepEqual(result[0].turnEvents, events);
+    });
+
+    it("getRecentMessages — skips unreadable turn event rows", async () => {
+        const cid = "conv_bad_events_" + crypto.randomUUID();
+        const { db } = openDatabase(":memory:");
+        const localStore = new SQLiteChatStore(db);
+        const convStore = new SQLiteConversationStore(db);
+        const conv = makeConversation({ id: cid });
+        const { selfActorId } = await convStore.createConversation(conv, { selfDisplayName: "AI" });
+        const message = makeMessage(cid, selfActorId, {
+            kind: "assistant_turn_events",
+            displayText: "hello",
+        });
+        const validEvent: NonNullable<Message["turnEvents"]>[number] = {
+            type: "replyText",
+            characterId: "char_a",
+            text: "hello",
+        };
+
+        await localStore.appendAssistantTurn({ message, events: [validEvent] });
+        await db.insert(turnEvents).values([
+            {
+                id: crypto.randomUUID(),
+                messageId: message.id,
+                conversationId: cid,
+                seq: 1,
+                type: "replyText",
+                payloadJson: "{bad json",
+                schemaVersion: 1,
+                createdAt: message.createdAt,
+            },
+            {
+                id: crypto.randomUUID(),
+                messageId: message.id,
+                conversationId: cid,
+                seq: 2,
+                type: "replyText",
+                payloadJson: JSON.stringify(validEvent),
+                schemaVersion: 999,
+                createdAt: message.createdAt,
+            },
+        ]);
+
+        const result = await localStore.getRecentMessages({ conversationId: cid, limit: 10 });
+        assert.equal(result[0].kind, "assistant_turn_events");
+        assert.deepEqual(result[0].turnEvents, [validEvent]);
     });
 
     it("deleteMessage — removes attached turn events", async () => {

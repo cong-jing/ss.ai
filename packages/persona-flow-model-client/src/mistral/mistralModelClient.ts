@@ -101,79 +101,14 @@ export class MistralModelClient implements ModelAdapter {
         };
     }
 
-    async generateStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
-        const client = await this.getClient();
-        const toolRequest = toMistralToolRequest(input);
-
-        const stream = await withTimeout(
-            client.chat.stream({
-                model: input.model,
-                messages: toSdkMessages(input),
-                responseFormat: { type: "text" },
-                ...toolRequest,
-            }),
-            this.options.timeoutMs,
-            "Mistral non-structured stream request",
-        );
-
-        let output = "";
-        const toolCalls: ModelToolCall[] = [];
-        let usage: ModelUsage | undefined;
-        let completed = false;
-        let finishReason: string | undefined;
-
-        for await (const event of stream as AsyncIterable<{ data?: { choices?: Array<{ delta?: { content?: unknown; toolCalls?: unknown[] | null }; finishReason?: unknown; finish_reason?: unknown }>; usage?: unknown } }>) {
-            const data = event?.data;
-            const choices = data?.choices;
-            if (!Array.isArray(choices)) {
-                continue;
-            }
-
-            const eventUsage = extractUsage({ usage: data?.usage });
-            if (eventUsage) {
-                usage = eventUsage;
-            }
-
-            for (const choice of choices) {
-                const delta = choice?.delta;
-                if (!delta) {
-                    const rawFinishReason = choice?.finishReason ?? choice?.finish_reason;
-                    if (typeof rawFinishReason === "string" && rawFinishReason.length > 0) {
-                        completed = true;
-                        finishReason = rawFinishReason;
-                    }
-                    continue;
-                }
-
-                const textDelta = extractTextDelta(delta.content);
-                if (textDelta) {
-                    output += textDelta;
-                    callbacks?.onTextDelta?.(textDelta);
-                }
-
-                if (Array.isArray(delta.toolCalls) && delta.toolCalls.length > 0) {
-                    for (const rawToolCall of delta.toolCalls) {
-                        const normalized = normalizeToolCall(rawToolCall);
-                        toolCalls.push(normalized);
-                        callbacks?.onToolCall?.(normalized);
-                    }
-                }
-
-                const rawFinishReason = choice?.finishReason ?? choice?.finish_reason;
-                if (typeof rawFinishReason === "string" && rawFinishReason.length > 0) {
-                    completed = true;
-                    finishReason = rawFinishReason;
-                }
-            }
-        }
-
-        return {
-            output,
-            toolCalls,
-            usage,
-            completed,
-            finishReason,
-        };
+    async generateStream(_input: ModelGenerationInput, _callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
+        // TODO: implement real streaming once we settle on tool-call delta accumulation.
+        // The previous draft tried to forward `submit_turn_events` tools to Mistral's stream API,
+        // but Mistral returns toolCall arguments as fragmented deltas that need to be merged by
+        // `index` before they can be JSON.parse-d. Until that's done, fall back to the non-stream
+        // path via `ModelRuntime.chat()` / `ChatTurnService.streamTurn()` (which already emits the
+        // full reply once) instead of producing partial / corrupt turnEvents.
+        throw new Error("MistralModelClient.generateStream is not implemented yet.");
     }
 
     async listModels(): Promise<string[]> {

@@ -12,27 +12,6 @@ import {
 import { DefaultModelClient } from "@ss-ai/persona-flow-model-client";
 import { parse as parseYaml } from "yaml";
 
-type PromptViewModel = {
-    p1: {
-        speakerTag: string;
-        displayName: string;
-        description: string;
-        personaPrompt: string;
-    };
-    p2: {
-        speakerTag: string;
-    };
-    actors: Array<{
-        speakerTag: string;
-        displayName: string;
-        sourceType: "logged_user" | "local_actor";
-        profile: string;
-    }>;
-    relationshipState: string;
-    memories: string[];
-    structuredOutput: boolean;
-};
-
 type CurrentPromptViewModel = {
     character: {
         displayName: string;
@@ -63,35 +42,10 @@ type CliConfig = {
         name?: string;
         bio?: string;
     };
-    p1?: {
-        speakerTag?: string;
-    };
-    self?: {
-        // Backward compatibility with old config shape.
-        alias?: string;
-    };
-    actors?: Array<{
-        // Deprecated, use speakerTag.
-        alias?: string;
-        role?: string;
-        sourceType?: string;
-        displayName?: string;
-        // Deprecated, use profile.
-        info?: string;
-        profile?: string;
-        speakerTag?: string;
-    }>;
-    relationshipState?: string;
-    memories?: string[];
     messages?: Array<{
         role?: "system" | "user" | "assistant";
-        // Preferred field name for history speaker label.
-        speakerTag?: string;
-        // Backward compatibility with old config shape.
-        speakerAlias?: string;
         content?: string;
     }>;
-    structuredOutput?: boolean;
 };
 
 type CliArgs = {
@@ -277,54 +231,10 @@ async function parseArgs(argv: string[]): Promise<CliArgs> {
     };
 }
 
-function toPromptViewModel(config: CliConfig): PromptViewModel {
-    const normalizedActors = (config.actors ?? [])
-        .filter(actor => actor.role !== "self" && actor.role !== "system")
-        .map((actor, index) => {
-            const sourceType: PromptViewModel["actors"][number]["sourceType"] = actor.sourceType === "logged_user"
-                ? "logged_user"
-                : "local_actor";
-            const displayName = (actor.displayName ?? "").trim() || "unknown";
-            const speakerTag = actor.speakerTag
-                ?? actor.alias
-                ?? `p${index + 3}[${displayName}]`;
-            const profile = (actor.profile ?? actor.info ?? "").trim() || "（无）";
-
-            return {
-                speakerTag,
-                displayName,
-                sourceType,
-                profile,
-            };
-        });
-
-    const selfDisplayName = (config.character?.displayName || config.character?.name || "").trim() || "self";
-    const selfSpeakerTag = config.p1?.speakerTag
-        ?? config.self?.alias
-        ?? `p1[${selfDisplayName}]`;
-
-    return {
-        p1: {
-            speakerTag: selfSpeakerTag,
-            displayName: selfDisplayName,
-            description: config.character?.description ?? "",
-            personaPrompt: config.character?.personaPrompt ?? "",
-        },
-        p2: {
-            speakerTag: "p2[system]",
-        },
-        actors: normalizedActors,
-        relationshipState: config.relationshipState ?? "",
-        memories: config.memories ?? [],
-        structuredOutput: config.structuredOutput ?? true,
-    };
-}
-
 function toCurrentPromptViewModel(config: CliConfig): CurrentPromptViewModel {
     const characterDisplayName = (config.character?.displayName || config.character?.name || "").trim() || "Character";
-    const loggedUserActor = (config.actors ?? []).find(actor => actor.sourceType === "logged_user");
-    const userName = (config.userProfile?.name || config.userProfile?.userId || loggedUserActor?.displayName || "").trim() || "User";
-    const userBio = (config.userProfile?.bio || loggedUserActor?.profile || loggedUserActor?.info || "").trim();
+    const userName = (config.userProfile?.name || config.userProfile?.userId || "").trim() || "User";
+    const userBio = (config.userProfile?.bio || "").trim();
 
     return {
         character: {

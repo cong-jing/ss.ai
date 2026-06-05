@@ -6,6 +6,7 @@ export type Message = {
     /** Points to conversation_actors.id — identifies the actual speaker. */
     senderActorId: string;
     kind: MessageKind;
+    /** Domain display text; stored as DB display_text and exposed by current chat APIs as content. */
     displayText: string;
     turnEvents?: TurnEvent[];
     createdAt: string; // ISO 8601 字符串

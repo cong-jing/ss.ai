@@ -197,5 +197,12 @@ export async function chat(
         return replyText;
     }
 
-    return res.output;
+    // The model can intentionally produce a turn without any replyText (e.g. expression-only
+    // events). Treat that as "no reply" so the bot keeps quiet instead of sending empty text.
+    if (res.turnEvents && res.turnEvents.length > 0) {
+        return null;
+    }
+
+    const fallback = res.output.trim();
+    return fallback ? fallback : null;
 }

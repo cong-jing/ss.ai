@@ -182,6 +182,9 @@ export class PersonaFlowChatTurnService {
         const normalizedAssistantOutput = callResult.outcome.text;
         const turnEvents = callResult.outcome.turnEvents ?? [];
 
+        // Assistant turns are persisted even when no replyText event produced visible text.
+        // UI and bot integrations can then skip rendering/sending the empty text while
+        // still retaining non-text turn events such as expression or state updates.
         const assistantMessageId = crypto.randomUUID();
         await this.deps.stores.chat.appendAssistantTurn({
             message: {
