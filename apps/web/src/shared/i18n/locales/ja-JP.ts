@@ -92,7 +92,7 @@ export const jaJP: MessageSchema = {
     "chat.message.viewAssembledInput": "組み立て入力を表示",
     "chat.message.hideAssembledInput": "組み立て入力を非表示",
     "chat.message.promptPreview": "Prompt プレビュー",
-    "chat.message.structuredOutput": "構造化出力",
+    "chat.message.structuredOutput": "ターンイベント",
     "chat.message.countMessages": "{count} 件のメッセージ",
     "chat.source.logged_user": "ログインユーザー",
     "chat.source.local_actor": "ローカル actor",

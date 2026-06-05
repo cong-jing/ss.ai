@@ -94,7 +94,6 @@ describe("persona-flow chat turn preparation", () => {
                 characterId: base.characterId,
                 conversationId: "missing-conv",
                 userMessageText: "hello",
-                llmResponseMode: "structured",
                 senderActorId: base.userActorId,
                 persistUserMessage: false,
             }),
@@ -123,7 +122,6 @@ describe("persona-flow chat turn preparation", () => {
                 characterId: base.characterId,
                 conversationId: base.conversationId,
                 userMessageText: "hello",
-                llmResponseMode: "structured",
                 senderActorId: base.userActorId,
                 persistUserMessage: false,
             }),
@@ -169,7 +167,6 @@ describe("persona-flow chat turn preparation", () => {
             characterId: base.characterId,
             conversationId: base.conversationId,
             userMessageText: "new prompt",
-            llmResponseMode: "structured",
             senderActorId: base.userActorId,
             persistUserMessage: false,
         });
@@ -183,7 +180,6 @@ describe("persona-flow chat turn preparation", () => {
             userId: base.userId,
             characterId: base.characterId,
             promptContext: prepared.promptContext,
-            llmResponseMode: "structured",
             interactionMode: "single_character_chat",
             dryRun: true,
         });

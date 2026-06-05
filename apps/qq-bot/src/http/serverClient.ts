@@ -183,7 +183,6 @@ export async function chat(
         characterId,
         conversationId,
         userMessageText,
-        llmResponseMode: "structured",
         ...(senderActorId ? { senderActorId } : {}),
     });
 

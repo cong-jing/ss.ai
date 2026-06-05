@@ -1,4 +1,4 @@
-import { DEFAULT_INTERACTION_MODE, INTERACTION_MODES, type LlmResponseMode, type InteractionMode } from "@ss-ai/contracts";
+import { DEFAULT_INTERACTION_MODE, INTERACTION_MODES, type InteractionMode } from "@ss-ai/contracts";
 import {
     PersonaFlowChatTurnService
 } from "@ss-ai/persona-flow";
@@ -39,16 +39,6 @@ export function requireUserMessageText(userMessageText: unknown, endpoint: strin
         throw new HttpStatusError(400, `${endpoint}: userMessageText is required.`);
     }
     return userMessageText;
-}
-
-export function resolveLlmResponseMode(value: unknown, endpoint: string, defaultMode: LlmResponseMode): LlmResponseMode {
-    if (value === undefined || value === null || value === "") {
-        return defaultMode;
-    }
-    if (value === "structured" || value === "non-structured") {
-        return value;
-    }
-    throw new HttpStatusError(400, `${endpoint}: llmResponseMode must be 'structured' or 'non-structured'.`);
 }
 
 const interactionModes = new Set<string>(INTERACTION_MODES);

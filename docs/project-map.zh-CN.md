@@ -141,11 +141,11 @@ pnpm --dir ./.deploy-prod/server start
 1. `PersonaFlowChatTurnService.chatTurn()` 接收 user、character、conversation 和 message 输入。
 2. `prepareChatTurnContext()` 校验角色和会话、解析发送方 actor、按需追加用户消息，并构建 `PromptContext`。
 3. `resolveModelCall()` 根据请求的 purpose 和 interaction mode 选择已注册 handler。目前实际使用的是 `chat.main:single_character_chat`。
-4. handler 组装 LLM messages，随后 `ModelRuntime.chat()` 从 `userPreferences.modelAssignments[modelCallPurpose]` 解析 provider 和 model，从 `providerCredential` 解析 API key，最后调用 `ModelClient`。
-5. structured 回复会做归一化处理；如果 structured 输出为空，就不会追加 assistant 消息。
-6. 未被跳过的回复会作为 conversation 的 `self` actor 消息写入 chat store。
+4. handler 组装 LLM messages，并要求模型通过 `submit_turn_events` terminal tool 提交本回合事件。
+5. tool-call 结果会解析成 `TurnEvent[]`，其中 `replyText` 会归一化为展示文本。
+6. 回复会作为 conversation 的 `self` actor 消息写入 chat store，同时结构化事件写入 `turn_events`。
 
-`single_character_chat` 的 streaming 还没有真正完成。虽然 `/v1/chat/stream` 和前端 SSE 路径已经存在，但当前实现仍然会退回到一次 structured model call，然后把完整回复作为单个 SSE chunk 发出。
+`single_character_chat` 的 streaming 还没有真正完成。虽然 `/v1/chat/stream` 和前端 SSE 路径已经存在，但当前实现仍然会先走一次 `submit_turn_events` tool call，然后把完整回复作为单个 SSE chunk 发出。
 
 interaction modes 定义在 `@ss-ai/contracts` 中。当前只有 `single_character_chat` 真正注册到运行时；其他 mode 虽然已经在 contracts 和 UI 中存在，但还没有接入 prompt 和 model-call dispatch。
 
@@ -229,8 +229,8 @@ Express HTTP 服务。
 - 认证支持两种模式，通过 `config.auth.mode` 切换：`default-user` 和 `local-password`
 - `default-user` 不做真实登录，所有请求都视为配置中的默认用户
 - `local-password` 提供一个简单的用户名密码加 session-cookie 的认证流程
-- `/v1/chat` 默认使用 structured output
-- `/v1/chat/stream` 在 HTTP 层保持 SSE 响应形状并拒绝 structured mode，但当前 `single_character_chat` 实现仍然是一次性吐出完整回复
+- `/v1/chat` 使用 `submit_turn_events` tool call，并返回统一的 `output + turnEvents` 聊天契约
+- `/v1/chat/stream` 在 HTTP 层保持 SSE 响应形状，但当前 `single_character_chat` 实现仍然是一次性吐出完整回复；最终 `done` 事件携带 `turnEvents`
 - `/v1/chat/dry-run` 只组装 prompt messages，不做 LLM 调用，也不持久化
 - prompt logs 由 `promptLog` 配置控制
 
@@ -424,5 +424,5 @@ curl http://127.0.0.1:8999/health
 ```bash
 curl -X POST http://127.0.0.1:8999/v1/chat/dry-run \
   -H "Content-Type: application/json" \
-  -d '{"characterId":"<character-id>","conversationId":"<conversation-id>","userMessageText":"hello","llmResponseMode":"structured"}'
+  -d '{"characterId":"<character-id>","conversationId":"<conversation-id>","userMessageText":"hello"}'
 ```

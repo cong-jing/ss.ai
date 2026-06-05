@@ -1,6 +1,5 @@
 import type { RenderedMessage } from "../prompt/promptTypes.js";
 import type {
-    GenerationMode as LlmResponseMode,
     ModelClient,
     StructuredOutputSchema,
     ModelToolCall,
@@ -17,7 +16,6 @@ export interface PersonaModelRequest {
     characterId: string;
     messages: RenderedMessage[];
     modelCallPurpose: ModelCallPurpose;
-    llmResponseMode?: LlmResponseMode;
     structuredOutputSchema?: StructuredOutputSchema;
     tools?: ModelToolDefinition[];
     toolChoice?: ModelToolChoice;
@@ -28,7 +26,6 @@ export interface PersonaModelResponse {
     model: string;
     requestId: string;
     apiKeySource: "user" | "default";
-    llmResponseMode: LlmResponseMode;
     structuredOutput?: unknown;
     toolCalls: ModelToolCall[];
     usage?: ModelUsage;
@@ -138,7 +135,7 @@ export class ModelRuntime {
             model: model,
             messages: request.messages,
             output: JSON.stringify({
-                mode: request.llmResponseMode ?? "non-structured",
+                outputMode: request.structuredOutputSchema ? "structured" : "text_or_tools",
                 modelCallPurpose: request.modelCallPurpose ?? "chat.main",
                 tools: request.tools?.map(tool => ({
                     kind: tool.kind,
@@ -163,8 +160,7 @@ export class ModelRuntime {
 
     async chat(request: PersonaModelRequest): Promise<PersonaModelResponse> {
         const requestId = crypto.randomUUID();
-        const llmResponseMode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
-        const isStructuredResponse = llmResponseMode === "structured";
+        const isStructuredResponse = Boolean(request.structuredOutputSchema);
         const { provider, model, encryptedApiKey, apiKeySource } = await this.resolveProviderModelRuntime(
             request.userId,
             request.characterId,
@@ -173,7 +169,7 @@ export class ModelRuntime {
 
         this.logger.verbose("persona-flow/model: chat request", {
             requestId,
-            llmResponseMode,
+            outputMode: isStructuredResponse ? "structured" : "text_or_tools",
             modelCallPurpose: request.modelCallPurpose,
             messages: request.messages,
         });
@@ -216,7 +212,7 @@ export class ModelRuntime {
             const errorMessage = err instanceof Error ? err.message : "Unknown error";
             this.logger.error("persona-flow/model: chat failed", {
                 requestId,
-                llmResponseMode: llmResponseMode,
+                outputMode: isStructuredResponse ? "structured" : "text_or_tools",
                 modelCallPurpose: request.modelCallPurpose,
                 error: errorMessage,
             });
@@ -241,7 +237,7 @@ export class ModelRuntime {
 
         this.logger.verbose("persona-flow/model: chat completed", {
             requestId,
-            llmResponseMode,
+            outputMode: isStructuredResponse ? "structured" : "text_or_tools",
             modelCallPurpose: request.modelCallPurpose,
             output,
             structuredOutput,
@@ -262,7 +258,6 @@ export class ModelRuntime {
             model: model,
             requestId,
             apiKeySource,
-            llmResponseMode: llmResponseMode,
             toolCalls,
             usage,
             ...(structuredOutput ? { structuredOutput } : {}),
@@ -271,7 +266,6 @@ export class ModelRuntime {
 
     async chatStream(request: PersonaModelRequest & { onTextDelta?: (delta: string) => void }): Promise<PersonaModelResponse & ModelStreamResult> {
         const requestId = crypto.randomUUID();
-        const mode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
         const modelCallPurpose = request.modelCallPurpose ?? "chat.main";
         const { provider, model, encryptedApiKey, apiKeySource } = await this.resolveProviderModelRuntime(
             request.userId,
@@ -279,18 +273,8 @@ export class ModelRuntime {
             modelCallPurpose as ModelCallPurpose,
         );
 
-        if (mode !== "non-structured") {
-            this.logger.warn("persona-flow/model: chatStream called with unsupported mode", {
-                requestId,
-                mode,
-                modelCallPurpose,
-            });
-            throw new Error("PersonaFlow chatStream currently supports only non-structured mode.");
-        }
-
         this.logger.verbose("persona-flow/model: chatStream request", {
             requestId,
-            mode,
             modelCallPurpose,
             messages: request.messages,
         });
@@ -323,7 +307,6 @@ export class ModelRuntime {
             streamError = err instanceof Error ? err.message : "Unknown error";
             this.logger.error("persona-flow/model: chatStream failed", {
                 requestId,
-                mode,
                 modelCallPurpose,
                 error: streamError,
             });
@@ -343,7 +326,6 @@ export class ModelRuntime {
         if (!streamResult) {
             this.logger.error("persona-flow/model: chatStream missing stream result", {
                 requestId,
-                mode,
                 modelCallPurpose,
             });
             throw new Error("PersonaFlow chatStream ended without a stream result.");
@@ -351,7 +333,6 @@ export class ModelRuntime {
 
         this.logger.verbose("persona-flow/model: chatStream completed", {
             requestId,
-            mode,
             modelCallPurpose,
             outputLength: streamResult.output?.length ?? 0,
             toolCallCount: streamResult.toolCalls.length,
@@ -373,7 +354,6 @@ export class ModelRuntime {
             model: model,
             requestId,
             apiKeySource,
-            llmResponseMode: mode,
             toolCalls: streamResult.toolCalls,
             usage: streamResult.usage,
             completed: streamResult.completed,

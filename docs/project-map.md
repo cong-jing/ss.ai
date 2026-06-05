@@ -240,8 +240,8 @@ Important behavior:
 - Auth supports two modes through `config.auth.mode`: `default-user` and `local-password`.
 - `default-user` skips real sign-in and treats every request as the configured default user.
 - `local-password` enables a small built-in username/password plus session-cookie auth flow.
-- `/v1/chat` still accepts the shared `llmResponseMode` request field, but the current `single_character_chat` runtime path uses the `submit_turn_events` tool internally and returns `turnEvents`.
-- `/v1/chat/stream` keeps the SSE response shape and rejects structured mode at the HTTP layer, but the current `single_character_chat` implementation still emits a full reply once rather than token by token. The final `done` event carries `turnEvents`.
+- `/v1/chat` uses the `submit_turn_events` tool internally and returns the unified `output + turnEvents` chat contract.
+- `/v1/chat/stream` keeps the SSE response shape, but the current `single_character_chat` implementation still emits a full reply once rather than token by token. The final `done` event carries `turnEvents`.
 - `/v1/chat/dry-run` assembles prompt messages without LLM calls or persistence.
 - Prompt logs are controlled by `promptLog` config.
 
@@ -444,5 +444,5 @@ Dry-run prompt assembly before debugging model behavior:
 ```bash
 curl -X POST http://127.0.0.1:8999/v1/chat/dry-run \
   -H "Content-Type: application/json" \
-  -d '{"characterId":"<character-id>","conversationId":"<conversation-id>","userMessageText":"hello","llmResponseMode":"structured"}'
+  -d '{"characterId":"<character-id>","conversationId":"<conversation-id>","userMessageText":"hello"}'
 ```

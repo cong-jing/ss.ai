@@ -149,7 +149,6 @@ describe("persona-flow chat turn service", () => {
             characterId: base.characterId,
             conversationId: base.conversationId,
             userMessageText: "hello",
-            llmResponseMode: "structured",
             senderActorId: base.userActorId,
         });
 
@@ -228,7 +227,6 @@ describe("persona-flow chat turn service", () => {
             characterId: base.characterId,
             conversationId: base.conversationId,
             userMessageText: "stream me",
-            llmResponseMode: "non-structured",
             senderActorId: base.userActorId,
             includeAssembledMessages: true,
             onAssembledMessages: (messages) => {

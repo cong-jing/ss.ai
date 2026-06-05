@@ -13,7 +13,7 @@
 - `messages.kind + display_text` 和新建 `turn_events` 表都在 [openDatabase.ts](../packages/persona-flow-sqlite/src/db/openDatabase.ts) / [openCharacterDatabase.ts](../packages/persona-flow-sqlite/src/db/openCharacterDatabase.ts) / [schema.ts](../packages/persona-flow-sqlite/src/db/schema.ts) 配齐，并且 `appendAssistantTurn` / `deleteMessage` 都走事务（[SQLiteMessageStore.ts](../packages/persona-flow-sqlite/src/db/SQLiteMessageStore.ts)）。
 - 测试更新到位（[personaFlowChatTurnService.test.ts](../packages/persona-flow/test/personaFlowChatTurnService.test.ts)、[submitTurnEventsParser.test.ts](../packages/persona-flow/test/submitTurnEventsParser.test.ts)、[messages.test.ts](../packages/persona-flow-sqlite/test/messages.test.ts) 等）。
 
-剩余风险主要在命名/抽象收敛、contracts 引入 Zod 后的前端引用与 bundle 行为、以及 stream 真流化的后续推进，不阻塞主线。
+剩余风险主要在命名/抽象收敛、chat 层输出模式语义、以及 stream 真流化的后续推进，不阻塞主线。
 
 ## 已完成项
 
@@ -24,6 +24,8 @@
 - [personaFlowChatTurnService.test.ts](../packages/persona-flow/test/personaFlowChatTurnService.test.ts) 的 stream 测试名已改成 “full normalized reply once” 语义，避免误读成已验证真流式。
 - [system.zh-CN.md.hbs](../packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/templates/system.zh-CN.md.hbs) 已修正 `replyText` 文案并补齐文件末尾换行。
 - [mistralToolAdapter.test.ts](../packages/persona-flow-model-client/test/mistralToolAdapter.test.ts) 已新增，覆盖 `submitTurnEventsTool` 转 Mistral function tool 后的 `parameters.type`、`required.events`、`events` 数组、以及 discriminated union 分支数量。
+- contracts / Zod 的 web bundle 边界已收口：[turnEvents.ts](../packages/contracts/src/turnEvents.ts) 现在只导出纯类型和字面量常量，[turnEvents.schema.ts](../packages/contracts/src/turnEvents.schema.ts) 专门导出 Zod schema，并通过 [package.json](../packages/contracts/package.json) 的 `./turnEvents.schema` 子入口暴露。需要运行时校验的 persona-flow / SQLite 代码已改为显式 import schema 子入口；web build 已验证不再包含 `$Zod` / `ZodError` / `TurnEventSchema` 等运行时代码。
+- `LlmResponseMode` 已从 chat contracts、server route、chatTurn/modelCall 输入、web / QQ bot 客户端和测试中移除。chat API 现在只有一种输出契约：非 stream 和 stream 都返回 `output + turnEvents`，底层 provider structured response 能力仍通过 `structuredOutputSchema` 留在 `ModelRuntime` / `ModelClient` 层。
 
 ## 剩余问题
 
@@ -62,14 +64,7 @@ try {
 
 `schema_version` 兼容读取和坏事件跳过已经完成；这里只剩顺序上的防御性增强，优先级较低。
 
-### 4. `LlmResponseMode` 仍然存在但被边缘化
-
-- contracts 还保留 `LlmResponseMode = "non-structured" | "structured"`（[chat.api.ts](../packages/contracts/src/apis/chat.api.ts)），server 也仍然在收。
-- `singleCharacterChatCall` 现在永远写 `llmResponseMode: "non-structured"`，并且 `structuredOutputSchema` 字段在主链上没人用了（但 `PersonaModelRequest` / `ModelGenerationInput` 还留着）。
-- 这套字段如果决定“只为兼容某些非 chat.main 的 model call 保留”，就在 chat.api / route 文档里说明“stream 接口拒绝 structured；non-stream 接口的该字段对 chat.main 已无效”。否则迟早会有人传 `structured` 跑 chat 然后困惑。
-- 建议下一步直接从 contracts 删掉 `LlmResponseMode`，或者改成 `outputContract: "tool_call:submit_turn_events"` 这种更准确的命名。
-
-### 5. `ModelCallOutcome.turnEvents` 强耦合到 single_character_chat
+### 4. `ModelCallOutcome.turnEvents` 强耦合到 single_character_chat
 
 [modelCall.ts](../packages/persona-flow/src/modelCall/modelCall.ts):
 
@@ -86,21 +81,13 @@ try {
 
 第一版可以不做，但建议在后续 agent loop 演进前收敛。
 
-### 6. contracts 依赖 Zod 后的 web 引用 / bundle 行为
-
-[packages/contracts/package.json](../packages/contracts/package.json) 引入了 `zod ^4.3.6`。注意：
-
-- contracts 长期目标是“前后端共享类型”，引入 Zod 之后任何 import contracts 的前端代码都可能把 Zod runtime 带进 bundle。web 侧 [chatTypes.ts](../apps/web/src/panels/chat/chatTypes.ts) 仅引用 `type TurnEvent` 是好做法，但 [chatApi.ts](../apps/web/src/panels/chat/chatApi.ts) 引用了 `ApiChat` 等 value export，理论上 tree-shaking 不一定能完全去掉 Zod runtime（因为 `turnEvents.ts` 是 value export）。
-- 建议在讨论前先实测 Vite bundle 里是否引入 Zod；如果确实带入且体积/边界不理想，再考虑把 `turnEvents` 拆成 type-only 子模块和 schema 子模块。
-- 拆分方向：`turnEvents.types.ts` 仅导出类型/字面量常量，`turnEvents.schema.ts` 导出 Zod schema + 派生 type，后端 / persona-flow import schema，前端尽量 import type-only 路径。
-
-### 7. `mistralToolAdapter` schema 归一化仍可增强
+### 5. `mistralToolAdapter` schema 归一化仍可增强
 
 [mistralToolAdapter.ts](../packages/persona-flow-model-client/src/mistral/mistralToolAdapter.ts) 已有测试覆盖当前 `submit_turn_events` schema 形状，但 adapter 本身还没有显式处理 `$defs` / `definitions`、`additionalProperties`、或 Mistral 对 `oneOf` / `anyOf` 的偏好。
 
 目前 prompt log 中能跑通，新增测试也能防止 Zod 大版本升级时 schema 形状悄悄回归。后续如果遇到 provider 对 schema 严格度的兼容问题，再考虑在 adapter 层做 provider-specific normalization。
 
-### 8. 旧 prompt-debug 模板路径仍需清理或文档化
+### 6. 旧 prompt-debug 模板路径仍需清理或文档化
 
 仓库还保留了旧版 `data/prompts/zh-CN/main.md.hbs` 模板搜索路径（[apps/prompt-debug-cli/src/index.ts](../apps/prompt-debug-cli/src/index.ts)），但实际主链路不再使用。建议清理，或在 README / project map 中说明“旧 prompt 模板已废弃，仅作回退”。
 
@@ -116,9 +103,7 @@ try {
 
 ## 剩余建议优先级
 
-1. **P2**：讨论并处理 `LlmResponseMode` / `structuredOutputSchema` 残留字段（第 4 节）。
-2. **P2**：实测 contracts 引入 Zod 后 web bundle / 运行引用行为，再决定是否拆 type-only 子模块（第 6 节）。
-3. **P3**：把 `ModelCallOutcome.turnEvents` 抽象成 `toolFinalOutput`，为 agent loop 演进留余地（第 5 节）。
-4. **P3**：Mistral non-stream tool-only 响应的 text 解析 swallow 改成更精确的判断，并补 verbose log（第 1 节）。
-5. **P3**：视需要补 SQLite `messages.kind` CHECK 约束 / 迁移说明，以及事件组内排序防御（第 2、3 节）。
-6. **P3**：清理或文档化 `prompt-debug-cli` 中旧 prompt 路径回退（第 8 节）。
+1. **P3**：把 `ModelCallOutcome.turnEvents` 抽象成 `toolFinalOutput`，为 agent loop 演进留余地（第 4 节）。
+2. **P3**：Mistral non-stream tool-only 响应的 text 解析 swallow 改成更精确的判断，并补 verbose log（第 1 节）。
+3. **P3**：视需要补 SQLite `messages.kind` CHECK 约束 / 迁移说明，以及事件组内排序防御（第 2、3 节）。
+4. **P3**：清理或文档化 `prompt-debug-cli` 中旧 prompt 路径回退（第 6 节）。

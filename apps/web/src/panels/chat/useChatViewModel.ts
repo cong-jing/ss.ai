@@ -88,7 +88,6 @@ export function useChatViewModel() {
                     conversationId,
                     userMessageText,
                     senderActorId,
-                    "non-structured",
                     (chunk) => {
                         const msg = messages.value.find(m => m.id === msgId);
                         if (msg) msg.content += chunk;
@@ -130,7 +129,6 @@ export function useChatViewModel() {
                 conversationId,
                 userMessageText,
                 senderActorId,
-                "structured",
                 true,
                 activeCharacter.value?.interactionMode ?? DEFAULT_INTERACTION_MODE,
             );
@@ -219,8 +217,7 @@ export function useChatViewModel() {
         }
 
         try {
-            const llmResponseMode = streamMode.value ? "non-structured" : "structured";
-            const result = await apiDryRunChat(characterId, conversationId, userMessageText, senderActorId, llmResponseMode, activeCharacter.value?.interactionMode ?? DEFAULT_INTERACTION_MODE);
+            const result = await apiDryRunChat(characterId, conversationId, userMessageText, senderActorId, activeCharacter.value?.interactionMode ?? DEFAULT_INTERACTION_MODE);
             console.group("[dry-run] Assembled LLM input messages");
             for (const msg of result.messages) {
                 console.log(`--- [${msg.role}] ---`);

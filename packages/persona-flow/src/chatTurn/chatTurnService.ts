@@ -1,4 +1,4 @@
-import type { InteractionMode, LlmResponseMode, ModelAssignmentMap, TurnEvent } from "@ss-ai/contracts";
+import type { InteractionMode, ModelAssignmentMap, TurnEvent } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
 import { prepareChatTurnContext } from "./chatTurnPreparation.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "./personaFlowLogger.js";
@@ -20,7 +20,6 @@ export interface PersonaChatTurnRequest {
     characterId: string;
     conversationId: string;
     userMessageText: string;
-    llmResponseMode: LlmResponseMode;
     interactionMode?: InteractionMode;
     senderActorId?: unknown;
     includeAssembledMessages?: boolean;
@@ -31,7 +30,6 @@ export interface PersonaDryRunTurnRequest {
     characterId: string;
     conversationId: string;
     userMessageText: string;
-    llmResponseMode: LlmResponseMode;
     interactionMode?: InteractionMode;
     senderActorId?: unknown;
 }
@@ -41,7 +39,6 @@ export interface PersonaStreamTurnRequest {
     characterId: string;
     conversationId: string;
     userMessageText: string;
-    llmResponseMode: "non-structured";
     interactionMode?: InteractionMode;
     senderActorId?: unknown;
     includeAssembledMessages?: boolean;
@@ -70,7 +67,6 @@ export class PersonaFlowChatTurnService {
             userId: input.userId,
             characterId: input.characterId,
             conversationId: input.conversationId,
-            llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
         });
 
@@ -80,7 +76,6 @@ export class PersonaFlowChatTurnService {
             characterId: input.characterId,
             conversationId: input.conversationId,
             userMessageText: input.userMessageText,
-            llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
             senderActorId: input.senderActorId,
             persistUserMessage: false,
@@ -95,7 +90,6 @@ export class PersonaFlowChatTurnService {
             userId: input.userId,
             characterId: input.characterId,
             promptContext: prepared.promptContext,
-            llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
             dryRun: true,
         });
@@ -122,17 +116,8 @@ export class PersonaFlowChatTurnService {
             userId: input.userId,
             characterId: input.characterId,
             conversationId: input.conversationId,
-            llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
         });
-
-        if (input.llmResponseMode !== "structured") {
-            // TODO: decide whether chat.main/singleCharacterChat should support non-structured mode.
-            this.logger.warn("persona-flow/chat-turn: non-structured chat requested; using structured model call", {
-                conversationId: input.conversationId,
-                requestedMode: input.llmResponseMode,
-            });
-        }
 
         const prepared = await prepareChatTurnContext({
             stores: this.deps.stores,
@@ -140,7 +125,6 @@ export class PersonaFlowChatTurnService {
             characterId: input.characterId,
             conversationId: input.conversationId,
             userMessageText: input.userMessageText,
-            llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
             senderActorId: input.senderActorId,
             persistUserMessage: true,
@@ -155,7 +139,6 @@ export class PersonaFlowChatTurnService {
             userId: input.userId,
             characterId: input.characterId,
             promptContext: prepared.promptContext,
-            llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
         });
         if (!callResult.llmResponse || !callResult.outcome) {
@@ -232,19 +215,17 @@ export class PersonaFlowChatTurnService {
             userId: input.userId,
             characterId: input.characterId,
             conversationId: input.conversationId,
-            llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
         });
 
-        // TODO: decide whether chat.main/singleCharacterChat supports streaming.
-        // For now stream requests use the structured model call and emit the full reply once.
+        // TODO: implement true turn-event streaming for chat.main/singleCharacterChat.
+        // For now stream requests use the terminal tool call and emit the full reply once.
         const prepared = await prepareChatTurnContext({
             stores: this.deps.stores,
             userId: input.userId,
             characterId: input.characterId,
             conversationId: input.conversationId,
             userMessageText: input.userMessageText,
-            llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
             senderActorId: input.senderActorId,
             persistUserMessage: true,
@@ -259,7 +240,6 @@ export class PersonaFlowChatTurnService {
             userId: input.userId,
             characterId: input.characterId,
             promptContext: prepared.promptContext,
-            llmResponseMode: input.llmResponseMode,
             interactionMode: input.interactionMode,
         });
         if (!callResult.llmResponse || !callResult.outcome) {

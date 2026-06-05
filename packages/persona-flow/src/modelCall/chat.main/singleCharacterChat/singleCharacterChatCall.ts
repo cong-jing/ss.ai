@@ -51,9 +51,9 @@ function buildConversationMessages(context: PromptContext): RenderedMessage[] {
             ? normalizeSingleCharacterReply(
                 message.turnEvents ? getTurnEventsReplyText(message.turnEvents) : message.displayText,
                 [
-                actor?.displayName,
-                context.character?.displayName,
-                context.character?.name,
+                    actor?.displayName,
+                    context.character?.displayName,
+                    context.character?.name,
                 ],
             )
             : message.displayText;
@@ -106,7 +106,6 @@ export const singleCharacterChatCall: ModelCall<SubmitTurnEventsArgs> = {
             userId: input.userId,
             characterId: input.characterId,
             messages,
-            llmResponseMode: "non-structured",
             modelCallPurpose: this.purpose,
             tools: [submitTurnEventsTool],
             toolChoice: {

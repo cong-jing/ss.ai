@@ -54,13 +54,7 @@
 4. `packages/persona-flow/src/llm/modelClient.ts`
 5. `packages/persona-flow-model-client/src/mistral/mistralModelClient.ts`
 
-当前 `singleCharacterChatCall.ts` 会强制使用 structured output：
-
-- `llmResponseMode: "structured"`
-- `structuredOutputSchema: singleCharacterChatStructuredOutputSchema`
-- 收到返回后调用 `parseSingleCharacterChatOutput(llmResponse.structuredOutput)`
-
-这条路径需要改成以 `submit_turn_events` tool call 为主输出。否则 prompt 虽然要求模型调用工具，代码仍然不会把工具定义传给 provider，也不会解析工具调用结果。
+`singleCharacterChatCall.ts` 现在以 `submit_turn_events` tool call 为主输出。chat API 不再暴露 structured / non-structured response mode；stream 与非 stream 只区分传输形态，最终都归一到 `output + turnEvents`。
 
 当前 `ModelRuntime` 已经能收集并记录 `toolCalls`，但只是 TODO 日志，并没有执行或解析：
 

@@ -111,7 +111,6 @@ describe("model runtime", () => {
             userId: "u1",
             characterId: "c1",
             messages: [{ role: "user", content: "hello" }],
-            llmResponseMode: "structured",
             modelCallPurpose: "memory.summarize",
             structuredOutputSchema,
         });
