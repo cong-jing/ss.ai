@@ -17,6 +17,11 @@
             "types": "./src/index.ts",
             "import": "./dist/index.js"
         },
+        "./turnEvents.schema": {
+            "source": "./src/turnEvents.schema.ts",
+            "types": "./src/turnEvents.schema.ts",
+            "import": "./dist/turnEvents.schema.js"
+        },
         "./apis/userPreference": {
             "source": "./src/apis/userPreference.api.ts",
             "types": "./src/apis/userPreference.api.ts",

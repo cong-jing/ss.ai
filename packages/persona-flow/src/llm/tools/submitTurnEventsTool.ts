@@ -1,4 +1,4 @@
-import { SubmitTurnEventsArgsSchema, type SubmitTurnEventsArgs } from "@ss-ai/contracts";
+import { SubmitTurnEventsArgsSchema, type SubmitTurnEventsArgs } from "@ss-ai/contracts/turnEvents.schema";
 import type { ModelFunctionToolDefinition } from "./modelTool.js";
 
 export const SUBMIT_TURN_EVENTS_TOOL_NAME = "submit_turn_events";

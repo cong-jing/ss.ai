@@ -1,7 +1,7 @@
 import {
     SubmitTurnEventsArgsSchema,
     type SubmitTurnEventsArgs,
-} from "@ss-ai/contracts";
+} from "@ss-ai/contracts/turnEvents.schema";
 import type { ZodError } from "zod";
 
 export type SafeParseSubmitTurnEventsArgsResult =

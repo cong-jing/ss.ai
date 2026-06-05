@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 export const EXPRESSION_VALUES = [
     "neutral",
     "happy",
@@ -19,80 +17,78 @@ export const ATMOSPHERE_VALUES = [
     "comical",
 ] as const;
 
-export const ReplyTextEventSchema = z.object({
-    type: z.literal("replyText"),
-    characterId: z.string().min(1),
-    text: z.string(),
-}).strict();
+export const TURN_EVENT_TYPES = {
+    replyText: "replyText",
+    expression: "expression",
+    sceneAtmosphere: "sceneAtmosphere",
+    stateUpdate: "stateUpdate",
+} as const;
 
-export const ExpressionEventSchema = z.object({
-    type: z.literal("expression"),
-    characterId: z.string().min(1),
-    expression: z.enum(EXPRESSION_VALUES),
-    intensity: z.number().min(0).max(1).optional(),
-}).strict();
+export const STATE_UPDATE_TYPES = {
+    itemGranted: "itemGranted",
+    flagSet: "flagSet",
+    relationshipDelta: "relationshipDelta",
+} as const;
 
-export const SceneAtmosphereEventSchema = z.object({
-    type: z.literal("sceneAtmosphere"),
-    atmosphere: z.enum(ATMOSPHERE_VALUES),
-    note: z.string().optional(),
-}).strict();
+export type ExpressionValue = typeof EXPRESSION_VALUES[number];
+export type AtmosphereValue = typeof ATMOSPHERE_VALUES[number];
+export type TurnEventType = typeof TURN_EVENT_TYPES[keyof typeof TURN_EVENT_TYPES];
+export type StateUpdateType = typeof STATE_UPDATE_TYPES[keyof typeof STATE_UPDATE_TYPES];
 
-export const ItemGrantedUpdateSchema = z.object({
-    type: z.literal("itemGranted"),
-    targetId: z.string().min(1),
-    itemId: z.string().min(1),
-    count: z.number().int().min(1),
-    reason: z.string(),
-}).strict();
+export type ReplyTextEvent = {
+    type: typeof TURN_EVENT_TYPES.replyText;
+    characterId: string;
+    text: string;
+};
 
-export const FlagSetUpdateSchema = z.object({
-    type: z.literal("flagSet"),
-    key: z.string().min(1),
-    value: z.union([z.string(), z.number(), z.boolean()]),
-    reason: z.string(),
-}).strict();
+export type ExpressionEvent = {
+    type: typeof TURN_EVENT_TYPES.expression;
+    characterId: string;
+    expression: ExpressionValue;
+    intensity?: number;
+};
 
-export const RelationshipDeltaUpdateSchema = z.object({
-    type: z.literal("relationshipDelta"),
-    characterId: z.string().min(1),
-    targetId: z.string().min(1),
-    value: z.number(),
-    reason: z.string(),
-}).strict();
+export type SceneAtmosphereEvent = {
+    type: typeof TURN_EVENT_TYPES.sceneAtmosphere;
+    atmosphere: AtmosphereValue;
+    note?: string;
+};
 
-export const StateUpdateValueSchema = z.discriminatedUnion("type", [
-    ItemGrantedUpdateSchema,
-    FlagSetUpdateSchema,
-    RelationshipDeltaUpdateSchema,
-]);
+export type ItemGrantedUpdate = {
+    type: typeof STATE_UPDATE_TYPES.itemGranted;
+    targetId: string;
+    itemId: string;
+    count: number;
+    reason: string;
+};
 
-export const StateUpdateEventSchema = z.object({
-    type: z.literal("stateUpdate"),
-    update: StateUpdateValueSchema,
-}).strict();
+export type FlagSetUpdate = {
+    type: typeof STATE_UPDATE_TYPES.flagSet;
+    key: string;
+    value: string | number | boolean;
+    reason: string;
+};
 
-export const TurnEventSchema = z.discriminatedUnion("type", [
-    ReplyTextEventSchema,
-    ExpressionEventSchema,
-    SceneAtmosphereEventSchema,
-    StateUpdateEventSchema,
-]);
+export type RelationshipDeltaUpdate = {
+    type: typeof STATE_UPDATE_TYPES.relationshipDelta;
+    characterId: string;
+    targetId: string;
+    value: number;
+    reason: string;
+};
 
-export const SubmitTurnEventsArgsSchema = z.object({
-    events: z.array(TurnEventSchema).min(1),
-}).strict();
+export type StateUpdateValue = ItemGrantedUpdate | FlagSetUpdate | RelationshipDeltaUpdate;
 
-export type ReplyTextEvent = z.infer<typeof ReplyTextEventSchema>;
-export type ExpressionEvent = z.infer<typeof ExpressionEventSchema>;
-export type SceneAtmosphereEvent = z.infer<typeof SceneAtmosphereEventSchema>;
-export type ItemGrantedUpdate = z.infer<typeof ItemGrantedUpdateSchema>;
-export type FlagSetUpdate = z.infer<typeof FlagSetUpdateSchema>;
-export type RelationshipDeltaUpdate = z.infer<typeof RelationshipDeltaUpdateSchema>;
-export type StateUpdateValue = z.infer<typeof StateUpdateValueSchema>;
-export type StateUpdateEvent = z.infer<typeof StateUpdateEventSchema>;
-export type TurnEvent = z.infer<typeof TurnEventSchema>;
-export type SubmitTurnEventsArgs = z.infer<typeof SubmitTurnEventsArgsSchema>;
+export type StateUpdateEvent = {
+    type: typeof TURN_EVENT_TYPES.stateUpdate;
+    update: StateUpdateValue;
+};
+
+export type TurnEvent = ReplyTextEvent | ExpressionEvent | SceneAtmosphereEvent | StateUpdateEvent;
+
+export type SubmitTurnEventsArgs = {
+    events: TurnEvent[];
+};
 
 export type MessageKind =
     | "user_text"

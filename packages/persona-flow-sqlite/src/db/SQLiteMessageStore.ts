@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
-import { TurnEventSchema } from "@ss-ai/contracts";
+import { TurnEventSchema } from "@ss-ai/contracts/turnEvents.schema";
 import { messages, turnEvents, type MessageRow, type TurnEventRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
 import type { Message } from "@ss-ai/persona-flow";
