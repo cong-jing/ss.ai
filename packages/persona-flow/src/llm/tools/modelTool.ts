@@ -27,4 +27,3 @@ export interface ModelFunctionToolDefinition<TArgs = unknown> {
 
 export type ModelToolDefinition<TArgs = unknown> =
     ModelFunctionToolDefinition<TArgs>;
-

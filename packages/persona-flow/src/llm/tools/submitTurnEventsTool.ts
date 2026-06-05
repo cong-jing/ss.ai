@@ -11,4 +11,3 @@ export const submitTurnEventsTool: ModelFunctionToolDefinition<SubmitTurnEventsA
     terminal: true,
     purpose: "final_output",
 };
-

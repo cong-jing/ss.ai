@@ -7,4 +7,3 @@ export function getTurnEventsReplyText(events: TurnEvent[]): string {
         .filter(Boolean)
         .join("\n");
 }
-

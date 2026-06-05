@@ -1,6 +1,14 @@
 import fs from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
-import { renderPromptTemplate } from "@ss-ai/persona-flow";
+import {
+    getTurnEventsReplyText,
+    parseSubmitTurnEventsArgs,
+    renderPromptTemplate,
+    SUBMIT_TURN_EVENTS_TOOL_NAME,
+    submitTurnEventsTool,
+    type ModelGenerationResult,
+    type ModelToolCall,
+} from "@ss-ai/persona-flow";
 import { DefaultModelClient } from "@ss-ai/persona-flow-model-client";
 import { parse as parseYaml } from "yaml";
 
@@ -25,6 +33,18 @@ type PromptViewModel = {
     structuredOutput: boolean;
 };
 
+type CurrentPromptViewModel = {
+    character: {
+        displayName: string;
+        description: string;
+        personaPrompt: string;
+    };
+    userProfile: {
+        name: string;
+        bio: string;
+    };
+};
+
 type CliConfig = {
     name?: string;
     provider: string;
@@ -37,6 +57,11 @@ type CliConfig = {
         displayName?: string;
         description?: string;
         personaPrompt?: string;
+    };
+    userProfile?: {
+        userId?: string;
+        name?: string;
+        bio?: string;
     };
     p1?: {
         speakerTag?: string;
@@ -108,6 +133,8 @@ async function resolvePromptTemplatePath(configPath: string): Promise<string> {
         resolve(startupCwd, "main.md.hbs"),
         resolve(runtimeCwd, "main.md.hbs"),
         resolve(startupCwd, "packages/persona-flow/data/prompts/zh-CN/main.md.hbs"),
+        resolve(startupCwd, "packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/templates/system.zh-CN.md.hbs"),
+        resolve(runtimeCwd, "packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/templates/system.zh-CN.md.hbs"),
     ];
 
     for (const candidate of candidates) {
@@ -293,6 +320,25 @@ function toPromptViewModel(config: CliConfig): PromptViewModel {
     };
 }
 
+function toCurrentPromptViewModel(config: CliConfig): CurrentPromptViewModel {
+    const characterDisplayName = (config.character?.displayName || config.character?.name || "").trim() || "Character";
+    const loggedUserActor = (config.actors ?? []).find(actor => actor.sourceType === "logged_user");
+    const userName = (config.userProfile?.name || config.userProfile?.userId || loggedUserActor?.displayName || "").trim() || "User";
+    const userBio = (config.userProfile?.bio || loggedUserActor?.profile || loggedUserActor?.info || "").trim();
+
+    return {
+        character: {
+            displayName: characterDisplayName,
+            description: config.character?.description ?? "",
+            personaPrompt: config.character?.personaPrompt ?? "",
+        },
+        userProfile: {
+            name: userName,
+            bio: userBio,
+        },
+    };
+}
+
 function toChatMessages(config: CliConfig, systemPrompt: string): Array<{
     role: "system" | "user" | "assistant";
     content: string;
@@ -300,16 +346,8 @@ function toChatMessages(config: CliConfig, systemPrompt: string): Array<{
     const history = (config.messages ?? []).map((message) => {
         const role = message.role ?? "user";
         const content = message.content ?? "";
-        const speakerTag = message.speakerTag ?? message.speakerAlias;
 
-        if (role === "system" || !speakerTag) {
-            return { role, content };
-        }
-
-        return {
-            role,
-            content: `${speakerTag}: ${content}`,
-        };
+        return { role, content };
     });
 
     return [
@@ -326,7 +364,7 @@ async function render(configPath: string, templatePath?: string | null): Promise
 }> {
     const raw = await fs.readFile(configPath, "utf-8");
     const config = parseYaml(raw) as CliConfig;
-    const viewModel = toPromptViewModel(config);
+    const viewModel = toCurrentPromptViewModel(config);
     const resolvedTemplatePath = templatePath ?? await resolvePromptTemplatePath(configPath);
     const systemPrompt = await renderPromptTemplate(resolvedTemplatePath, viewModel);
     const assembledMessages = toChatMessages(config, systemPrompt);
@@ -358,19 +396,74 @@ async function runChat(
         model: config.model,
         encryptedApiKey: apiKey,
         messages: assembledMessages,
+        tools: [submitTurnEventsTool],
+        toolChoice: {
+            type: "function",
+            functionName: SUBMIT_TURN_EVENTS_TOOL_NAME,
+        },
     });
 
-    const raw = typeof result.output === "string" ? result.output : "";
-    if (!raw) {
-        return "";
+    return formatChatResult(result);
+}
+
+function findSubmitTurnEventsToolCall(toolCalls: ModelToolCall[]): ModelToolCall | undefined {
+    return toolCalls.find(toolCall => toolCall.functionName === SUBMIT_TURN_EVENTS_TOOL_NAME);
+}
+
+function formatJson(value: unknown): string {
+    return JSON.stringify(value, null, 2);
+}
+
+function formatChatResult(result: ModelGenerationResult): string {
+    const sections: string[] = [];
+    const rawOutput = typeof result.output === "string" ? result.output.trim() : "";
+
+    if (rawOutput) {
+        sections.push("### Text Output");
+        sections.push(rawOutput);
+    }
+
+    if (result.toolCalls.length > 0) {
+        sections.push("### Raw Tool Calls");
+        sections.push("```json");
+        sections.push(formatJson(result.toolCalls));
+        sections.push("```");
+    }
+
+    const submitToolCall = findSubmitTurnEventsToolCall(result.toolCalls);
+    if (!submitToolCall) {
+        sections.push(`### ${SUBMIT_TURN_EVENTS_TOOL_NAME}`);
+        sections.push("(not called)");
+        return sections.join("\n");
     }
 
     try {
-        const parsed = JSON.parse(raw.trim());
-        return JSON.stringify(parsed, null, 2);
-    } catch {
-        return raw;
+        const parsed = parseSubmitTurnEventsArgs(submitToolCall.arguments);
+        const replyText = getTurnEventsReplyText(parsed.events);
+
+        sections.push(`### Parsed ${SUBMIT_TURN_EVENTS_TOOL_NAME}`);
+        sections.push("```json");
+        sections.push(formatJson(parsed));
+        sections.push("```");
+
+        if (replyText) {
+            sections.push("### Reply Text");
+            sections.push(replyText);
+        }
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        sections.push(`### ${SUBMIT_TURN_EVENTS_TOOL_NAME} Parse Error`);
+        sections.push(message);
     }
+
+    if (result.usage) {
+        sections.push("### Usage");
+        sections.push("```json");
+        sections.push(formatJson(result.usage));
+        sections.push("```");
+    }
+
+    return sections.join("\n");
 }
 
 async function maybeWriteLog(outputPath: string | null, content: string): Promise<void> {
