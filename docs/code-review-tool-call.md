@@ -26,30 +26,12 @@
 - [mistralToolAdapter.test.ts](../packages/persona-flow-model-client/test/mistralToolAdapter.test.ts) 已新增，覆盖 `submitTurnEventsTool` 转 Mistral function tool 后的 `parameters.type`、`required.events`、`events` 数组、以及 discriminated union 分支数量。
 - contracts / Zod 的 web bundle 边界已收口：[turnEvents.ts](../packages/contracts/src/turnEvents.ts) 现在只导出纯类型和字面量常量，[turnEvents.schema.ts](../packages/contracts/src/turnEvents.schema.ts) 专门导出 Zod schema，并通过 [package.json](../packages/contracts/package.json) 的 `./turnEvents.schema` 子入口暴露。需要运行时校验的 persona-flow / SQLite 代码已改为显式 import schema 子入口；web build 已验证不再包含 `$Zod` / `ZodError` / `TurnEventSchema` 等运行时代码。
 - `LlmResponseMode` 已从 chat contracts、server route、chatTurn/modelCall 输入、web / QQ bot 客户端和测试中移除。chat API 现在只有一种输出契约：非 stream 和 stream 都返回 `output + turnEvents`，底层 provider structured response 能力仍通过 `structuredOutputSchema` 留在 `ModelRuntime` / `ModelClient` 层。
+- `ModelCallOutcome` / `parsedModelOutput` 已移除。[modelCall.ts](../packages/persona-flow/src/modelCall/modelCall.ts) 现在使用 `ModelCall<TParsedOutput>` / `ModelCallRunResult<TParsedOutput>` 表达各 model call 的解析后业务结果，并保留可选 `parsedToolCalls` 记录中间工具解析结果；[singleCharacterChatCall.ts](../packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.ts) 自己解析并处理 `submit_turn_events`，chatTurnService 只消费 `parsedOutput`。
+- Mistral non-stream tool-only 响应不再通过吞掉 `extractText` 异常来兼容。[mistralModelClient.ts](../packages/persona-flow-model-client/src/mistral/mistralModelClient.ts) 现在只在消息 content 明确为空且存在 tool calls 时返回空文本，并写 verbose log；未知非空 content 形状仍会抛错。[messageTransforms.test.ts](../packages/persona-flow-model-client/test/messageTransforms.test.ts) 已补覆盖。
 
 ## 剩余问题
 
-### 1. Mistral non-stream 错误吞掉
-
-[mistralModelClient.ts](../packages/persona-flow-model-client/src/mistral/mistralModelClient.ts):
-
-```ts
-const toolCalls = extractToolCallsFromMessage(firstMessage);
-let output = "";
-try {
-    output = extractText(response);
-} catch (error: unknown) {
-    if (toolCalls.length === 0) {
-        throw error;
-    }
-}
-```
-
-`extractText` 在响应里没有 text content 时会抛错。当前 tool-only 响应正是没 text 的，所以需要 swallow；逻辑本身合理，但建议改成“先判断消息里是不是没有 content（正常 tool call 情况）；只有真的解析异常时才 throw”，避免把 SDK schema 变化（比如新 content 类型）也一起吃掉。
-
-至少可以多一行 verbose log，把 swallow 的 error message 记下来，方便排查。
-
-### 2. `messages.kind` 没有数据库层面的枚举校验
+### 1. `messages.kind` 没有数据库层面的枚举校验
 
 `MessageKind` 在 TS 层是 union（`user_text | assistant_turn_events | system_text`），但 SQLite 列没有 CHECK 约束，写入完全靠应用层。
 
@@ -58,36 +40,19 @@ try {
 - 历史迁移期间 `kind` 取自 `COALESCE(kind, 'user_text')`，这意味着旧 assistant 消息会被标成 `user_text`，[singleCharacterChatCall.ts](../packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.ts) 组 prompt 时会因此把它们当成 user content。tool-call instruction 里允许“破坏性迁移、可删库”，所以这是可接受的取舍，但应该在 PR/CHANGELOG 里明确提示“升级后旧库的历史会被解释错乱，建议删库重建”。
 - 长期可以加 SQLite CHECK 约束，或者迁移时根据 `sender_actor_id` 是否对应 `self` actor 来回填 `kind`。
 
-### 3. `getRecentMessages` 事件顺序仍可更防御
+### 2. `getRecentMessages` 事件顺序仍可更防御
 
 [SQLiteMessageStore.ts](../packages/persona-flow-sqlite/src/db/SQLiteMessageStore.ts) 目前依赖 SQL `orderBy(asc(messageId), asc(seq))` 保证同一消息内事件顺序。SQLite 下这基本可用，但如果未来换 driver / 改查询形态，可以考虑在分组后对每个 message 的事件按 `seq` 再排一次。
 
 `schema_version` 兼容读取和坏事件跳过已经完成；这里只剩顺序上的防御性增强，优先级较低。
 
-### 4. `ModelCallOutcome.turnEvents` 强耦合到 single_character_chat
-
-[modelCall.ts](../packages/persona-flow/src/modelCall/modelCall.ts):
-
-```ts
-| { kind: "assistantReply"; text: string; turnEvents?: TurnEvent[]; }
-```
-
-`ModelCallOutcome` 是 generic model call 的产物，现在直接挂上了 chat 专用的 `TurnEvent`。如果将来 `memory.summarize` 或别的 purpose 也走 tool call，它们的 “events” 形状未必一致，会被迫复用这个字段或者再加一个。
-
-一个更可扩展的方向：
-
-- `kind: "toolFinalOutput"`, `terminalToolName: string`, `arguments: unknown`
-- chatTurnService 根据 `terminalToolName === "submit_turn_events"` 再做 schema 校验并取出 events。
-
-第一版可以不做，但建议在后续 agent loop 演进前收敛。
-
-### 5. `mistralToolAdapter` schema 归一化仍可增强
+### 3. `mistralToolAdapter` schema 归一化仍可增强
 
 [mistralToolAdapter.ts](../packages/persona-flow-model-client/src/mistral/mistralToolAdapter.ts) 已有测试覆盖当前 `submit_turn_events` schema 形状，但 adapter 本身还没有显式处理 `$defs` / `definitions`、`additionalProperties`、或 Mistral 对 `oneOf` / `anyOf` 的偏好。
 
 目前 prompt log 中能跑通，新增测试也能防止 Zod 大版本升级时 schema 形状悄悄回归。后续如果遇到 provider 对 schema 严格度的兼容问题，再考虑在 adapter 层做 provider-specific normalization。
 
-### 6. 旧 prompt-debug 模板路径仍需清理或文档化
+### 4. 旧 prompt-debug 模板路径仍需清理或文档化
 
 仓库还保留了旧版 `data/prompts/zh-CN/main.md.hbs` 模板搜索路径（[apps/prompt-debug-cli/src/index.ts](../apps/prompt-debug-cli/src/index.ts)），但实际主链路不再使用。建议清理，或在 README / project map 中说明“旧 prompt 模板已废弃，仅作回退”。
 
@@ -103,7 +68,5 @@ try {
 
 ## 剩余建议优先级
 
-1. **P3**：把 `ModelCallOutcome.turnEvents` 抽象成 `toolFinalOutput`，为 agent loop 演进留余地（第 4 节）。
-2. **P3**：Mistral non-stream tool-only 响应的 text 解析 swallow 改成更精确的判断，并补 verbose log（第 1 节）。
-3. **P3**：视需要补 SQLite `messages.kind` CHECK 约束 / 迁移说明，以及事件组内排序防御（第 2、3 节）。
-4. **P3**：清理或文档化 `prompt-debug-cli` 中旧 prompt 路径回退（第 6 节）。
+1. **P3**：视需要补 SQLite `messages.kind` CHECK 约束 / 迁移说明，以及事件组内排序防御（第 1、2 节）。
+2. **P3**：清理或文档化 `prompt-debug-cli` 中旧 prompt 路径回退（第 4 节）。

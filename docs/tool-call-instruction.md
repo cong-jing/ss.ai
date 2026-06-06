@@ -14,8 +14,8 @@
 - **第 6 节 — Mistral adapter**：non-stream 路径完整支持 tool call（[packages/persona-flow-model-client/src/mistral/mistralToolAdapter.ts](../packages/persona-flow-model-client/src/mistral/mistralToolAdapter.ts) + [mistralModelClient.ts](../packages/persona-flow-model-client/src/mistral/mistralModelClient.ts)）。
 - **第 8 节 — tool call arguments 解析**：[packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts](../packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts)。
 - **第 9 节 — singleCharacterChatCall**：已切换到强制 `submit_turn_events` 工具调用（[singleCharacterChatCall.ts](../packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.ts)）。
-- **第 10 节 — ModelRuntime**：`chat()` 透传 tool 相关字段并把 `toolCalls` 收集到 `ModelCallOutcome`。
-- **第 11 节 — ChatTurnService**：non-stream 路径解析 `submit_turn_events` 并把 `TurnEvent[]` 回到 service 输出。
+- **第 10 节 — ModelRuntime**：`chat()` 透传 tool 相关字段并把 provider 返回的 `toolCalls` 收集到 `PersonaModelResponse`。
+- **第 11 节 — ChatTurnService**：消费 model call 已处理的 `submit_turn_events` terminal tool 输出，并把 `TurnEvent[]` 回到 service 输出。
 - **第 12 节（部分）— 上层 API/前端**：`/v1/chat` 与 `/v1/chat/stream` done event 里都会带 `turnEvents`；web 端 [useChatViewModel.ts](../apps/web/src/panels/chat/useChatViewModel.ts) 已经按 `replyText` 类型渲染。
 - **第 13 节（部分）— 持久化**：`messages` 表新增 `kind / display_text`，新建 `turn_events` 表，`appendAssistantTurn` / `deleteMessage` 走事务（[SQLiteMessageStore.ts](../packages/persona-flow-sqlite/src/db/SQLiteMessageStore.ts)）。
 - **第 14 节 — 中文 prompt**：[templates/system.zh-CN.md.hbs](../packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/templates/system.zh-CN.md.hbs)。
@@ -504,12 +504,7 @@ export interface ConversationMessage {
 
 必须修改 `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.ts`。
 
-当前逻辑是 structured output：
-
-- 创建 `structuredOutputSchema`
-- 调用 `input.runtime.chat(llmRequest)`
-- 从 `llmResponse.structuredOutput` 解析 `replyText`
-- 转成 `assistantReply`
+旧逻辑是 structured output：创建 `structuredOutputSchema`、调用 `input.runtime.chat(llmRequest)`、再从 `llmResponse.structuredOutput` 解析 `replyText`。当前实现已经改为 terminal tool call。
 
 目标逻辑应改为 tool call：
 
@@ -530,20 +525,20 @@ toolChoice: {
 - 从 `llmResponse.toolCalls` 中找到 `functionName === "submit_turn_events"` 的 tool call。
 - 如果没有找到，当前阶段应视为格式错误。可以直接 throw，也可以后续加一次纠错 retry。
 - 用 `parseSubmitTurnEventsArgs(toolCall.arguments)` 校验参数。
-- 将解析后的 `events` 保存到 `parsedModelOutput`。
+- 将解析后的结果作为 `singleCharacterChatCall` 的 `ModelCallRunResult.parsedOutput` 返回。
 
-4. 将事件转成当前已有的 `ModelCallOutcome`：
+4. 将事件转成当前 chat 输出：
 
 - 第一版至少把所有 `replyText` 事件按顺序拼接成 assistant message 文本。
-- 如果没有任何 `replyText`，返回 `noReply` 或按业务需要 throw。
-- `expression`、`sceneAtmosphere`、`stateUpdate` 第一版可以先保留在 parsed output / logs 中，后续再决定持久化和 API 返回结构。
+- 如果没有任何 `replyText`，`output` 可以为空，但仍保留并持久化非文本 turn events。
+- `expression`、`sceneAtmosphere`、`stateUpdate` 随 `turnEvents` 一起返回并持久化。
 
 5. `normalizeSingleCharacterReply()` 仍可用于清理 `replyText.text` 中误加的角色名前缀。
 
 建议新增局部 helper，例如：
 
 - `findSubmitTurnEventsToolCall(toolCalls)`
-- `toSingleCharacterChatOutcomeFromEvents(args, promptContext)`
+- `toSingleCharacterChatOutput(args, promptContext)`
 
 ## 10. 修改 ModelRuntime
 
@@ -560,9 +555,7 @@ toolChoice: {
 
 ## 11. 修改 ChatTurnService
 
-`packages/persona-flow/src/chatTurn/chatTurnService.ts` 当前只支持 `assistantReply` 和 `noReply`。
-
-第一版可以继续让 `singleCharacterChatCall` 把 `submit_turn_events` 中的 `replyText` 转成 `assistantReply` 风格的 `output`，这样前端主消息流可以少改。
+`packages/persona-flow/src/chatTurn/chatTurnService.ts` 从 `ModelCallRunResult.parsedOutput` 读取已经由 model call 解析过的 single-character chat 结果。
 
 但持久化时不应只写最终文本。`chatTurnService` 应把 assistant turn 保存为：
 
@@ -1164,7 +1157,7 @@ pnpm --filter @ss-ai/persona-flow-model-client typecheck
 - 请求中传入 `submitTurnEventsTool`
 - 解析 `submit_turn_events` tool call
 - 将 `replyText` 合并为 `output`
-- 将原始 `events` 作为 `parsedModelOutput` / `turnEvents` 返回
+- 将解析后的 submit_turn_events 结果封装为 `parsedOutput`，并由 `ChatTurnService` 作为 `turnEvents` 返回
 - `ChatTurnService` 用 store 事务保存 assistant turn
 
 建议测试：

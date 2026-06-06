@@ -14,6 +14,7 @@ import {
     extractTextDelta,
     extractToolCallsFromMessage,
     extractUsage,
+    isMistralMessageContentEmpty,
     normalizeToolCall,
     toSdkMessages,
 } from "./messageTransforms.js";
@@ -85,14 +86,19 @@ export class MistralModelClient implements ModelAdapter {
         }
 
         const toolCalls = extractToolCallsFromMessage(firstMessage);
-        let output = "";
-        try {
-            output = extractText(response);
-        } catch (error: unknown) {
-            if (toolCalls.length === 0) {
-                throw error;
-            }
+        if (toolCalls.length > 0 && isMistralMessageContentEmpty(firstMessage)) {
+            this.options.logger?.verbose("Mistral non-stream tool response did not include text content.", {
+                toolCallCount: toolCalls.length,
+            });
+
+            return {
+                output: "",
+                toolCalls,
+                usage: extractUsage(response),
+            };
         }
+
+        const output = extractText(response);
 
         return {
             output,

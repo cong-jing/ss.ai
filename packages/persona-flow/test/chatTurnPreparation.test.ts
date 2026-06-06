@@ -98,7 +98,9 @@ describe("persona-flow chat turn preparation", () => {
                 persistUserMessage: false,
             }),
             (error: unknown) => {
-                assert.ok(error instanceof PersonaFlowTurnError);
+                if (!(error instanceof PersonaFlowTurnError)) {
+                    return false;
+                }
                 assert.equal(error.status, 404);
                 assert.match(error.message, /Conversation not found/i);
                 return true;
@@ -126,7 +128,9 @@ describe("persona-flow chat turn preparation", () => {
                 persistUserMessage: false,
             }),
             (error: unknown) => {
-                assert.ok(error instanceof PersonaFlowTurnError);
+                if (!(error instanceof PersonaFlowTurnError)) {
+                    return false;
+                }
                 assert.equal(error.status, 404);
                 assert.match(error.message, /Conversation not found for character/i);
                 return true;

@@ -3,6 +3,8 @@ import type { AppStores } from "../stores/appStores.js";
 import { prepareChatTurnContext } from "./chatTurnPreparation.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "./personaFlowLogger.js";
 import type { ModelClient } from "../llm/modelClient.js";
+import type { SingleCharacterChatResult } from "../modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.js";
+import type { ModelCallRunResult } from "../modelCall/modelCall.js";
 import { resolveModelCall } from "../modelCall/modelCallRegistry.js";
 import { ModelRuntime } from "../modelCall/modelRuntime.js";
 
@@ -141,29 +143,12 @@ export class PersonaFlowChatTurnService {
             promptContext: prepared.promptContext,
             interactionMode: input.interactionMode,
         });
-        if (!callResult.llmResponse || !callResult.outcome) {
-            throw new Error("Model call must return llmResponse and outcome for chat turn.");
+        if (!callResult.llmResponse) {
+            throw new Error("Model call must return llmResponse for chat turn.");
         }
-        if (callResult.outcome.kind === "noReply") {
-            this.logger.debug("persona-flow/chat-turn: assistant message not appended", {
-                requestId: callResult.llmResponse.requestId,
-                conversationId: input.conversationId,
-                reason: callResult.outcome.reason,
-            });
-            return {
-                requestId: callResult.llmResponse.requestId,
-                model: callResult.llmResponse.model,
-                apiKeySource: callResult.llmResponse.apiKeySource,
-                output: "",
-                userMessageId: prepared.userMessage.id,
-                ...(input.includeAssembledMessages ? { assembledMessages: callResult.llmRequestSnapshot.messages } : {}),
-            };
-        }
-        if (callResult.outcome.kind !== "assistantReply") {
-            throw new Error(`Unsupported outcome kind for chat.main: ${callResult.outcome.kind}`);
-        }
-        const normalizedAssistantOutput = callResult.outcome.text;
-        const turnEvents = callResult.outcome.turnEvents ?? [];
+        const chatResult = getSingleCharacterChatResult(callResult);
+        const normalizedAssistantOutput = chatResult.displayText;
+        const turnEvents = chatResult.events;
 
         // Assistant turns are persisted even when no replyText event produced visible text.
         // UI and bot integrations can then skip rendering/sending the empty text while
@@ -242,17 +227,15 @@ export class PersonaFlowChatTurnService {
             promptContext: prepared.promptContext,
             interactionMode: input.interactionMode,
         });
-        if (!callResult.llmResponse || !callResult.outcome) {
-            throw new Error("Model call must return llmResponse and outcome for stream turn.");
+        if (!callResult.llmResponse) {
+            throw new Error("Model call must return llmResponse for stream turn.");
         }
         if (input.includeAssembledMessages) {
             input.onAssembledMessages?.(callResult.llmRequestSnapshot.messages);
         }
-        if (callResult.outcome.kind !== "assistantReply") {
-            throw new Error(`Unsupported stream outcome kind for chat.main: ${callResult.outcome.kind}`);
-        }
-        const fullResponse = callResult.outcome.text;
-        const turnEvents = callResult.outcome.turnEvents ?? [];
+        const chatResult = getSingleCharacterChatResult(callResult);
+        const fullResponse = chatResult.displayText;
+        const turnEvents = chatResult.events;
         input.onChunk?.(fullResponse);
 
         const assistantMessageId = crypto.randomUUID();
@@ -287,4 +270,17 @@ export class PersonaFlowChatTurnService {
         };
     }
 
+}
+
+function getSingleCharacterChatResult(callResult: ModelCallRunResult): SingleCharacterChatResult {
+    const parsedOutput = callResult.parsedOutput;
+    if (
+        !parsedOutput
+        || typeof parsedOutput !== "object"
+        || typeof (parsedOutput as SingleCharacterChatResult).displayText !== "string"
+        || !Array.isArray((parsedOutput as SingleCharacterChatResult).events)
+    ) {
+        throw new Error("Model call must return a parsed single-character chat result.");
+    }
+    return parsedOutput as SingleCharacterChatResult;
 }

@@ -1,6 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ModelCall, ModelCallOutcome, ModelCallRunResult } from "../../modelCall.js";
+import type { ModelCall, ModelCallRunResult } from "../../modelCall.js";
 import type { PromptContext } from "../../../prompt/promptContext.js";
 import type { RenderedMessage } from "../../../prompt/promptTypes.js";
 import type { SubmitTurnEventsArgs } from "@ss-ai/contracts";
@@ -12,13 +12,16 @@ import type { ModelToolCall } from "../../../llm/modelClient.js";
 import { buildPromptViewModel } from "./promptViewModel.js";
 import { PersonaModelRequest } from "../../modelRuntime.js";
 
-export type SingleCharacterChatOutput = SubmitTurnEventsArgs;
-
 const __dir = dirname(fileURLToPath(import.meta.url));
 const SYSTEM_TEMPLATE_PATH = resolve(
     __dir,
     "./templates/system.zh-CN.md.hbs",
 );
+
+export type SingleCharacterChatResult = {
+    displayText: string;
+    events: SubmitTurnEventsArgs["events"];
+};
 
 function normalizeSingleCharacterReply(
     replyText: string,
@@ -88,9 +91,9 @@ function stripRepeatedPrefix(text: string, regex: RegExp): string {
     return output;
 }
 
-export const singleCharacterChatCall: ModelCall<SubmitTurnEventsArgs> = {
+export const singleCharacterChatCall: ModelCall<SingleCharacterChatResult> = {
     purpose: "chat.main",
-    async run(input): Promise<ModelCallRunResult<SingleCharacterChatOutput>> {
+    async run(input): Promise<ModelCallRunResult<SingleCharacterChatResult>> {
         const viewModel = buildPromptViewModel({
             character: input.promptContext.character,
             userProfile: input.promptContext.userProfile,
@@ -124,36 +127,32 @@ export const singleCharacterChatCall: ModelCall<SubmitTurnEventsArgs> = {
             throw new Error(`Model response did not call ${SUBMIT_TURN_EVENTS_TOOL_NAME}.`);
         }
 
-        const parsedModelOutput = parseSubmitTurnEventsArgs(toolCall.arguments);
-        const outcome = toSingleCharacterChatOutcome({
-            parsedModelOutput,
+        const submitTurnEventsOutput = parseSubmitTurnEventsArgs(toolCall.arguments);
+        const parsedOutput = toSingleCharacterChatResult({
+            submitTurnEventsOutput,
             promptContext: input.promptContext,
         });
 
         return {
             llmRequestSnapshot: llmRequest,
             llmResponse,
-            parsedModelOutput,
-            outcome,
+            parsedOutput,
         };
     },
 };
 
-function toSingleCharacterChatOutcome(input: {
-    parsedModelOutput: SubmitTurnEventsArgs;
+function toSingleCharacterChatResult(input: {
+    submitTurnEventsOutput: SubmitTurnEventsArgs;
     promptContext: PromptContext;
-}): ModelCallOutcome {
+}): SingleCharacterChatResult {
     const selfActor = Array.from(input.promptContext.actorMap.values()).find(actor => actor.role === "self");
-    const replyText = normalizeSingleCharacterReply(getTurnEventsReplyText(input.parsedModelOutput.events), [
-        selfActor?.displayName,
-        input.promptContext.character?.displayName,
-        input.promptContext.character?.name,
-    ]);
-
     return {
-        kind: "assistantReply",
-        text: replyText,
-        turnEvents: input.parsedModelOutput.events,
+        displayText: normalizeSingleCharacterReply(getTurnEventsReplyText(input.submitTurnEventsOutput.events), [
+            selfActor?.displayName,
+            input.promptContext.character?.displayName,
+            input.promptContext.character?.name,
+        ]),
+        events: input.submitTurnEventsOutput.events,
     };
 }
 

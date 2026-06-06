@@ -378,7 +378,6 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 - `packages/persona-flow/src/modelCall/modelCallRegistry.ts`
 - `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.ts`
 - `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/promptViewModel.ts`
-- `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatOutput.ts`
 - `packages/persona-flow/src/stores/appStores.ts`
 - `packages/persona-flow-sqlite/src/db/schema.ts`
 - `packages/persona-flow-sqlite/src/db/CharacterDbRouter.ts`
