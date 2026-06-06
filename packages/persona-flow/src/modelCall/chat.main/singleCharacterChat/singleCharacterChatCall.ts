@@ -136,6 +136,8 @@ export const singleCharacterChatCall: ModelCall<SingleCharacterChatResult> = {
         return {
             llmRequestSnapshot: llmRequest,
             llmResponse,
+            // submit_turn_events is the terminal result for this call, so expose it
+            // as the chat-specific parsedOutput instead of mirroring it as a parsedToolCall.
             parsedOutput,
         };
     },

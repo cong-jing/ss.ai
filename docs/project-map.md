@@ -137,14 +137,16 @@ Responsibilities:
 - Defines LLM client interfaces in `src/llm/modelClient.ts`, including provider-neutral tool definitions and tool choice.
 - Defines the `submit_turn_events` terminal tool and parses turn events returned by the model.
 
+Layering note: `PersonaFlowChatTurnService` orchestrates turns and persistence, but it should not parse provider tool calls directly. A registered `ModelCall<TParsedOutput>` owns prompt assembly, required tools, and business-level parsing for its purpose. `ModelRuntime` stays provider/model/API-key focused and returns the raw provider-neutral `llmResponse`. The model call then converts that response into `parsedOutput`; optional `parsedToolCalls` is reserved for intermediate tool results that callers need to inspect. For `single_character_chat`, the terminal `submit_turn_events` result is folded into `parsedOutput` as `{ displayText, events }`, so it is not duplicated in `parsedToolCalls`.
+
 Main chat flow:
 
 1. `PersonaFlowChatTurnService.chatTurn()` receives user, character, conversation, and message input.
 2. `prepareChatTurnContext()` validates character and conversation, resolves the sender actor, optionally appends the user message, and builds `PromptContext`.
 3. `resolveModelCall()` selects the registered handler for the requested purpose and interaction mode. Today that is `chat.main:single_character_chat`.
 4. The handler assembles LLM messages and requests the terminal `submit_turn_events` tool. `ModelRuntime.chat()` resolves provider and model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves the API key from `providerCredential`, then calls `ModelClient`.
-5. The returned tool call arguments are parsed as `SubmitTurnEventsArgs`.
-6. `replyText` events are normalized into assistant message display text. The complete ordered turn event list is persisted with the assistant turn.
+5. The model call parses the returned tool call arguments as `SubmitTurnEventsArgs` and returns a chat-specific `parsedOutput` containing normalized display text plus the ordered `TurnEvent[]`.
+6. `PersonaFlowChatTurnService` consumes that parsed result without knowing the underlying tool implementation. The complete ordered turn event list is persisted with the assistant turn.
 7. Assistant turns are appended to the chat store as the conversation self actor via `appendAssistantTurn()`, which writes both the timeline message and the structured turn events.
 
 Streaming is not complete for `single_character_chat` yet. The `/v1/chat/stream` endpoint and frontend SSE path exist, but the current implementation still falls back to the same tool-call model path and emits the full `replyText` as one SSE chunk. The final SSE `done` event includes the submitted `turnEvents`.
@@ -413,6 +415,7 @@ Start here when reviewing or changing behavior:
 - The `AI_FUNCTIONS` / `AiFunction` to `MODEL_CALL_PURPOSES` / `ModelCallPurpose` rename is complete in the contracts, web, server, and store layers.
 - The SQLite model assignment column is `model_assignments_json`; old model-assignment storage compatibility has been removed.
 - The single-character chat model output path now uses the terminal `submit_turn_events` tool instead of `singleCharacterChatStructuredOutputSchema`.
+- Chat-turn/model-call layering is intentionally split: chat services consume model-call `parsedOutput`, while each model call owns provider response/tool parsing for its purpose. This keeps future interaction modes free to use different tools or structured output without changing chat-turn persistence code.
 - `messages` is now a timeline/display table with `kind` and `display_text`; structured assistant facts are stored in `turn_events`.
 - Prompt history currently reuses only `replyText` events from assistant turns. TODO: include selected latest non-text state, such as expression or scene atmosphere, once prompt format and UI needs are settled.
 - API key encryption hooks exist in the SQLite credential store, but currently return the input unchanged.

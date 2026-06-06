@@ -19,7 +19,7 @@
 - LLM API 集成
 - 基于 SSE 的流式聊天
 - prompt 组合与模板管理
-- structured output 与类似 tool-call 的事件设计
+- tool-call 驱动的 turn event 设计
 - 用 SQLite 持久化对话与角色数据
 - 角色对话与 TRPG 风格交互设计
 - LLM provider abstraction
@@ -131,19 +131,23 @@ pnpm --dir ./.deploy-prod/server start
 - 定义 `AppStores`，作为应用层注入的聚合依赖边界
 - 通过 `PromptContextBuilder` 从 stores 构建 prompt context
 - 通过 `modelCallRegistry` 解析 model-call handlers
-- 实现当前 `chat.main/single_character_chat` 的 prompt 组装和输出归一化流程
+- 实现当前 `chat.main/single_character_chat` 的 prompt 组装和 `submit_turn_events` 输出流程
 - 通过 `PersonaFlowChatTurnService` 负责编排 chat turn
 - 通过 `ModelRuntime` 解析模型运行时并调用注入的 `ModelClient`
 - 在 `src/llm/modelClient.ts` 中定义 LLM client interfaces
+- 定义 provider-neutral 的 tool 描述、`submit_turn_events` terminal tool，以及模型提交 turn events 的解析逻辑
+
+层级关系需要特别注意：`PersonaFlowChatTurnService` 负责 turn 编排和持久化，但不直接解析 provider tool calls。已注册的 `ModelCall<TParsedOutput>` 负责本 purpose 的 prompt 组装、需要的工具、以及业务级解析。`ModelRuntime` 只负责 provider/model/API key 解析和调用 `ModelClient`，返回 provider-neutral 的原始 `llmResponse`。随后 model call 把响应转换为 `parsedOutput`；可选的 `parsedToolCalls` 只用于调用方确实需要检查的中间工具结果。对当前 `single_character_chat` 来说，terminal tool `submit_turn_events` 已经被折叠成 `{ displayText, events }` 作为 `parsedOutput`，因此不会再重复写入 `parsedToolCalls`。
 
 主聊天流程：
 
 1. `PersonaFlowChatTurnService.chatTurn()` 接收 user、character、conversation 和 message 输入。
 2. `prepareChatTurnContext()` 校验角色和会话、解析发送方 actor、按需追加用户消息，并构建 `PromptContext`。
 3. `resolveModelCall()` 根据请求的 purpose 和 interaction mode 选择已注册 handler。目前实际使用的是 `chat.main:single_character_chat`。
-4. handler 组装 LLM messages，并要求模型通过 `submit_turn_events` terminal tool 提交本回合事件。
-5. tool-call 结果会解析成 `TurnEvent[]`，其中 `replyText` 会归一化为展示文本。
-6. 回复会作为 conversation 的 `self` actor 消息写入 chat store，同时结构化事件写入 `turn_events`。
+4. handler 组装 LLM messages，并要求模型通过 `submit_turn_events` terminal tool 提交本回合事件。`ModelRuntime.chat()` 根据 `userPreferences.modelAssignments[modelCallPurpose]` 解析 provider / model，根据 provider credential 或默认 API key 解析密钥，然后调用 `ModelClient`。
+5. model call 把返回的 tool-call arguments 解析为 `SubmitTurnEventsArgs`，并返回 chat 专用的 `parsedOutput`：归一化后的展示文本和有序 `TurnEvent[]`。
+6. `PersonaFlowChatTurnService` 只消费这个 parsed result，不需要知道底层是 tool call、structured output 还是未来别的形式。
+7. 回复会作为 conversation 的 `self` actor 消息写入 chat store，同时结构化事件写入 `turn_events`。
 
 `single_character_chat` 的 streaming 还没有真正完成。虽然 `/v1/chat/stream` 和前端 SSE 路径已经存在，但当前实现仍然会先走一次 `submit_turn_events` tool call，然后把完整回复作为单个 SSE chunk 发出。
 
@@ -159,8 +163,11 @@ interaction modes 定义在 `@ss-ai/contracts` 中。当前只有 `single_charac
 - 在 `src/apis/*.api.ts` 中定义请求和响应类型
 - 定义 `INTERACTION_MODES`、`DEFAULT_INTERACTION_MODE` 和 `InteractionMode`
 - 定义 `MODEL_CALL_PURPOSES`、`ModelCallPurpose` 以及模型分配相关类型
+- 定义 `TurnEvent`、`SubmitTurnEventsArgs`、`MessageKind`，以及用于模型提交事件和落库读取校验的 Zod schemas
 
 模型调用配置使用 `MODEL_CALL_PURPOSES` / `ModelCallPurpose`，以及 `ModelAssignment` / `ModelAssignmentMap`。
+
+Turn event 的纯类型与字面量常量位于 `packages/contracts/src/turnEvents.ts`；需要运行时校验的 Zod schema 位于 `packages/contracts/src/turnEvents.schema.ts`，通过 `@ss-ai/contracts/turnEvents.schema` 子入口使用。这样 web 可以引用纯 contracts 而不把 Zod 运行时代码打进主 bundle。
 
 ### `packages/persona-flow-sqlite`
 
@@ -179,12 +186,17 @@ interaction modes 定义在 `@ss-ai/contracts` 中。当前只有 `single_charac
 - `conversations`
 - `conversation_actors`
 - `messages`
+- `turn_events`
 - `user_profiles`
 - `user_preferences`
 - `user_character_states`
 - `user_provider_credentials`
 
 `user_preferences.model_assignments_json` 用于保存从 model-call purpose 到 `{ provider, model }` 的映射。
+
+`messages` 是会话 timeline/display 表，保存 `kind`、`display_text`、发送 actor、conversation id 和时间戳。assistant turn 使用 `kind = "assistant_turn_events"`。
+
+`turn_events` 保存 `submit_turn_events` 提交的有序事件 payload。每行属于一个 assistant message，并保存 `seq`、`type`、JSON payload、schema version 和时间戳。`SQLiteChatStore.appendAssistantTurn()` 会在同一个事务中写入 message 和 turn events；读取 recent messages 时会把 assistant message 的 `turnEvents` 重新组装出来。
 
 ### `packages/persona-flow-model-client`
 
@@ -195,7 +207,8 @@ interaction modes 定义在 `@ss-ai/contracts` 中。当前只有 `single_charac
 - 实现 `persona-flow` 中定义的 `ModelClient` interface
 - 由 `DefaultModelClient` 按 provider 分发
 - 当前实际 provider 是通过 `MistralModelClient` 接入的 Mistral
-- 支持普通生成、非结构化流式生成、structured 输出和模型列表获取
+- 支持普通生成、structured 输出、tool calls、模型列表获取，以及当前保留接口但尚未完成真流式的 streaming 路径
+- 在 `src/mistral/mistralToolAdapter.ts` 中把 provider-neutral `ModelToolDefinition` 转成 Mistral function tools
 
 provider 列表和 API URL 来自 runtime config。API key 按用户和 provider 保存在 credential store 中。SQLite 目前仍然通过空实现的 encrypt/decrypt helpers 处理它们，因此落库值依然是明文，直到后续补上真正的加密方案。
 
@@ -249,7 +262,7 @@ Vue 3 + Vite 前端。
 
 - `src/shared/state/appState.ts` 中的 `contextVersion` 会在角色或会话上下文变化时触发聊天历史重载
 - 当前激活的角色、会话和 actor 状态保存在各面板 view-model 模块中
-- 聊天目前可以走 structured 非流式路径；虽然 UI 中已经有非结构化 streaming 路径，但当前 `single_character_chat` 后端仍然只返回一个完整 chunk
+- 聊天目前无论非 stream 还是 stream UI 模式，都会收到由 `replyText` events 派生出的 assistant output；后端的 `single_character_chat` stream 路径仍然只返回一个完整 chunk
 
 当前设置行为：
 
@@ -328,13 +341,13 @@ QQ bot 集成。
 - `other`：登录用户或本地 actor
 - `system`：保留的系统 actor 角色
 
-messages 只保存 `senderActorId`、`conversationId`、内容和时间戳。prompt 渲染阶段会把 actors 映射到 LLM roles：
+messages 保存 `senderActorId`、`conversationId`、`kind`、`displayText`、可选 `turnEvents` 和时间戳。prompt 渲染阶段会把 actors 映射到 LLM roles：
 
 - `self` -> `assistant`
 - `system` -> `system`
 - 其他 actor -> `user`
 
-`packages/persona-flow/src/prompt/speakerTag.ts` 中有共享的 speaker-tag helper，为未来更复杂的 interaction mode 预留。当前 `single_character_chat` prompt 路径不会给发往 LLM 的消息加 speaker tag；不过在输出归一化时，仍会移除 assistant 风格的名字前缀，避免回复里重复出现标签。
+`packages/persona-flow/src/prompt/speakerTag.ts` 中有共享的 speaker-tag helper，为未来更复杂的 interaction mode 预留。当前 `single_character_chat` prompt 路径不会给发往 LLM 的消息加 speaker tag。assistant 历史如果带有 `turnEvents`，当前只会把其中的 `replyText` 重新用于 prompt history；expression、scene atmosphere 等非文本事件会持久化下来，留给后续 prompt/state 设计使用。在输出归一化时，仍会移除 assistant 风格的名字前缀，避免回复里重复出现标签。
 
 ## 模型分配
 
@@ -371,19 +384,26 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 
 - `packages/contracts/src/modelCallPurpose.ts`
 - `packages/contracts/src/interactionMode.ts`
+- `packages/contracts/src/turnEvents.ts`
 - `packages/contracts/src/apis/*.api.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnService.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnPreparation.ts`
+- `packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts`
+- `packages/persona-flow/src/chatTurn/events/turnEventText.ts`
+- `packages/persona-flow/src/llm/tools/modelTool.ts`
+- `packages/persona-flow/src/llm/tools/submitTurnEventsTool.ts`
 - `packages/persona-flow/src/modelCall/modelRuntime.ts`
 - `packages/persona-flow/src/modelCall/modelCallRegistry.ts`
 - `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.ts`
 - `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/promptViewModel.ts`
 - `packages/persona-flow/src/stores/appStores.ts`
 - `packages/persona-flow-sqlite/src/db/schema.ts`
+- `packages/persona-flow-sqlite/src/db/SQLiteMessageStore.ts`
 - `packages/persona-flow-sqlite/src/db/CharacterDbRouter.ts`
 - `packages/persona-flow-sqlite/src/createSqliteStores.ts`
 - `packages/persona-flow-model-client/src/defaultModelClient.ts`
 - `packages/persona-flow-model-client/src/mistral/mistralModelClient.ts`
+- `packages/persona-flow-model-client/src/mistral/mistralToolAdapter.ts`
 - `apps/server/src/http/apis/chat/*.ts`
 - `apps/server/src/http/apis/userPreference.route.ts`
 - `apps/web/src/panels/chat/useChatViewModel.ts`
@@ -393,9 +413,12 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 
 - `AI_FUNCTIONS` / `AiFunction` 到 `MODEL_CALL_PURPOSES` / `ModelCallPurpose` 的重命名已经在 contracts、web、server 和 store 层完成
 - SQLite 中模型分配对应的列是 `model_assignments_json`，旧的 model-assignment 存储兼容逻辑已经移除
+- 当前 single-character chat 模型输出路径使用 terminal `submit_turn_events` tool，而不是旧的 `singleCharacterChatStructuredOutputSchema`
+- chatTurn/modelCall 的层级边界是刻意拆开的：chat service 消费 model call 的 `parsedOutput`，每个 model call 自己负责解析 provider response 和 tool arguments。这样未来 interaction mode 即使用不同工具或 structured output，也不需要改 chat-turn 持久化代码
+- `messages` 现在是 timeline/display 表，结构化 assistant 事实存储在 `turn_events` 中
+- Prompt history 当前只复用 assistant turn 里的 `replyText` events。TODO：等 prompt 格式和 UI 需求明确后，再把 expression、scene atmosphere 等非文本状态选择性注入 prompt
 - SQLite credential store 已经预留 API key 加密钩子，但目前仍然是原样返回
 - 低优先级 TODO：等部署与密钥管理方案明确后，把当前空实现的 API key encrypt/decrypt 替换成真正的静态加密方案
-- Tool calls 目前只会被检测和记录为 TODO，并不会真的执行
 - `single_character_chat` streaming 还没有真正完成；SSE route 虽然已存在，但当前仍然只返回一个完整回复 chunk
 - 除 `single_character_chat` 之外的 interaction modes 虽然已经声明，但尚未接入运行时 model-call dispatch
 - speaker-tag helper 和更丰富的多 actor prompt shaping 预留给后续 interaction modes；当前 `single_character_chat` 故意保持更简单的 prompt 路径
