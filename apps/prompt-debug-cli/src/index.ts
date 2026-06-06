@@ -86,7 +86,6 @@ async function resolvePromptTemplatePath(configPath: string): Promise<string> {
         resolve(dirname(configPath), "main.md.hbs"),
         resolve(startupCwd, "main.md.hbs"),
         resolve(runtimeCwd, "main.md.hbs"),
-        resolve(startupCwd, "packages/persona-flow/data/prompts/zh-CN/main.md.hbs"),
         resolve(startupCwd, "packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/templates/system.zh-CN.md.hbs"),
         resolve(runtimeCwd, "packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/templates/system.zh-CN.md.hbs"),
     ];

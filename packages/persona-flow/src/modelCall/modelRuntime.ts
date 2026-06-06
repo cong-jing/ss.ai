@@ -10,6 +10,7 @@ import type { ModelToolChoice, ModelToolDefinition } from "../llm/tools/modelToo
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "../chatTurn/personaFlowLogger.js";
 import type { ModelAssignmentMap, ModelCallPurpose } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
+import { toJSONSchema } from "zod";
 
 export interface PersonaModelRequest {
     userId: string;
@@ -142,6 +143,7 @@ export class ModelRuntime {
                     name: tool.name,
                     terminal: tool.terminal,
                     purpose: tool.purpose,
+                    argsSchema: toJSONSchema(tool.argsSchema, { io: "input" }),
                 })),
                 toolChoice: request.toolChoice,
                 status: payload.status,

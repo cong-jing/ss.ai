@@ -3,7 +3,6 @@
 ## Higher priority follow-ups
 
 - Chat stream is still an SSE fallback path for `single_character_chat`, not true token streaming yet. This includes the current "SSE error event looks like done" behavior from review issue 8.
-- `prompt-debug` still points its default fallback template path at the pre-refactor prompt layout. Fix this after the prompt refactor settles, along with the CLI README and example alignment.
 - Character-level `modelConfig` is stored and editable, but chat model selection still does not consume it. Decide whether to implement that priority chain or hide the field until it becomes real.
 
 ## Lower priority follow-ups

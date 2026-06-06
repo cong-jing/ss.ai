@@ -28,6 +28,10 @@
 - `LlmResponseMode` 已从 chat contracts、server route、chatTurn/modelCall 输入、web / QQ bot 客户端和测试中移除。chat API 现在只有一种输出契约：非 stream 和 stream 都返回 `output + turnEvents`，底层 provider structured response 能力仍通过 `structuredOutputSchema` 留在 `ModelRuntime` / `ModelClient` 层。
 - `ModelCallOutcome` / `parsedModelOutput` 已移除。[modelCall.ts](../packages/persona-flow/src/modelCall/modelCall.ts) 现在使用 `ModelCall<TParsedOutput>` / `ModelCallRunResult<TParsedOutput>` 表达各 model call 的解析后业务结果，并保留可选 `parsedToolCalls` 记录中间工具解析结果；[singleCharacterChatCall.ts](../packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.ts) 自己解析并处理 `submit_turn_events`，chatTurnService 只消费 `parsedOutput`。
 - Mistral non-stream tool-only 响应不再通过吞掉 `extractText` 异常来兼容。[mistralModelClient.ts](../packages/persona-flow-model-client/src/mistral/mistralModelClient.ts) 现在只在消息 content 明确为空且存在 tool calls 时返回空文本，并写 verbose log；未知非空 content 形状仍会抛错。[messageTransforms.test.ts](../packages/persona-flow-model-client/test/messageTransforms.test.ts) 已补覆盖。
+- [SQLiteMessageStore.ts](../packages/persona-flow-sqlite/src/db/SQLiteMessageStore.ts) 在分组后会按 `seq` 对每条 message 的 turn events 做防御性排序；[messages.test.ts](../packages/persona-flow-sqlite/test/messages.test.ts) 已补乱序插入读取覆盖。
+- [apps/prompt-debug-cli/src/index.ts](../apps/prompt-debug-cli/src/index.ts) 已删除旧的 `packages/persona-flow/data/prompts/zh-CN/main.md.hbs` fallback；[README.md](../apps/prompt-debug-cli/README.md) 和 [todo.md](todo.md) 已同步。
+- 新增 [.gitattributes](../.gitattributes) 统一文本文件 LF，避免 CRLF 行尾继续进入主线。
+- [modelRuntime.ts](../packages/persona-flow/src/modelCall/modelRuntime.ts) 的 prompt log 已记录 tool `argsSchema`，便于对照 provider-facing schema；[submitTurnEventsParser.ts](../packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts) 对缺失 arguments 会返回明确的 `submit_turn_events arguments missing.` 错误，并已补测试。
 
 ## 剩余问题
 
@@ -37,36 +41,22 @@
 
 考虑：
 
-- 历史迁移期间 `kind` 取自 `COALESCE(kind, 'user_text')`，这意味着旧 assistant 消息会被标成 `user_text`，[singleCharacterChatCall.ts](../packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.ts) 组 prompt 时会因此把它们当成 user content。tool-call instruction 里允许“破坏性迁移、可删库”，所以这是可接受的取舍，但应该在 PR/CHANGELOG 里明确提示“升级后旧库的历史会被解释错乱，建议删库重建”。
-- 长期可以加 SQLite CHECK 约束，或者迁移时根据 `sender_actor_id` 是否对应 `self` actor 来回填 `kind`。
+- 本次不考虑旧库迁移。长期可以加 SQLite CHECK 约束，避免未来代码路径写入未知 `kind`。
 
-### 2. `getRecentMessages` 事件顺序仍可更防御
-
-[SQLiteMessageStore.ts](../packages/persona-flow-sqlite/src/db/SQLiteMessageStore.ts) 目前依赖 SQL `orderBy(asc(messageId), asc(seq))` 保证同一消息内事件顺序。SQLite 下这基本可用，但如果未来换 driver / 改查询形态，可以考虑在分组后对每个 message 的事件按 `seq` 再排一次。
-
-`schema_version` 兼容读取和坏事件跳过已经完成；这里只剩顺序上的防御性增强，优先级较低。
-
-### 3. `mistralToolAdapter` schema 归一化仍可增强
+### 2. `mistralToolAdapter` schema 归一化仍可增强
 
 [mistralToolAdapter.ts](../packages/persona-flow-model-client/src/mistral/mistralToolAdapter.ts) 已有测试覆盖当前 `submit_turn_events` schema 形状，但 adapter 本身还没有显式处理 `$defs` / `definitions`、`additionalProperties`、或 Mistral 对 `oneOf` / `anyOf` 的偏好。
 
 目前 prompt log 中能跑通，新增测试也能防止 Zod 大版本升级时 schema 形状悄悄回归。后续如果遇到 provider 对 schema 严格度的兼容问题，再考虑在 adapter 层做 provider-specific normalization。
 
-### 4. 旧 prompt-debug 模板路径仍需清理或文档化
-
-仓库还保留了旧版 `data/prompts/zh-CN/main.md.hbs` 模板搜索路径（[apps/prompt-debug-cli/src/index.ts](../apps/prompt-debug-cli/src/index.ts)），但实际主链路不再使用。建议清理，或在 README / project map 中说明“旧 prompt 模板已废弃，仅作回退”。
-
 ## 小问题集合
 
 | 位置 | 备注 |
 | --- | --- |
-| [apps/qq-bot/src/http/serverClient.ts](../apps/qq-bot/src/http/serverClient.ts) | 整段 import 改成混合 `import { value }` + `import type {...}`，部分编辑器显示行尾混了 CRLF（diff 里大量 `\r`）。请确认 `.editorconfig` / `.gitattributes` 行尾配置，不要让 CRLF 进主线。 |
-| [packages/persona-flow/src/modelCall/modelRuntime.ts](../packages/persona-flow/src/modelCall/modelRuntime.ts) | prompt log 中 `tools` 只记录 name/terminal/purpose，不记录 args schema。对调试影响不大，可选项。 |
-| [packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts](../packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts) | `normalizeToolArguments` 在 `argumentsValue === undefined` 时返回 `undefined`，`SubmitTurnEventsArgsSchema.parse(undefined)` 会抛 Zod 错误，可读性 OK；如果想给出更友好的提示，可以专门 throw `"submit_turn_events arguments missing"`。 |
 | [packages/contracts/src/apis/chat.api.ts](../packages/contracts/src/apis/chat.api.ts) | `ChatStructuredOutput` 类型已被删，仓库内搜不到引用。请确认 lightsail / 外部消费方是否也升级。 |
 | [apps/server/test/helpers/inMemoryChatStore.ts](../apps/server/test/helpers/inMemoryChatStore.ts) | `appendAssistantTurn` 直接 push 同一对象，相比 SQLite 真实路径不会 throw 也不会校验 schema。生产用 SQLite 测试覆盖到了 schema parse，OK。 |
 
 ## 剩余建议优先级
 
-1. **P3**：视需要补 SQLite `messages.kind` CHECK 约束 / 迁移说明，以及事件组内排序防御（第 1、2 节）。
-2. **P3**：清理或文档化 `prompt-debug-cli` 中旧 prompt 路径回退（第 4 节）。
+1. **P3**：视需要补 SQLite `messages.kind` CHECK 约束（第 1 节）。
+2. **观察项**：如果 Mistral 开始拒绝当前 tool schema，再在 adapter 层做 provider-specific normalization（第 2 节）。

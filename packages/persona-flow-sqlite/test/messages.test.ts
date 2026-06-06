@@ -180,6 +180,56 @@ describe("SQLiteChatStore — message operations", () => {
         assert.deepEqual(result[0].turnEvents, [validEvent]);
     });
 
+    it("getRecentMessages — returns turn events ordered by seq", async () => {
+        const cid = "conv_event_order_" + crypto.randomUUID();
+        const { db } = openDatabase(":memory:");
+        const localStore = new SQLiteChatStore(db);
+        const convStore = new SQLiteConversationStore(db);
+        const conv = makeConversation({ id: cid });
+        const { selfActorId } = await convStore.createConversation(conv, { selfDisplayName: "AI" });
+        const message = makeMessage(cid, selfActorId, {
+            kind: "assistant_turn_events",
+            displayText: "hello then happy",
+        });
+        const firstEvent: NonNullable<Message["turnEvents"]>[number] = {
+            type: "replyText",
+            characterId: "char_a",
+            text: "hello",
+        };
+        const secondEvent: NonNullable<Message["turnEvents"]>[number] = {
+            type: "expression",
+            characterId: "char_a",
+            expression: "happy",
+        };
+
+        await localStore.appendAssistantTurn({ message, events: [] });
+        await db.insert(turnEvents).values([
+            {
+                id: crypto.randomUUID(),
+                messageId: message.id,
+                conversationId: cid,
+                seq: 1,
+                type: secondEvent.type,
+                payloadJson: JSON.stringify(secondEvent),
+                schemaVersion: 1,
+                createdAt: message.createdAt,
+            },
+            {
+                id: crypto.randomUUID(),
+                messageId: message.id,
+                conversationId: cid,
+                seq: 0,
+                type: firstEvent.type,
+                payloadJson: JSON.stringify(firstEvent),
+                schemaVersion: 1,
+                createdAt: message.createdAt,
+            },
+        ]);
+
+        const result = await localStore.getRecentMessages({ conversationId: cid, limit: 10 });
+        assert.deepEqual(result[0].turnEvents, [firstEvent, secondEvent]);
+    });
+
     it("deleteMessage — removes attached turn events", async () => {
         const cid = "conv_delete_events_" + crypto.randomUUID();
         const { db } = openDatabase(":memory:");

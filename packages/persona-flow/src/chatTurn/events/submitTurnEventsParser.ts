@@ -15,6 +15,10 @@ export type SafeParseSubmitTurnEventsArgsResult =
     };
 
 function normalizeToolArguments(argumentsValue: unknown): unknown {
+    if (argumentsValue === undefined) {
+        throw new Error("submit_turn_events arguments missing.");
+    }
+
     if (typeof argumentsValue !== "string") {
         return argumentsValue;
     }

@@ -118,7 +118,6 @@ pnpm run prompt:debug -- --config apps/prompt-debug-cli/examples/shishi-basic.ya
 1. 配置文件同目录的 `main.md.hbs`
 2. 启动目录的 `main.md.hbs`
 3. 当前进程目录的 `main.md.hbs`
-4. `packages/persona-flow/data/prompts/zh-CN/main.md.hbs`
-5. `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/templates/system.zh-CN.md.hbs`
+4. `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/templates/system.zh-CN.md.hbs`
 
 通常不需要指定 `--template`。

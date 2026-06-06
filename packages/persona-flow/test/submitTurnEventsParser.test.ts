@@ -32,4 +32,13 @@ describe("submit turn events parser", () => {
             assert.match(result.error.message, /too small|at least/i);
         }
     });
+
+    it("returns a clear error when tool arguments are missing", () => {
+        const result = safeParseSubmitTurnEventsArgs(undefined);
+
+        assert.equal(result.success, false);
+        if (!result.success) {
+            assert.match(result.error.message, /arguments missing/i);
+        }
+    });
 });

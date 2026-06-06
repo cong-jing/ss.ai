@@ -30,6 +30,11 @@ function rowToTurnEvent(row: TurnEventRow): NonNullable<Message["turnEvents"]>[n
     }
 }
 
+type ParsedTurnEventRow = {
+    seq: number;
+    event: NonNullable<Message["turnEvents"]>[number];
+};
+
 export class SQLiteMessageStore {
     constructor(
         private readonly db: DrizzleDb,
@@ -96,18 +101,18 @@ export class SQLiteMessageStore {
                 .where(inArray(turnEvents.messageId, messageIds))
                 .orderBy(asc(turnEvents.messageId), asc(turnEvents.seq))
             : [];
-        const eventsByMessageId = new Map<string, NonNullable<Message["turnEvents"]>>();
+        const eventsByMessageId = new Map<string, ParsedTurnEventRow[]>();
         for (const row of eventRows) {
             const event = rowToTurnEvent(row);
             if (!event) {
                 continue;
             }
             const list = eventsByMessageId.get(row.messageId) ?? [];
-            list.push(event);
+            list.push({ seq: row.seq, event });
             eventsByMessageId.set(row.messageId, list);
         }
 
-        return orderedRows.map(row => rowToMessage(row, eventsByMessageId.get(row.id) ?? []));
+        return orderedRows.map(row => rowToMessage(row, toOrderedTurnEvents(eventsByMessageId.get(row.id) ?? [])));
     }
 
     async deleteMessage(input: { conversationId: string; messageId: string }): Promise<void> {
@@ -134,4 +139,10 @@ export class SQLiteMessageStore {
         }
         return await this.characterDbRouter.getDbForConversation({ conversationId });
     }
+}
+
+function toOrderedTurnEvents(rows: ParsedTurnEventRow[]): NonNullable<Message["turnEvents"]> {
+    return [...rows]
+        .sort((a, b) => a.seq - b.seq)
+        .map(row => row.event);
 }
