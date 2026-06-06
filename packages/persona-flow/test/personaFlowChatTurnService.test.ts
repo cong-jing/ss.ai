@@ -98,7 +98,7 @@ function seedModelRuntime(fixture: ReturnType<typeof createTestFixture>, userId:
 }
 
 describe("persona-flow chat turn service", () => {
-    it("chatTurn appends assistant reply from single-character structured output", async () => {
+    it("chatTurn appends assistant reply from submit_turn_events tool call", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -110,16 +110,29 @@ describe("persona-flow chat turn service", () => {
 
         const modelClient: ModelClient = {
             generate: async (input) => {
-                if (input.structuredOutputSchema) {
-                    return {
-                        structuredOutput: {
-                            replyText: "SS: hello back",
-                        },
-                        toolCalls: [],
-                    };
-                }
+                assert.equal(input.tools?.[0]?.name, "submit_turn_events");
+                assert.deepEqual(input.toolChoice, {
+                    type: "function",
+                    functionName: "submit_turn_events",
+                });
 
-                return { output: "", toolCalls: [] };
+                return {
+                    output: "",
+                    toolCalls: [
+                        {
+                            functionName: "submit_turn_events",
+                            arguments: {
+                                events: [
+                                    {
+                                        type: "replyText",
+                                        characterId: base.characterId,
+                                        text: "SS: hello back",
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                };
             },
             generateStream: async () => ({ output: "", toolCalls: [], completed: true }),
             listModels: async () => [],
@@ -136,21 +149,28 @@ describe("persona-flow chat turn service", () => {
             characterId: base.characterId,
             conversationId: base.conversationId,
             userMessageText: "hello",
-            llmResponseMode: "structured",
             senderActorId: base.userActorId,
         });
 
         assert.equal(result.output, "hello back");
         assert.equal(result.apiKeySource, "user");
         assert.ok(result.assistantMessageId);
+        assert.deepEqual(result.turnEvents, [
+            {
+                type: "replyText",
+                characterId: base.characterId,
+                text: "SS: hello back",
+            },
+        ]);
 
         const messages = fixture.inspect.messages(base.conversationId);
         const assistantMessages = messages.filter(message => message.senderActorId === base.selfActorId);
         assert.equal(assistantMessages.length, 1);
-        assert.equal(assistantMessages[0].content, "hello back");
+        assert.equal(assistantMessages[0].displayText, "hello back");
+        assert.deepEqual(assistantMessages[0].turnEvents, result.turnEvents);
     });
 
-    it("streamTurn emits normalized chunks and persists assistant message", async () => {
+    it("streamTurn emits the full normalized reply once and persists assistant message", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -165,16 +185,30 @@ describe("persona-flow chat turn service", () => {
 
         const modelClient: ModelClient = {
             generate: async (input) => {
-                if (input.structuredOutputSchema) {
-                    return {
-                        structuredOutput: {
-                            replyText: "SS: Hello World",
-                        },
-                        toolCalls: [],
-                    };
-                }
+                assert.equal(input.tools?.[0]?.name, "submit_turn_events");
 
-                return { output: "unused", toolCalls: [] };
+                return {
+                    output: "",
+                    toolCalls: [
+                        {
+                            functionName: "submit_turn_events",
+                            arguments: JSON.stringify({
+                                events: [
+                                    {
+                                        type: "replyText",
+                                        characterId: base.characterId,
+                                        text: "SS: Hello World",
+                                    },
+                                    {
+                                        type: "expression",
+                                        characterId: base.characterId,
+                                        expression: "happy",
+                                    },
+                                ],
+                            }),
+                        },
+                    ],
+                };
             },
             generateStream: async () => {
                 throw new Error("should not be called");
@@ -193,7 +227,6 @@ describe("persona-flow chat turn service", () => {
             characterId: base.characterId,
             conversationId: base.conversationId,
             userMessageText: "stream me",
-            llmResponseMode: "non-structured",
             senderActorId: base.userActorId,
             includeAssembledMessages: true,
             onAssembledMessages: (messages) => {
@@ -207,12 +240,14 @@ describe("persona-flow chat turn service", () => {
         assert.equal(result.model, "m1");
         assert.equal(result.apiKeySource, "user");
         assert.equal(result.output, "Hello World");
+        assert.equal(result.turnEvents?.length, 2);
         assert.equal(seenChunks.join(""), "Hello World");
         assert.equal(seenPrompts.length, 1);
 
         const messages = fixture.inspect.messages(base.conversationId);
         const assistantMessages = messages.filter(message => message.senderActorId === base.selfActorId);
         assert.equal(assistantMessages.length, 1);
-        assert.equal(assistantMessages[0].content, "Hello World");
+        assert.equal(assistantMessages[0].displayText, "Hello World");
+        assert.equal(assistantMessages[0].turnEvents?.length, 2);
     });
 });

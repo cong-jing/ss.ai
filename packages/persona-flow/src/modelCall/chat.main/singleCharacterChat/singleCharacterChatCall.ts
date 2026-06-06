@@ -1,24 +1,27 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ModelCall, ModelCallOutcome, ModelCallPreparedRequest, ModelCallRunResult } from "../../modelCall.js";
+import type { ModelCall, ModelCallRunResult } from "../../modelCall.js";
 import type { PromptContext } from "../../../prompt/promptContext.js";
 import type { RenderedMessage } from "../../../prompt/promptTypes.js";
+import type { SubmitTurnEventsArgs } from "@ss-ai/contracts";
 import { renderPromptTemplate } from "../../../prompt/renderPromptTemplate.js";
+import { getTurnEventsReplyText } from "../../../chatTurn/events/turnEventText.js";
+import { parseSubmitTurnEventsArgs } from "../../../chatTurn/events/submitTurnEventsParser.js";
+import { SUBMIT_TURN_EVENTS_TOOL_NAME, submitTurnEventsTool } from "../../../llm/tools/submitTurnEventsTool.js";
+import type { ModelToolCall } from "../../../llm/modelClient.js";
 import { buildPromptViewModel } from "./promptViewModel.js";
-import {
-    parseSingleCharacterChatOutput,
-    singleCharacterChatStructuredOutputSchema,
-    type SingleCharacterChatOutput,
-} from "./singleCharacterChatOutput.js";
 import { PersonaModelRequest } from "../../modelRuntime.js";
-
-export type { SingleCharacterChatOutput } from "./singleCharacterChatOutput.js";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const SYSTEM_TEMPLATE_PATH = resolve(
     __dir,
     "./templates/system.zh-CN.md.hbs",
 );
+
+export type SingleCharacterChatResult = {
+    displayText: string;
+    events: SubmitTurnEventsArgs["events"];
+};
 
 function normalizeSingleCharacterReply(
     replyText: string,
@@ -48,12 +51,15 @@ function buildConversationMessages(context: PromptContext): RenderedMessage[] {
         const actor = context.actorMap.get(message.senderActorId);
         const role = actor ? toLlmRole(actor.role) : "user";
         const content = role === "assistant"
-            ? normalizeSingleCharacterReply(message.content, [
-                actor?.displayName,
-                context.character?.displayName,
-                context.character?.name,
-            ])
-            : message.content;
+            ? normalizeSingleCharacterReply(
+                message.turnEvents ? getTurnEventsReplyText(message.turnEvents) : message.displayText,
+                [
+                    actor?.displayName,
+                    context.character?.displayName,
+                    context.character?.name,
+                ],
+            )
+            : message.displayText;
 
         return { role, content };
     });
@@ -62,7 +68,7 @@ function buildConversationMessages(context: PromptContext): RenderedMessage[] {
         ...historyMessages,
         {
             role: "user",
-            content: context.currentUserMessage.content,
+            content: context.currentUserMessage.displayText,
         },
     ];
 }
@@ -85,9 +91,9 @@ function stripRepeatedPrefix(text: string, regex: RegExp): string {
     return output;
 }
 
-export const singleCharacterChatCall: ModelCall<SingleCharacterChatOutput> = {
+export const singleCharacterChatCall: ModelCall<SingleCharacterChatResult> = {
     purpose: "chat.main",
-    async run(input): Promise<ModelCallRunResult<SingleCharacterChatOutput>> {
+    async run(input): Promise<ModelCallRunResult<SingleCharacterChatResult>> {
         const viewModel = buildPromptViewModel({
             character: input.promptContext.character,
             userProfile: input.promptContext.userProfile,
@@ -103,9 +109,12 @@ export const singleCharacterChatCall: ModelCall<SingleCharacterChatOutput> = {
             userId: input.userId,
             characterId: input.characterId,
             messages,
-            llmResponseMode: "structured",
             modelCallPurpose: this.purpose,
-            structuredOutputSchema: singleCharacterChatStructuredOutputSchema,
+            tools: [submitTurnEventsTool],
+            toolChoice: {
+                type: "function",
+                functionName: SUBMIT_TURN_EVENTS_TOOL_NAME,
+            },
         };
 
         if (input.dryRun) {
@@ -113,42 +122,42 @@ export const singleCharacterChatCall: ModelCall<SingleCharacterChatOutput> = {
         }
 
         const llmResponse = await input.runtime.chat(llmRequest);
+        const toolCall = findSubmitTurnEventsToolCall(llmResponse.toolCalls);
+        if (!toolCall) {
+            throw new Error(`Model response did not call ${SUBMIT_TURN_EVENTS_TOOL_NAME}.`);
+        }
 
-        const parsedModelOutput = parseSingleCharacterChatOutput(llmResponse.structuredOutput);
-        const outcome = toSingleCharacterChatOutcome({
-            parsedModelOutput,
+        const submitTurnEventsOutput = parseSubmitTurnEventsArgs(toolCall.arguments);
+        const parsedOutput = toSingleCharacterChatResult({
+            submitTurnEventsOutput,
             promptContext: input.promptContext,
         });
 
         return {
             llmRequestSnapshot: llmRequest,
             llmResponse,
-            parsedModelOutput,
-            outcome,
+            // submit_turn_events is the terminal result for this call, so expose it
+            // as the chat-specific parsedOutput instead of mirroring it as a parsedToolCall.
+            parsedOutput,
         };
     },
 };
 
-function toSingleCharacterChatOutcome(input: {
-    parsedModelOutput: SingleCharacterChatOutput;
+function toSingleCharacterChatResult(input: {
+    submitTurnEventsOutput: SubmitTurnEventsArgs;
     promptContext: PromptContext;
-}): ModelCallOutcome {
+}): SingleCharacterChatResult {
     const selfActor = Array.from(input.promptContext.actorMap.values()).find(actor => actor.role === "self");
-    const replyText = normalizeSingleCharacterReply(input.parsedModelOutput.replyText, [
-        selfActor?.displayName,
-        input.promptContext.character?.displayName,
-        input.promptContext.character?.name,
-    ]);
-
-    if (replyText.trim().length === 0) {
-        return {
-            kind: "noReply",
-            reason: "empty-output",
-        };
-    }
-
     return {
-        kind: "assistantReply",
-        text: replyText,
+        displayText: normalizeSingleCharacterReply(getTurnEventsReplyText(input.submitTurnEventsOutput.events), [
+            selfActor?.displayName,
+            input.promptContext.character?.displayName,
+            input.promptContext.character?.name,
+        ]),
+        events: input.submitTurnEventsOutput.events,
     };
+}
+
+function findSubmitTurnEventsToolCall(toolCalls: ModelToolCall[]): ModelToolCall | undefined {
+    return toolCalls.find(toolCall => toolCall.functionName === SUBMIT_TURN_EVENTS_TOOL_NAME);
 }

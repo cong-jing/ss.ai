@@ -124,8 +124,20 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             id                    TEXT PRIMARY KEY,
             conversation_id       TEXT NOT NULL,
             sender_actor_id       TEXT NOT NULL DEFAULT '',
-            content               TEXT NOT NULL,
+            kind                  TEXT NOT NULL DEFAULT 'user_text',
+            display_text          TEXT NOT NULL DEFAULT '',
             created_at            TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS turn_events (
+            id             TEXT PRIMARY KEY,
+            message_id     TEXT NOT NULL,
+            conversation_id TEXT NOT NULL,
+            seq            INTEGER NOT NULL,
+            type           TEXT NOT NULL,
+            payload_json   TEXT NOT NULL,
+            schema_version INTEGER NOT NULL DEFAULT 1,
+            created_at     TEXT NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS app_users (
@@ -201,6 +213,8 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
     const hasLegacySenderColumn = messageColumnNames.has("sender_participant_id");
     const hasConversationIdColumn = messageColumnNames.has("conversation_id");
     const hasContentColumn = messageColumnNames.has("content");
+    const hasKindColumn = messageColumnNames.has("kind");
+    const hasDisplayTextColumn = messageColumnNames.has("display_text");
     const hasCreatedAtColumn = messageColumnNames.has("created_at");
 
     const needsMessagesRebuild =
@@ -208,7 +222,8 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
         hasUserIdColumn ||
         !hasSenderActorIdColumn ||
         !hasConversationIdColumn ||
-        !hasContentColumn ||
+        !hasKindColumn ||
+        !hasDisplayTextColumn ||
         !hasCreatedAtColumn;
 
     if (needsMessagesRebuild) {
@@ -217,16 +232,25 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             : hasLegacySenderColumn
                 ? `COALESCE(sender_participant_id, '')`
                 : `''`;
+        const displayTextExpr = hasDisplayTextColumn
+            ? `COALESCE(display_text, '')`
+            : hasContentColumn
+                ? `COALESCE(content, '')`
+                : `''`;
+        const kindExpr = hasKindColumn
+            ? `COALESCE(kind, 'user_text')`
+            : `'user_text'`;
         sqlite.exec(`
             CREATE TABLE IF NOT EXISTS messages_new (
                 id                   TEXT PRIMARY KEY,
                 conversation_id      TEXT NOT NULL,
                 sender_actor_id      TEXT NOT NULL DEFAULT '',
-                content              TEXT NOT NULL,
+                kind                 TEXT NOT NULL DEFAULT 'user_text',
+                display_text         TEXT NOT NULL DEFAULT '',
                 created_at           TEXT NOT NULL
             );
-            INSERT INTO messages_new (id, conversation_id, sender_actor_id, content, created_at)
-                SELECT id, conversation_id, ${senderExpr}, content, created_at
+            INSERT INTO messages_new (id, conversation_id, sender_actor_id, kind, display_text, created_at)
+                SELECT id, conversation_id, ${senderExpr}, ${kindExpr}, ${displayTextExpr}, created_at
                 FROM messages;
             DROP TABLE messages;
             ALTER TABLE messages_new RENAME TO messages;
@@ -238,6 +262,14 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
     sqlite.exec(`
         CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
             ON messages(conversation_id, created_at DESC)
+    `);
+    sqlite.exec(`
+        CREATE INDEX IF NOT EXISTS idx_turn_events_message_seq
+            ON turn_events(message_id, seq)
+    `);
+    sqlite.exec(`
+        CREATE INDEX IF NOT EXISTS idx_turn_events_conversation_type_created
+            ON turn_events(conversation_id, type, created_at DESC)
     `);
     sqlite.exec(`
         CREATE INDEX IF NOT EXISTS idx_app_sessions_user_id

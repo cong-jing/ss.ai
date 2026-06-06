@@ -1,6 +1,5 @@
 import type { RenderedMessage } from "../prompt/promptTypes.js";
-
-export type GenerationMode = "non-structured" | "structured";
+import type { ModelToolChoice, ModelToolDefinition } from "./tools/modelTool.js";
 
 export interface StructuredOutputSchema {
     type: "json_schema";
@@ -19,6 +18,8 @@ export interface ModelGenerationInput {
     encryptedApiKey: string;
     messages: RenderedMessage[];
     structuredOutputSchema?: StructuredOutputSchema;
+    tools?: ModelToolDefinition[];
+    toolChoice?: ModelToolChoice;
 }
 
 export interface ModelToolCall {

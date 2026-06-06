@@ -41,7 +41,7 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
     <div v-if="showDebug && message.id" class="message-id-row">id: {{ message.id }}</div>
     <details>
       <summary class="debug-summary">
-        <span>{{ message.structuredOutput ? t("chat.message.structuredOutput") : t("chat.message.promptPreview") }}</span>
+        <span>{{ message.turnEvents ? t("chat.message.structuredOutput") : t("chat.message.promptPreview") }}</span>
         <span class="debug-count">{{ t("chat.message.countMessages", { count: message.debugMessages?.length ?? 0 }) }}</span>
         <time v-if="message.createdAt" class="debug-time">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
       </summary>

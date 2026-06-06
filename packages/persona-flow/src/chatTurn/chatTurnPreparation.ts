@@ -1,4 +1,4 @@
-import type { InteractionMode, LlmResponseMode } from "@ss-ai/contracts";
+import type { InteractionMode } from "@ss-ai/contracts";
 import type { PromptContext } from "../prompt/promptContext.js";
 import { PromptContextBuilder } from "../prompt/promptContext.js";
 import type { AppStores } from "../stores/appStores.js";
@@ -60,7 +60,6 @@ export interface PrepareChatTurnInput {
     characterId: string;
     conversationId: string;
     userMessageText: string;
-    llmResponseMode: LlmResponseMode;
     interactionMode?: InteractionMode;
     senderActorId?: unknown;
     persistUserMessage?: boolean;
@@ -82,7 +81,6 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
         userId: input.userId,
         characterId: input.characterId,
         conversationId: input.conversationId,
-        llmResponseMode: input.llmResponseMode,
         interactionMode: input.interactionMode,
         persistUserMessage,
         hasSenderActorId: typeof input.senderActorId === "string" && input.senderActorId.trim().length > 0,
@@ -159,7 +157,8 @@ export async function prepareChatTurnContext(input: PrepareChatTurnInput): Promi
         id: crypto.randomUUID(),
         conversationId: input.conversationId,
         senderActorId: resolvedSenderActorId,
-        content: input.userMessageText,
+        kind: "user_text",
+        displayText: input.userMessageText,
         createdAt: new Date().toISOString(),
     };
 

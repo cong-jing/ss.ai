@@ -11,6 +11,10 @@ import type { UserCharacterState } from "../character/userCharacterState.js";
 export interface ChatStore {
     // ── Messages ──────────────────────────────────────────────────────────────
     appendMessage(message: Message): Promise<void>;
+    appendAssistantTurn(input: {
+        message: Message;
+        events: NonNullable<Message["turnEvents"]>;
+    }): Promise<void>;
     getRecentMessages(input: {
         /** @deprecated userId is no longer stored on messages; retained for call-site backwards compat only. */
         userId?: string;

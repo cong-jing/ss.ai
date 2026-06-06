@@ -50,6 +50,39 @@ export function extractText(response: unknown): string {
     throw new Error("Mistral response did not contain text content.");
 }
 
+export function isMistralMessageContentEmpty(message: unknown): boolean {
+    if (!message || typeof message !== "object") {
+        return true;
+    }
+
+    const content = (message as { content?: unknown }).content;
+    if (content === undefined || content === null) {
+        return true;
+    }
+
+    if (typeof content === "string") {
+        return !content.trim();
+    }
+
+    if (Array.isArray(content)) {
+        return content.length === 0 || content.every(isEmptyTextContentPart);
+    }
+
+    return false;
+}
+
+function isEmptyTextContentPart(item: unknown): boolean {
+    if (typeof item === "string") {
+        return !item.trim();
+    }
+
+    if (item && typeof item === "object" && "text" in item && typeof (item as { text?: unknown }).text === "string") {
+        return !(item as { text: string }).text.trim();
+    }
+
+    return false;
+}
+
 export function extractStructuredOutput(response: unknown): unknown {
     const responseWithChoices = response as {
         choices?: Array<{

@@ -1,7 +1,6 @@
 import { ApiDefine } from "../apiBase.js";
 import type { InteractionMode } from "../interactionMode.js";
-
-export type LlmResponseMode = "non-structured" | "structured";
+import type { TurnEvent } from "../turnEvents.js";
 
 export interface ChatRequest {
     /** Character to chat with. */
@@ -11,8 +10,6 @@ export interface ChatRequest {
     /** Optional sender actor for this user message. */
     senderActorId?: string;
     userMessageText: string;
-    /** LLM response mode. Defaults to `structured` when omitted. */
-    llmResponseMode?: LlmResponseMode;
     /** Interaction mode for prompt assembly. Defaults to `single_character_chat` when omitted. */
     interactionMode?: InteractionMode;
     /** When true, the response will include assembled LLM input messages for debugging. */
@@ -28,14 +25,10 @@ export interface ChatResponse {
     userMessageId: string;
     /** ID of the appended assistant message. Undefined when no assistant message was appended. */
     assistantMessageId?: string;
-    /** Structured payload returned by the chat model call. */
-    structuredOutput?: ChatStructuredOutput;
+    /** Ordered events submitted by the assistant turn. */
+    turnEvents?: TurnEvent[];
     /** Assembled LLM input messages, only present when request included `includeAssembledMessages: true`. */
     assembledMessages?: ChatDryRunMessage[];
-}
-
-export interface ChatStructuredOutput {
-    replyText: string;
 }
 
 export interface ChatStreamRequest {
@@ -46,8 +39,6 @@ export interface ChatStreamRequest {
     /** Optional sender actor for this user message. */
     senderActorId?: string;
     userMessageText: string;
-    /** LLM response mode for stream endpoint. Defaults to `non-structured` when omitted. */
-    llmResponseMode?: LlmResponseMode;
     /** Interaction mode for prompt assembly. Defaults to `single_character_chat` when omitted. */
     interactionMode?: InteractionMode;
     /** When true, an `assembledMessages` SSE event is sent first with assembled LLM input messages. */
@@ -57,7 +48,7 @@ export interface ChatStreamRequest {
 /** SSE stream event — one per `data:` line */
 export type ChatStreamEvent =
     | { type: "chunk"; content: string }
-    | { type: "done"; requestId: string; model: string; apiKeySource?: "user" | "default" }
+    | { type: "done"; requestId: string; model: string; apiKeySource?: "user" | "default"; turnEvents?: TurnEvent[] }
     | { type: "assembledMessages"; messages: ChatDryRunMessage[] };
 
 export const ApiChat = new ApiDefine<ChatRequest, ChatResponse>("/v1/chat", "POST");
@@ -76,8 +67,6 @@ export interface ChatDryRunRequest {
     /** Optional sender actor for this user message. */
     senderActorId?: string;
     userMessageText: string;
-    /** LLM response mode for prompt assembly. Defaults to `structured` when omitted. */
-    llmResponseMode?: LlmResponseMode;
     /** Interaction mode for prompt assembly. Defaults to `single_character_chat` when omitted. */
     interactionMode?: InteractionMode;
 }

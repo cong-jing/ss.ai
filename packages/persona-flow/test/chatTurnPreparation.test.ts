@@ -94,12 +94,13 @@ describe("persona-flow chat turn preparation", () => {
                 characterId: base.characterId,
                 conversationId: "missing-conv",
                 userMessageText: "hello",
-                llmResponseMode: "structured",
                 senderActorId: base.userActorId,
                 persistUserMessage: false,
             }),
             (error: unknown) => {
-                assert.ok(error instanceof PersonaFlowTurnError);
+                if (!(error instanceof PersonaFlowTurnError)) {
+                    return false;
+                }
                 assert.equal(error.status, 404);
                 assert.match(error.message, /Conversation not found/i);
                 return true;
@@ -123,12 +124,13 @@ describe("persona-flow chat turn preparation", () => {
                 characterId: base.characterId,
                 conversationId: base.conversationId,
                 userMessageText: "hello",
-                llmResponseMode: "structured",
                 senderActorId: base.userActorId,
                 persistUserMessage: false,
             }),
             (error: unknown) => {
-                assert.ok(error instanceof PersonaFlowTurnError);
+                if (!(error instanceof PersonaFlowTurnError)) {
+                    return false;
+                }
                 assert.equal(error.status, 404);
                 assert.match(error.message, /Conversation not found for character/i);
                 return true;
@@ -149,7 +151,8 @@ describe("persona-flow chat turn preparation", () => {
             id: crypto.randomUUID(),
             conversationId: base.conversationId,
             senderActorId: base.userActorId,
-            content: "seed user history",
+            kind: "user_text",
+            displayText: "seed user history",
             createdAt: nowIso(),
         });
         const assistantMessageContent = "seed assistant history";
@@ -157,7 +160,8 @@ describe("persona-flow chat turn preparation", () => {
             id: crypto.randomUUID(),
             conversationId: base.conversationId,
             senderActorId: base.selfActorId,
-            content: assistantMessageContent,
+            kind: "assistant_turn_events",
+            displayText: assistantMessageContent,
             createdAt: nowIso(),
         });
 
@@ -167,7 +171,6 @@ describe("persona-flow chat turn preparation", () => {
             characterId: base.characterId,
             conversationId: base.conversationId,
             userMessageText: "new prompt",
-            llmResponseMode: "structured",
             senderActorId: base.userActorId,
             persistUserMessage: false,
         });
@@ -181,7 +184,6 @@ describe("persona-flow chat turn preparation", () => {
             userId: base.userId,
             characterId: base.characterId,
             promptContext: prepared.promptContext,
-            llmResponseMode: "structured",
             interactionMode: "single_character_chat",
             dryRun: true,
         });

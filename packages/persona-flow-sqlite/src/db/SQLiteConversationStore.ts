@@ -1,6 +1,6 @@
 import type { ConversationStore, CreateConversationResult, Conversation } from "@ss-ai/persona-flow";
 import { and, eq, desc } from "drizzle-orm";
-import { conversations, messages, conversationActors } from "./schema.js";
+import { conversations, messages, conversationActors, turnEvents } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
 import type { CharacterDbRouter } from "./CharacterDbRouter.js";
 
@@ -109,7 +109,10 @@ export class SQLiteConversationStore implements ConversationStore {
             return;
         }
         const conversationDb = this.getDbForCharacter(conversation.userId, conversation.characterId);
-        // Delete messages, then actors, then the conversation record
+        // Delete turn events, messages, actors, then the conversation record.
+        await conversationDb.delete(turnEvents).where(
+            eq(turnEvents.conversationId, input.conversationId),
+        );
         await conversationDb.delete(messages).where(
             eq(messages.conversationId, input.conversationId),
         );

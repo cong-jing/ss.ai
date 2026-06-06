@@ -1,9 +1,15 @@
-// 一条消息的完整 domain model
+import type { MessageKind, TurnEvent } from "@ss-ai/contracts";
+
 export type Message = {
     id: string;
     conversationId: string;
     /** Points to conversation_actors.id — identifies the actual speaker. */
     senderActorId: string;
-    content: string;
+    kind: MessageKind;
+    /** Domain display text; stored as DB display_text and exposed by current chat APIs as content. */
+    displayText: string;
+    turnEvents?: TurnEvent[];
     createdAt: string; // ISO 8601 字符串
 };
+
+export type { MessageKind };

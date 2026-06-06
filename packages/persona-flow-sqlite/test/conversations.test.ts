@@ -28,7 +28,8 @@ function makeMessage(conversationId: string, senderActorId: string, overrides?: 
         id: crypto.randomUUID(),
         conversationId,
         senderActorId,
-        content: "hello",
+        kind: "user_text",
+        displayText: "hello",
         createdAt: new Date().toISOString(),
         ...overrides,
     };
@@ -123,8 +124,14 @@ describe("SQLiteConversationStore — deleteConversation cascades to messages", 
         const conv = makeConversation({ characterId: "char_cascade" });
         const { selfActorId } = await convStore.createConversation(conv, { selfDisplayName: "AI" });
 
-        await chatStore.appendMessage(makeMessage(conv.id, selfActorId, { content: "msg 1" }));
-        await chatStore.appendMessage(makeMessage(conv.id, selfActorId, { content: "msg 2" }));
+        await chatStore.appendMessage(makeMessage(conv.id, selfActorId, { displayText: "msg 1" }));
+        await chatStore.appendAssistantTurn({
+            message: makeMessage(conv.id, selfActorId, {
+                kind: "assistant_turn_events",
+                displayText: "msg 2",
+            }),
+            events: [{ type: "replyText", characterId: conv.characterId, text: "msg 2" }],
+        });
 
         const before = await chatStore.getRecentMessages({ conversationId: conv.id, limit: 10 });
         assert.equal(before.length, 2);
@@ -144,13 +151,13 @@ describe("SQLiteConversationStore — deleteConversation cascades to messages", 
         const { selfActorId: p1 } = await convStore.createConversation(conv1, { selfDisplayName: "AI" });
         const { selfActorId: p2 } = await convStore.createConversation(conv2, { selfDisplayName: "AI" });
 
-        await chatStore.appendMessage(makeMessage(conv1.id, p1, { content: "from conv1" }));
-        await chatStore.appendMessage(makeMessage(conv2.id, p2, { content: "from conv2" }));
+        await chatStore.appendMessage(makeMessage(conv1.id, p1, { displayText: "from conv1" }));
+        await chatStore.appendMessage(makeMessage(conv2.id, p2, { displayText: "from conv2" }));
 
         await convStore.deleteConversation({ userId: conv1.userId, conversationId: conv1.id });
 
         const conv2Messages = await chatStore.getRecentMessages({ conversationId: conv2.id, limit: 10 });
         assert.equal(conv2Messages.length, 1, "conv2 messages should be unaffected");
-        assert.equal(conv2Messages[0].content, "from conv2");
+        assert.equal(conv2Messages[0].displayText, "from conv2");
     });
 });

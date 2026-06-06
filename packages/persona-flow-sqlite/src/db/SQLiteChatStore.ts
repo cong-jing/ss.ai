@@ -26,6 +26,10 @@ export class SQLiteChatStore implements ChatStore {
         return this.msgs.appendMessage(message);
     }
 
+    appendAssistantTurn(input: { message: Message; events: NonNullable<Message["turnEvents"]> }): Promise<void> {
+        return this.msgs.appendAssistantTurn(input);
+    }
+
     getRecentMessages(input: { userId?: string; conversationId: string; limit: number }): Promise<Message[]> {
         return this.msgs.getRecentMessages(input);
     }

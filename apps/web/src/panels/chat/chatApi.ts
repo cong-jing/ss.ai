@@ -1,4 +1,4 @@
-import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMessagesResponse, type LlmResponseMode, type InteractionMode } from "@ss-ai/contracts";
+import { ApiChat, ApiChatDryRun, ApiChatStream, type ChatStreamEvent, type GetMessagesResponse, type InteractionMode, type TurnEvent } from "@ss-ai/contracts";
 import { callApi } from "../../shared/api/httpClient";
 import { throwApiRequestError } from "../../shared/api/throwApiRequestError";
 
@@ -27,11 +27,10 @@ export async function apiSendChatMessage(
     conversationId: string,
     userMessageText: string,
     senderActorId?: string,
-    llmResponseMode: LlmResponseMode = "structured",
     includeAssembledMessages = false,
     interactionMode?: InteractionMode,
 ) {
-    return callApi(ApiChat, { characterId, conversationId, userMessageText, senderActorId, llmResponseMode, includeAssembledMessages, interactionMode });
+    return callApi(ApiChat, { characterId, conversationId, userMessageText, senderActorId, includeAssembledMessages, interactionMode });
 }
 
 export async function apiDryRunChat(
@@ -39,10 +38,9 @@ export async function apiDryRunChat(
     conversationId: string,
     userMessageText: string,
     senderActorId?: string,
-    llmResponseMode: LlmResponseMode = "structured",
     interactionMode?: InteractionMode,
 ) {
-    return callApi(ApiChatDryRun, { characterId, conversationId, userMessageText, senderActorId, llmResponseMode, interactionMode });
+    return callApi(ApiChatDryRun, { characterId, conversationId, userMessageText, senderActorId, interactionMode });
 }
 
 export async function apiStreamChatMessage(
@@ -50,18 +48,17 @@ export async function apiStreamChatMessage(
     conversationId: string,
     userMessageText: string,
     senderActorId: string | undefined,
-    llmResponseMode: LlmResponseMode = "non-structured",
     onChunk: (content: string) => void,
     signal?: AbortSignal,
     includeAssembledMessages = false,
     onAssembledMessages?: (messages: { role: string; content: string }[]) => void,
     interactionMode?: InteractionMode
-): Promise<{ requestId: string; model: string; apiKeySource: "user" | "default" | null }> {
+): Promise<{ requestId: string; model: string; apiKeySource: "user" | "default" | null; turnEvents?: TurnEvent[] }> {
     const response = await fetch(ApiChatStream.apiUrl, {
         method: ApiChatStream.method,
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ characterId, conversationId, userMessageText, senderActorId, llmResponseMode, interactionMode, includeAssembledMessages }),
+        body: JSON.stringify({ characterId, conversationId, userMessageText, senderActorId, interactionMode, includeAssembledMessages }),
         signal
     });
 
@@ -75,7 +72,7 @@ export async function apiStreamChatMessage(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    let result: { requestId: string; model: string; apiKeySource: "user" | "default" | null } = {
+    let result: { requestId: string; model: string; apiKeySource: "user" | "default" | null; turnEvents?: TurnEvent[] } = {
         requestId: "",
         model: "",
         apiKeySource: null,
@@ -95,7 +92,7 @@ export async function apiStreamChatMessage(
             if (event.type === "chunk") {
                 onChunk(event.content);
             } else if (event.type === "done") {
-                result = { requestId: event.requestId, model: event.model, apiKeySource: event.apiKeySource ?? null };
+                result = { requestId: event.requestId, model: event.model, apiKeySource: event.apiKeySource ?? null, turnEvents: event.turnEvents };
             } else if (event.type === "assembledMessages") {
                 onAssembledMessages?.(event.messages);
             }

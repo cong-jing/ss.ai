@@ -1,4 +1,4 @@
-import type { ChatStructuredOutput } from "@ss-ai/contracts";
+import type { TurnEvent } from "@ss-ai/contracts";
 
 export type ChatRole = "user" | "assistant" | "system" | "debug";
 
@@ -19,6 +19,6 @@ export interface ChatMessage {
     debugMessages?: DebugMessage[];
     /** Assembled LLM input messages attached when sent with includeAssembledMessages=true */
     assembledMessages?: DebugMessage[];
-    structuredOutput?: ChatStructuredOutput;
+    turnEvents?: TurnEvent[];
     deleting?: boolean;
 }

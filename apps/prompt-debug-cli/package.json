@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "tsx src/index.ts",
+        "dev": "tsx --conditions=source src/index.ts",
         "start": "node dist/index.js",
         "build": "tsc -p tsconfig.json"
     },
