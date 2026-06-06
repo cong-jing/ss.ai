@@ -41,4 +41,16 @@ describe("submit turn events parser", () => {
             assert.match(result.error.message, /arguments missing/i);
         }
     });
+
+    it("rejects replyText events whose text is empty or whitespace only", () => {
+        for (const text of ["", "   ", "\n\t"]) {
+            const result = safeParseSubmitTurnEventsArgs({
+                events: [{ type: "replyText", characterId: "c1", text }],
+            });
+            assert.equal(result.success, false, `expected ${JSON.stringify(text)} to be rejected`);
+            if (!result.success) {
+                assert.match(result.error.message, /non-empty after trim/i);
+            }
+        }
+    });
 });

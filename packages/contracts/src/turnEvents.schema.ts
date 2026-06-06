@@ -26,7 +26,13 @@ export type {
 export const ReplyTextEventSchema = z.object({
     type: z.literal(TURN_EVENT_TYPES.replyText),
     characterId: z.string().min(1),
-    text: z.string(),
+    // replyText represents what the character actually says out loud. Empty or
+    // whitespace-only text is rejected on purpose: a turn without spoken lines
+    // must be expressed by omitting the replyText event entirely (the model can
+    // still emit expression / sceneAtmosphere / stateUpdate events).
+    text: z.string().refine((v) => v.trim().length > 0, {
+        message: "replyText.text must be non-empty after trim",
+    }),
 }).strict();
 
 export const ExpressionEventSchema = z.object({
