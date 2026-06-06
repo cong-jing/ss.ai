@@ -8,4 +8,5 @@
 ## Lower priority follow-ups
 
 - API key at-rest protection is still a no-op encrypt/decrypt layer. Revisit once deployment and key-management expectations are stable.
+- Prompt log tool-call output is still hard to read when arguments are logged as one-line strings. Reformat tool-call arguments into a more readable structured block when revisiting prompt-log UX.
 - `PromptLogger` and `DefaultModelClient` are still created per chat request by design for now. The SDK client promise is intentionally not reused across requests. Current prompt logs append to one file rather than recreating files, so this is a maintainability/perf note, not an active correctness bug.
