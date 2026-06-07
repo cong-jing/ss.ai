@@ -5,6 +5,12 @@ import Button from '../ui/Button.vue'
 import { debugActions } from './debugActions'
 import { useToast } from '../ui/useToast'
 
+withDefaults(defineProps<{
+  embedded?: boolean
+}>(), {
+  embedded: false,
+})
+
 const showMenu = ref(false)
 const showDemoModal = ref(false)
 const showDemoDraggable = ref(false)
@@ -17,9 +23,8 @@ function runAction(action: { run: () => void }) {
 </script>
 
 <template>
-  <!-- Fixed trigger button (bottom-right) -->
-  <div class="debug-trigger">
-    <button class="debug-btn" @click="showMenu = !showMenu">Debug</button>
+  <div class="debug-trigger" :class="{ 'debug-trigger--embedded': embedded }">
+    <button class="debug-btn" :class="{ 'debug-btn--embedded': embedded }" @click="showMenu = !showMenu">Debug</button>
   </div>
 
   <!-- Debug menu popup: anchored above the trigger button -->
@@ -31,7 +36,7 @@ function runAction(action: { run: () => void }) {
     :draggable="false"
     placement="bottom-right"
     :offset-x="16"
-    :offset-y="52"
+    :offset-y="32"
     width="200px"
   >
     <div class="debug-actions">
@@ -100,6 +105,10 @@ function runAction(action: { run: () => void }) {
   z-index: 900;
 }
 
+.debug-trigger--embedded {
+  position: static;
+}
+
 .debug-btn {
   padding: 5px 14px;
   background: #1e293b;
@@ -114,6 +123,10 @@ function runAction(action: { run: () => void }) {
 
 .debug-btn:hover {
   opacity: 1;
+}
+
+.debug-btn--embedded {
+  min-width: 88px;
 }
 
 .debug-actions {

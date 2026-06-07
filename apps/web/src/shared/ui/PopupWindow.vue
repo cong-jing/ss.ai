@@ -16,11 +16,12 @@ const props = withDefaults(defineProps<{
    * 初始定位方式。
    * 'center'（默认）：居中显示
    * 'bottom-right'：从右下角锚定，配合 offsetX/offsetY 使用
+    * 'bottom-left'：从左下角锚定，配合 offsetX/offsetY 使用
    */
-  placement?: 'center' | 'bottom-right'
-  /** placement='bottom-right' 时距右边缘的像素距离，默认 16 */
+    placement?: 'center' | 'bottom-right' | 'bottom-left'
+    /** placement='bottom-right' 或 'bottom-left' 时距边缘的像素距离，默认 16 */
   offsetX?: number
-  /** placement='bottom-right' 时距下边缘的像素距离，默认 16 */
+    /** placement='bottom-right' 或 'bottom-left' 时距下边缘的像素距离，默认 16 */
   offsetY?: number
 }>(), {
   modal: true,
@@ -51,6 +52,9 @@ const popupStyle = computed(() => {
   }
   if (props.placement === 'bottom-right') {
     return { ...base, bottom: `${props.offsetY}px`, right: `${props.offsetX}px` }
+  }
+  if (props.placement === 'bottom-left') {
+    return { ...base, bottom: `${props.offsetY}px`, left: `${props.offsetX}px` }
   }
   return base
 })
@@ -131,7 +135,7 @@ onUnmounted(() => {
         class="popup-window"
         :class="{
           'popup-window--moved': hasMoved,
-          'popup-window--bottom-right': !hasMoved && placement === 'bottom-right',
+          'popup-window--edge-anchored': !hasMoved && placement !== 'center',
         }"
         :style="popupStyle"
         role="dialog"
@@ -189,8 +193,8 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 
-/* bottom-right anchored (before first drag) */
-.popup-window--bottom-right {
+/* edge anchored (before first drag) */
+.popup-window--edge-anchored {
   top: auto;
   left: auto;
   transform: none;
