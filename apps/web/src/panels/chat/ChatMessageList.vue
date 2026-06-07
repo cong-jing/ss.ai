@@ -22,6 +22,11 @@ function scrollToBottom() {
   el.scrollTop = el.scrollHeight;
 }
 
+async function handleDebugToggle() {
+  await nextTick();
+  requestAnimationFrame(scrollToBottom);
+}
+
 function onScroll() {
   const el = listEl.value;
   if (!el) return;
@@ -55,6 +60,7 @@ watch(
         :message="message"
         :show-debug="props.showDebug"
         @delete-message="emit('deleteMessage', $event)"
+        @debug-toggle="handleDebugToggle"
       />
     </template>
   </section>

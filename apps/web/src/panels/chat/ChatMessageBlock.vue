@@ -9,6 +9,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   deleteMessage: [messageId: string];
+  debugToggle: [];
 }>();
 
 function handleDeleteMessage() {
@@ -33,10 +34,10 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
 </script>
 
 <template>
-  <!-- Debug message: expandable prompt preview -->
+  <!-- Debug message: expandable raw data -->
   <article v-if="message.role === 'debug'" class="message-block role-debug">
     <div v-if="showDebug && message.id" class="message-id-row">id: {{ message.id }}</div>
-    <details>
+    <details @toggle="emit('debugToggle')">
       <summary class="debug-summary">
         <span>{{ t("chat.message.debugData") }}</span>
         <span class="debug-count">{{ t("chat.message.countMessages", { count: message.debugMessages?.length ?? 0 }) }}</span>

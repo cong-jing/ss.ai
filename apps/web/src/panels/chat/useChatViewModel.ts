@@ -141,7 +141,7 @@ export function useChatViewModel() {
                 const debugMessages = toRawDebugMessages(capturedAssembledMessages, result.turnEvents);
                 if (debugMessages.length > 0) {
                     const assistantIndex = messages.value.findIndex(m => m.id === (result.requestId || msgId));
-                    const insertIndex = assistantIndex >= 0 ? assistantIndex + 1 : messages.value.length;
+                    const insertIndex = assistantIndex >= 0 ? assistantIndex : messages.value.length;
                     messages.value.splice(insertIndex, 0, {
                         role: "debug",
                         content: "",
@@ -183,6 +183,7 @@ export function useChatViewModel() {
             const debugMessages = toRawDebugMessages(response.assembledMessages, response.turnEvents);
             let assistantInsertIndex = messages.value.length;
             if (response.assistantMessageId || response.output.trim().length > 0) {
+                assistantInsertIndex = messages.value.length;
                 messages.value.push({
                     id: response.assistantMessageId || response.requestId,
                     role: "assistant",
@@ -193,7 +194,6 @@ export function useChatViewModel() {
                     status: "normal",
                     ...(response.turnEvents ? { turnEvents: response.turnEvents } : {}),
                 });
-                assistantInsertIndex = messages.value.length;
             }
 
             if (debugMessages.length > 0) {
