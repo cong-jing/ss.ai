@@ -111,7 +111,7 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
   background: #f0fdf4;
   border-radius: 8px;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .status-failed {
@@ -268,11 +268,16 @@ details[open] .debug-summary {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-height: min(60vh, 560px);
+  min-height: 96px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  resize: vertical;
 }
 
 .debug-msg {
   border-radius: 6px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid #d1fae5;
 }
 

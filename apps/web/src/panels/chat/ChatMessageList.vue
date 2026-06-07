@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ChatMessageBlock from "./ChatMessageBlock.vue";
 import type { ChatMessage } from "./chatTypes";
 
@@ -15,6 +15,7 @@ const emit = defineEmits<{
 }>();
 
 const listEl = ref<HTMLElement | null>(null);
+let resizeObserver: ResizeObserver | null = null;
 
 function scrollToBottom() {
   const el = listEl.value;
@@ -25,6 +26,16 @@ function scrollToBottom() {
 async function handleDebugToggle() {
   await nextTick();
   requestAnimationFrame(scrollToBottom);
+}
+
+function observeMessageBlocks() {
+  const el = listEl.value;
+  if (!el || !resizeObserver) return;
+
+  resizeObserver.disconnect();
+  for (const child of el.children) {
+    resizeObserver.observe(child);
+  }
 }
 
 function onScroll() {
@@ -43,13 +54,26 @@ function onScroll() {
 watch(
   () => {
     const last = props.messages[props.messages.length - 1];
-    return `${props.messages.length}:${last?.content?.length ?? 0}`;
+    return `${props.messages.length}:${last?.content?.length ?? 0}:${props.showDebug ? 1 : 0}`;
   },
   async () => {
     await nextTick();
+    observeMessageBlocks();
     scrollToBottom();
   }
 );
+
+onMounted(() => {
+  resizeObserver = new ResizeObserver(() => {
+    requestAnimationFrame(scrollToBottom);
+  });
+  observeMessageBlocks();
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+});
 </script>
 
 <template>
