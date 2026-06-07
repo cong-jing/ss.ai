@@ -36,7 +36,7 @@ export class SQLiteConversationActorStore implements ConversationActorStore {
     ) { }
 
     /**
-     * TODO: 分库模式下目前是依据核心会话索引遍历角色库查找。后面如果想提速，需要补一个 actor_index 到 core.db 做 O(1) 定位。
+     * TODO: 分库模式下目前是依据核心会话索引遍历角色库查找。后面如果想提速，需要补一�?actor_index �?core.db �?O(1) 定位�?
      */
     async getActorById(id: string): Promise<ConversationActor | null> {
         if (this.characterDbRouter) {
