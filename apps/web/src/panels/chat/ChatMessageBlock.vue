@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from "vue";
 import type { ChatMessage } from "./chatTypes";
 import { t } from "../../shared/i18n/i18n";
 
@@ -10,9 +9,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   deleteMessage: [messageId: string];
+  debugToggle: [];
 }>();
-
-const showPrompt = ref(false);
 
 function handleDeleteMessage() {
   if (!props.message.id) return;
@@ -36,12 +34,12 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
 </script>
 
 <template>
-  <!-- Debug message: expandable prompt preview -->
+  <!-- Debug message: expandable raw data -->
   <article v-if="message.role === 'debug'" class="message-block role-debug">
     <div v-if="showDebug && message.id" class="message-id-row">id: {{ message.id }}</div>
-    <details>
+    <details @toggle="emit('debugToggle')">
       <summary class="debug-summary">
-        <span>{{ message.turnEvents ? t("chat.message.structuredOutput") : t("chat.message.promptPreview") }}</span>
+        <span>{{ t("chat.message.debugData") }}</span>
         <span class="debug-count">{{ t("chat.message.countMessages", { count: message.debugMessages?.length ?? 0 }) }}</span>
         <time v-if="message.createdAt" class="debug-time">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
       </summary>
@@ -75,29 +73,10 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
         >
           {{ message.deleting ? t("chat.message.deleting") : t("common.delete") }}
         </button>
-        <button
-          v-if="message.role === 'assistant' && message.assembledMessages"
-          class="view-prompt-btn"
-          :class="{ active: showPrompt }"
-          @click="showPrompt = !showPrompt"
-        >
-          {{ showPrompt ? t("chat.message.hideAssembledInput") : t("chat.message.viewAssembledInput") }}
-        </button>
         <time v-if="message.createdAt">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
       </div>
     </header>
     <p class="message-content">{{ message.content }}</p>
-    <div v-if="showPrompt && message.assembledMessages" class="prompt-expand">
-      <div
-        v-for="(m, i) in message.assembledMessages"
-        :key="i"
-        class="debug-msg"
-        :class="`debug-role-${m.role}`"
-      >
-        <span class="debug-role-label">{{ m.role }}</span>
-        <pre class="debug-content">{{ m.content }}</pre>
-      </div>
-    </div>
   </article>
 </template>
 
@@ -132,7 +111,7 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
   background: #f0fdf4;
   border-radius: 8px;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .status-failed {
@@ -289,11 +268,16 @@ details[open] .debug-summary {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-height: min(60vh, 560px);
+  min-height: 96px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  resize: vertical;
 }
 
 .debug-msg {
   border-radius: 6px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid #d1fae5;
 }
 

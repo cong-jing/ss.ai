@@ -17,8 +17,6 @@ export interface ChatMessage {
     createdAt?: string;
     status?: "normal" | "streaming" | "failed";
     debugMessages?: DebugMessage[];
-    /** Assembled LLM input messages attached when sent with includeAssembledMessages=true */
-    assembledMessages?: DebugMessage[];
     turnEvents?: TurnEvent[];
     deleting?: boolean;
 }
