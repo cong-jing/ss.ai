@@ -18,13 +18,46 @@ function createId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function toTurnEventsDebugMessages(turnEvents: TurnEvent[]): import("./chatTypes").DebugMessage[] {
-    return [
-        {
+function toRawDebugMessages(input?: { role: string; content: string }[], turnEvents?: TurnEvent[]): import("./chatTypes").DebugMessage[] {
+    const debugMessages: import("./chatTypes").DebugMessage[] = [];
+    if (input) {
+        debugMessages.push({
+            role: "assembledInput",
+            content: JSON.stringify(input, null, 2),
+        });
+    }
+    if (turnEvents) {
+        debugMessages.push({
             role: "turnEvents",
             content: JSON.stringify(turnEvents, null, 2),
-        },
-    ];
+        });
+    }
+    return debugMessages;
+}
+
+function formatTurnEventsForMessage(turnEvents: TurnEvent[] | undefined, fallback: string): string {
+    if (!turnEvents?.length) return fallback;
+
+    return turnEvents.map(event => {
+        switch (event.type) {
+            case "replyText":
+                return `replyText: ${event.text}`;
+            case "expression": {
+                const fields = [`expression: ${event.expression}`];
+                if (event.intensity !== undefined) fields.push(`intensity: ${event.intensity}`);
+                return fields.join("\n");
+            }
+            case "sceneAtmosphere": {
+                const fields = [`sceneAtmosphere: ${event.atmosphere}`];
+                if (event.note) fields.push(`note: ${event.note}`);
+                return fields.join("\n");
+            }
+            case "stateUpdate":
+                return `stateUpdate: ${JSON.stringify(event.update)}`;
+            default:
+                return JSON.stringify(event);
+        }
+    }).join("\n");
 }
 
 export function useChatViewModel() {
@@ -103,7 +136,20 @@ export function useChatViewModel() {
                     msg.status = "normal";
                     msg.id = result.requestId || msgId;
                     if (result.turnEvents) msg.turnEvents = result.turnEvents;
-                    if (capturedAssembledMessages) msg.assembledMessages = capturedAssembledMessages;
+                    msg.content = formatTurnEventsForMessage(result.turnEvents, msg.content);
+                }
+                const debugMessages = toRawDebugMessages(capturedAssembledMessages, result.turnEvents);
+                if (debugMessages.length > 0) {
+                    const assistantIndex = messages.value.findIndex(m => m.id === (result.requestId || msgId));
+                    messages.value.splice(Math.max(assistantIndex, 0), 0, {
+                        role: "debug",
+                        content: "",
+                        createdAt: new Date().toISOString(),
+                        status: "normal",
+                        debugMessages,
+                        turnEvents: result.turnEvents,
+                    });
+                    showDebug.value = true;
                 }
                 if (result.apiKeySource === "default") {
                     chatReplyNotice.value = t("chat.defaultApiKeyReplyNotice");
@@ -133,13 +179,14 @@ export function useChatViewModel() {
                 activeCharacter.value?.interactionMode ?? DEFAULT_INTERACTION_MODE,
             );
 
-            if (response.turnEvents) {
+            const debugMessages = toRawDebugMessages(response.assembledMessages, response.turnEvents);
+            if (debugMessages.length > 0) {
                 messages.value.push({
                     role: "debug",
                     content: "",
                     createdAt: new Date().toISOString(),
                     status: "normal",
-                    debugMessages: toTurnEventsDebugMessages(response.turnEvents),
+                    debugMessages,
                     turnEvents: response.turnEvents,
                 });
                 showDebug.value = true;
@@ -151,11 +198,10 @@ export function useChatViewModel() {
                     role: "assistant",
                     senderDisplayName: assistantDisplayName,
                     senderSourceType: "ai_character",
-                    content: response.output,
+                    content: formatTurnEventsForMessage(response.turnEvents, response.output),
                     createdAt: new Date().toISOString(),
                     status: "normal",
                     ...(response.turnEvents ? { turnEvents: response.turnEvents } : {}),
-                    ...(response.assembledMessages ? { assembledMessages: response.assembledMessages } : {}),
                 });
             }
             if (response.apiKeySource === "default") {
@@ -230,7 +276,7 @@ export function useChatViewModel() {
                 content: "",
                 createdAt: new Date().toISOString(),
                 status: "normal",
-                debugMessages: result.messages,
+                debugMessages: toRawDebugMessages(result.messages),
             });
             showDebug.value = true;
         } catch (e) {
@@ -260,7 +306,7 @@ export function useChatViewModel() {
                 senderActorId: m.senderActorId,
                 senderDisplayName: m.senderDisplayName,
                 senderSourceType: m.senderSourceType,
-                content: m.content,
+                content: formatTurnEventsForMessage(m.turnEvents, m.content),
                 createdAt: m.createdAt,
                 turnEvents: m.turnEvents,
                 status: "normal" as const,
