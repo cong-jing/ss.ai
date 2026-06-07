@@ -11,8 +11,6 @@ const emit = defineEmits<{
   deleteMessage: [messageId: string];
 }>();
 
-const showPrompt = ref(false);
-
 function handleDeleteMessage() {
   if (!props.message.id) return;
   emit("deleteMessage", props.message.id);
@@ -74,29 +72,10 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
         >
           {{ message.deleting ? t("chat.message.deleting") : t("common.delete") }}
         </button>
-        <button
-          v-if="message.role === 'assistant' && message.assembledMessages"
-          class="view-prompt-btn"
-          :class="{ active: showPrompt }"
-          @click="showPrompt = !showPrompt"
-        >
-          {{ showPrompt ? t("chat.message.hideAssembledInput") : t("chat.message.viewAssembledInput") }}
-        </button>
         <time v-if="message.createdAt">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
       </div>
     </header>
     <p class="message-content">{{ message.content }}</p>
-    <div v-if="showPrompt && message.assembledMessages" class="prompt-expand">
-      <div
-        v-for="(m, i) in message.assembledMessages"
-        :key="i"
-        class="debug-msg"
-        :class="`debug-role-${m.role}`"
-      >
-        <span class="debug-role-label">{{ m.role }}</span>
-        <pre class="debug-content">{{ m.content }}</pre>
-      </div>
-    </div>
   </article>
 </template>
 

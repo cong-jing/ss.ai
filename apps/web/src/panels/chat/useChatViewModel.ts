@@ -141,7 +141,8 @@ export function useChatViewModel() {
                 const debugMessages = toRawDebugMessages(capturedAssembledMessages, result.turnEvents);
                 if (debugMessages.length > 0) {
                     const assistantIndex = messages.value.findIndex(m => m.id === (result.requestId || msgId));
-                    messages.value.splice(Math.max(assistantIndex, 0), 0, {
+                    const insertIndex = assistantIndex >= 0 ? assistantIndex + 1 : messages.value.length;
+                    messages.value.splice(insertIndex, 0, {
                         role: "debug",
                         content: "",
                         createdAt: new Date().toISOString(),
@@ -180,18 +181,7 @@ export function useChatViewModel() {
             );
 
             const debugMessages = toRawDebugMessages(response.assembledMessages, response.turnEvents);
-            if (debugMessages.length > 0) {
-                messages.value.push({
-                    role: "debug",
-                    content: "",
-                    createdAt: new Date().toISOString(),
-                    status: "normal",
-                    debugMessages,
-                    turnEvents: response.turnEvents,
-                });
-                showDebug.value = true;
-            }
-
+            let assistantInsertIndex = messages.value.length;
             if (response.assistantMessageId || response.output.trim().length > 0) {
                 messages.value.push({
                     id: response.assistantMessageId || response.requestId,
@@ -203,6 +193,19 @@ export function useChatViewModel() {
                     status: "normal",
                     ...(response.turnEvents ? { turnEvents: response.turnEvents } : {}),
                 });
+                assistantInsertIndex = messages.value.length;
+            }
+
+            if (debugMessages.length > 0) {
+                messages.value.splice(assistantInsertIndex, 0, {
+                    role: "debug",
+                    content: "",
+                    createdAt: new Date().toISOString(),
+                    status: "normal",
+                    debugMessages,
+                    turnEvents: response.turnEvents,
+                });
+                showDebug.value = true;
             }
             if (response.apiKeySource === "default") {
                 chatReplyNotice.value = t("chat.defaultApiKeyReplyNotice");
