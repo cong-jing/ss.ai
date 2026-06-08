@@ -31,6 +31,19 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
       return "";
   }
 }
+
+function markerTypeLabel(markerType: string): string {
+  switch (markerType) {
+    case "expression":
+      return t("chat.message.marker.expression");
+    case "sceneAtmosphere":
+      return t("chat.message.marker.sceneAtmosphere");
+    case "stateUpdate":
+      return t("chat.message.marker.stateUpdate");
+    default:
+      return markerType;
+  }
+}
 </script>
 
 <template>
@@ -76,7 +89,22 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
         <time v-if="message.createdAt">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
       </div>
     </header>
-    <p class="message-content">{{ message.content }}</p>
+    <p v-if="!message.displaySegments || message.displaySegments.length === 0" class="message-content">{{ message.content }}</p>
+    <div v-else class="message-content message-content--segmented">
+      <template v-for="(seg, idx) in message.displaySegments" :key="idx">
+        <span v-if="seg.kind === 'text'" class="segment-text">{{ seg.text }}</span>
+        <span
+          v-else
+          class="segment-marker"
+          :class="`marker-${seg.markerType}`"
+          :title="seg.detail || markerTypeLabel(seg.markerType)"
+        >
+          <span class="marker-type">{{ markerTypeLabel(seg.markerType) }}</span>
+          <span class="marker-label">{{ seg.label }}</span>
+          <span v-if="seg.detail" class="marker-detail">{{ seg.detail }}</span>
+        </span>
+      </template>
+    </div>
   </article>
 </template>
 
@@ -228,6 +256,65 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 14px;
+}
+
+.message-content--segmented {
+  white-space: normal;
+}
+
+.message-content--segmented .segment-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-content--segmented .segment-marker {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  line-height: 1.4;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.message-content--segmented .marker-type {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.message-content--segmented .marker-label {
+  font-weight: 500;
+}
+
+.message-content--segmented .marker-detail {
+  opacity: 0.75;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.message-content--segmented .segment-marker.marker-expression {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.message-content--segmented .segment-marker.marker-sceneAtmosphere {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #bfdbfe;
+}
+
+.message-content--segmented .segment-marker.marker-stateUpdate {
+  background: #ede9fe;
+  color: #5b21b6;
+  border-color: #ddd6fe;
 }
 
 /* Debug styles */

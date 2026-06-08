@@ -2,6 +2,12 @@ import { ref, watch } from "vue";
 import { DEFAULT_INTERACTION_MODE, type TurnEvent } from "@ss-ai/contracts";
 import { apiDryRunChat, apiSendChatMessage, apiStreamChatMessage, apiGetMessages, apiDeleteMessage } from "./chatApi";
 import type { ChatMessage } from "./chatTypes";
+import {
+    appendTextDeltaToSegments,
+    buildSegmentsFromTurnEvents,
+    eventToMarkerSegment,
+    isInlineMarkerEvent,
+} from "./turnEventDisplay";
 import { contextVersion } from "../../shared/state/appState";
 import { activeConversationId } from "../sidebar/viewmodels/useConversationViewModel";
 import { activeCharacter, activeCharacterId } from "../character/useCharacterViewModel";
@@ -36,29 +42,13 @@ function toRawDebugMessages(input?: { role: string; content: string }[], turnEve
     return debugMessages;
 }
 
-function formatTurnEventsForMessage(turnEvents: TurnEvent[] | undefined, fallback: string): string {
-    if (!turnEvents?.length) return fallback;
-
-    return turnEvents.map(event => {
-        switch (event.type) {
-            case "replyText":
-                return `replyText: ${event.text}`;
-            case "expression": {
-                const fields = [`expression: ${event.expression}`];
-                if (event.intensity !== undefined) fields.push(`intensity: ${event.intensity}`);
-                return fields.join("\n");
-            }
-            case "sceneAtmosphere": {
-                const fields = [`sceneAtmosphere: ${event.atmosphere}`];
-                if (event.note) fields.push(`note: ${event.note}`);
-                return fields.join("\n");
-            }
-            case "stateUpdate":
-                return `stateUpdate: ${JSON.stringify(event.update)}`;
-            default:
-                return JSON.stringify(event);
-        }
-    }).join("\n");
+function getReplyTextFromTurnEvents(turnEvents: TurnEvent[] | undefined): string {
+    if (!turnEvents?.length) return "";
+    return turnEvents
+        .filter((event): event is Extract<TurnEvent, { type: "replyText" }> => event.type === "replyText")
+        .map(event => event.text.trim())
+        .filter(Boolean)
+        .join("\n");
 }
 
 function isAsciiWordChar(char: string): boolean {
@@ -158,7 +148,15 @@ export function useChatViewModel() {
 
         if (stream) {
             const msgId = createId("assistant");
-            const pendingTokens: string[] = [];
+            // The stream queue holds either text tokens (paced one per timer
+            // tick so CJK / latin look smooth) or completed inline markers
+            // (expression / sceneAtmosphere). Both come from the SSE stream
+            // in document order; pacing them through the same queue keeps
+            // markers interleaved at the right point in the rendered bubble.
+            type StreamOp =
+                | { kind: "text"; token: string }
+                | { kind: "marker"; event: Extract<TurnEvent, { type: "expression" | "sceneAtmosphere" | "stateUpdate" }> };
+            const pendingOps: StreamOp[] = [];
             let renderTimer: number | undefined;
 
             const stopRenderTimer = () => {
@@ -174,15 +172,21 @@ export function useChatViewModel() {
                     const msg = messages.value.find(m => m.id === msgId);
                     if (!msg) {
                         stopRenderTimer();
-                        pendingTokens.length = 0;
+                        pendingOps.length = 0;
                         return;
                     }
-                    const nextToken = pendingTokens.shift();
-                    if (!nextToken) {
+                    const nextOp = pendingOps.shift();
+                    if (!nextOp) {
                         stopRenderTimer();
                         return;
                     }
-                    msg.content += nextToken;
+                    const segments = msg.displaySegments ? [...msg.displaySegments] : [];
+                    if (nextOp.kind === "text") {
+                        appendTextDeltaToSegments(segments, nextOp.token);
+                    } else {
+                        segments.push(eventToMarkerSegment(nextOp.event));
+                    }
+                    msg.displaySegments = segments;
                 }, STREAM_RENDER_INTERVAL_MS);
             };
 
@@ -192,6 +196,7 @@ export function useChatViewModel() {
                 senderDisplayName: assistantDisplayName,
                 senderSourceType: "ai_character",
                 content: "",
+                displaySegments: [],
                 createdAt: new Date().toISOString(),
                 status: "streaming"
             });
@@ -206,20 +211,31 @@ export function useChatViewModel() {
                     senderActorId,
                     {
                         onChunk: (chunk) => {
-                            pendingTokens.push(...tokenizeStreamChunk(chunk));
+                            for (const token of tokenizeStreamChunk(chunk)) {
+                                pendingOps.push({ kind: "text", token });
+                            }
                             ensureRenderTimer();
                         },
                         onAssembledMessages: (msgs) => { capturedAssembledMessages = msgs; },
-                        // Preview events are best-effort speculative updates; the
-                        // canonical turnEvents come on `done`. Skip stateUpdate
-                        // previews to avoid showing transient/duplicated state.
+                        // Preview events are best-effort speculative updates;
+                        // the canonical turnEvents arrive on `done`. Only
+                        // inline-renderable markers (expression /
+                        // sceneAtmosphere) feed the segments queue here so
+                        // they appear in the bubble at the same point in the
+                        // text where the model emitted them. stateUpdate is
+                        // skipped to avoid noisy/duplicated chips and is
+                        // still surfaced in the per-turn debug panel.
                         onTurnEventPreview: (preview) => {
-                            if (preview.event.type === "stateUpdate") return;
                             const msg = messages.value.find(m => m.id === msgId);
                             if (!msg) return;
                             const previews = msg.turnEvents ? [...msg.turnEvents] : [];
                             previews[preview.eventIndex] = preview.event;
                             msg.turnEvents = previews;
+
+                            if (isInlineMarkerEvent(preview.event)) {
+                                pendingOps.push({ kind: "marker", event: preview.event });
+                                ensureRenderTimer();
+                            }
                         },
                     },
                     undefined,
@@ -230,13 +246,23 @@ export function useChatViewModel() {
                 const msg = messages.value.find(m => m.id === msgId);
                 if (msg) {
                     stopRenderTimer();
-                    pendingTokens.length = 0;
+                    pendingOps.length = 0;
                     msg.status = "normal";
                     // Prefer the assistant message id from the database so later
                     // edits/deletes target the same row across reloads.
                     msg.id = result.assistantMessageId || result.requestId || msgId;
                     if (result.turnEvents) msg.turnEvents = result.turnEvents;
-                    msg.content = formatTurnEventsForMessage(result.turnEvents, result.output ?? msg.content);
+                    // Snap to the canonical segments derived from the final
+                    // turnEvents so any speculative preview drift is replaced
+                    // by the authoritative result.
+                    const finalSegments = buildSegmentsFromTurnEvents(result.turnEvents);
+                    if (finalSegments.length > 0) {
+                        msg.displaySegments = finalSegments;
+                        msg.content = getReplyTextFromTurnEvents(result.turnEvents);
+                    } else if (result.output) {
+                        msg.displaySegments = [{ kind: "text", text: result.output }];
+                        msg.content = result.output;
+                    }
                 }
                 const debugMessages = toRawDebugMessages(capturedAssembledMessages, result.turnEvents);
                 if (debugMessages.length > 0) {
@@ -261,10 +287,11 @@ export function useChatViewModel() {
                 console.error("[chat/stream] error:", e);
                 error.value = message;
                 stopRenderTimer();
-                pendingTokens.length = 0;
+                pendingOps.length = 0;
                 const msg = messages.value.find(m => m.id === msgId);
                 if (msg) {
                     msg.content = message;
+                    msg.displaySegments = undefined;
                     msg.status = "failed";
                 }
             } finally {
@@ -287,12 +314,16 @@ export function useChatViewModel() {
             let assistantInsertIndex = messages.value.length;
             if (response.assistantMessageId || response.output.trim().length > 0) {
                 assistantInsertIndex = messages.value.length;
+                const segments = buildSegmentsFromTurnEvents(response.turnEvents);
                 messages.value.push({
                     id: response.assistantMessageId || response.requestId,
                     role: "assistant",
                     senderDisplayName: assistantDisplayName,
                     senderSourceType: "ai_character",
-                    content: formatTurnEventsForMessage(response.turnEvents, response.output),
+                    content: getReplyTextFromTurnEvents(response.turnEvents) || response.output,
+                    displaySegments: segments.length > 0
+                        ? segments
+                        : [{ kind: "text", text: response.output }],
                     createdAt: new Date().toISOString(),
                     status: "normal",
                     ...(response.turnEvents ? { turnEvents: response.turnEvents } : {}),
@@ -406,17 +437,23 @@ export function useChatViewModel() {
         isLoading.value = true;
         try {
             const res = await apiGetMessages(convId);
-            messages.value = res.messages.map(m => ({
-                id: m.id,
-                role: m.role,
-                senderActorId: m.senderActorId,
-                senderDisplayName: m.senderDisplayName,
-                senderSourceType: m.senderSourceType,
-                content: formatTurnEventsForMessage(m.turnEvents, m.content),
-                createdAt: m.createdAt,
-                turnEvents: m.turnEvents,
-                status: "normal" as const,
-            }));
+            messages.value = res.messages.map(m => {
+                const segments = buildSegmentsFromTurnEvents(m.turnEvents);
+                return {
+                    id: m.id,
+                    role: m.role,
+                    senderActorId: m.senderActorId,
+                    senderDisplayName: m.senderDisplayName,
+                    senderSourceType: m.senderSourceType,
+                    content: segments.length > 0
+                        ? getReplyTextFromTurnEvents(m.turnEvents)
+                        : m.content,
+                    ...(segments.length > 0 ? { displaySegments: segments } : {}),
+                    createdAt: m.createdAt,
+                    turnEvents: m.turnEvents,
+                    status: "normal" as const,
+                };
+            });
         } catch (e) {
             toast.error(localizeApiError(e));
             messages.value = [];

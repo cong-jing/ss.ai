@@ -5,3 +5,4 @@ import "./promptViewModel.test.js";
 import "./singleCharacterChatCall.test.js";
 import "./submitTurnEventsParser.test.js";
 import "./submitTurnEventsStreamPreview.test.js";
+import "./turnEventText.test.js";

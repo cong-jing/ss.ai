@@ -123,15 +123,17 @@ export class MistralModelClient implements ModelAdapter {
         const streamStartedAt = Date.now();
         const client = await this.getClient();
         const toolRequest = toMistralToolRequest(input);
+        const responseFormat = input.structuredOutputSchema ?? { type: "text" };
 
         const stream = await withTimeout(
             client.chat.stream({
                 model: input.model,
                 messages: toSdkMessages(input),
+                responseFormat,
                 ...toolRequest,
             }),
             this.options.timeoutMs,
-            "Mistral stream request",
+            input.structuredOutputSchema ? "Mistral structured stream request" : "Mistral stream request",
         );
 
         let output = "";
@@ -245,8 +247,32 @@ export class MistralModelClient implements ModelAdapter {
             finishReason,
         });
 
+        let structuredOutput: unknown | undefined;
+        if (input.structuredOutputSchema) {
+            if (output.length === 0) {
+                this.options.logger?.warn("Mistral structured stream returned no text output", {
+                    model: input.model,
+                    finishReason,
+                });
+            } else {
+                try {
+                    structuredOutput = JSON.parse(output);
+                } catch (err: unknown) {
+                    this.options.logger?.error("Failed to parse Mistral structured stream output as JSON", {
+                        model: input.model,
+                        error: err instanceof Error ? err.message : "Unknown error",
+                        outputLength: output.length,
+                    });
+                    throw new Error(
+                        `Mistral structured stream returned invalid JSON: ${err instanceof Error ? err.message : "Unknown error"}`,
+                    );
+                }
+            }
+        }
+
         return {
             output,
+            ...(structuredOutput !== undefined ? { structuredOutput } : {}),
             toolCalls,
             usage,
             completed,

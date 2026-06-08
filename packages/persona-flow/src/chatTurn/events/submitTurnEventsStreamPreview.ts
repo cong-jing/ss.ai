@@ -4,11 +4,13 @@ import {
 } from "@ss-ai/contracts/turnEvents.schema";
 
 /**
- * Streaming JSON preview for a `submit_turn_events` tool call.
+ * Streaming JSON preview for `submit_turn_events` style arguments.
  *
- * Provider streams emit tool-call `arguments` as a fragmented JSON string.
- * This parser is fed those fragments and produces best-effort, application
- * level preview events:
+ * The model emits its final result as an incremental JSON string —
+ * either as the text channel of a `response_format: json_schema`
+ * structured output, or as fragmented `arguments` of a tool call.
+ * This parser is fed those fragments and produces best-effort,
+ * application level preview events:
  *
  * - `replyTextDelta`: incremental, JSON-escape-decoded characters from a
  *   `replyText.text` value that we can already safely show.
@@ -19,7 +21,7 @@ import {
  * The parser is deliberately tolerant: bad JSON or schema-invalid event
  * objects stop further preview emission but never throw. The final
  * authoritative result is always produced by `parseSubmitTurnEventsArgs`
- * over the fully assembled arguments string.
+ * over the fully assembled JSON string or parsed object.
  */
 export type SubmitTurnEventsPreviewEvent =
     | {
@@ -40,7 +42,7 @@ export type SubmitTurnEventsTurnEventPreview = Extract<
 
 export interface SubmitTurnEventsStreamPreviewParser {
     /**
-     * Feed a new fragment of the tool-call `arguments` JSON. Returns the
+     * Feed a new fragment of the streaming JSON arguments. Returns the
      * preview events that become available given the new data.
      */
     push(delta: string): SubmitTurnEventsPreviewEvent[];

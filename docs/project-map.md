@@ -131,25 +131,25 @@ Responsibilities:
 - Defines `AppStores`, the aggregate dependency boundary used by apps.
 - Builds prompt context from stores via `PromptContextBuilder`.
 - Resolves model-call handlers via `modelCallRegistry`.
-- Implements the current `chat.main/single_character_chat` prompt assembly and `submit_turn_events` output flow.
+- Implements the current `chat.main/single_character_chat` prompt assembly and structured-output event flow.
 - Owns chat-turn orchestration via `PersonaFlowChatTurnService`.
 - Resolves model runtime and calls the injected `ModelClient` via `ModelRuntime`.
 - Defines LLM client interfaces in `src/llm/modelClient.ts`, including provider-neutral tool definitions and tool choice.
-- Defines the `submit_turn_events` terminal tool and parses turn events returned by the model.
+- Defines the `submit_turn_events` event schema and parses turn events returned by the model. `ModelToolDefinition` is retained for future query-style tool calls but is no longer the terminal output channel for `single_character_chat`.
 
-Layering note: `PersonaFlowChatTurnService` orchestrates turns and persistence, but it should not parse provider tool calls directly. A registered `ModelCall<TParsedOutput>` owns prompt assembly, required tools, and business-level parsing for its purpose. `ModelRuntime` stays provider/model/API-key focused and returns the raw provider-neutral `llmResponse`. The model call then converts that response into `parsedOutput`; optional `parsedToolCalls` is reserved for intermediate tool results that callers need to inspect. For `single_character_chat`, the terminal `submit_turn_events` result is folded into `parsedOutput` as `{ displayText, events }`, so it is not duplicated in `parsedToolCalls`.
+Layering note: `PersonaFlowChatTurnService` orchestrates turns and persistence, but it should not parse provider tool calls or structured output directly. A registered `ModelCall<TParsedOutput>` owns prompt assembly, the requested output format (`structuredOutputSchema` or `tools`), and business-level parsing for its purpose. `ModelRuntime` stays provider/model/API-key focused and returns the raw provider-neutral `llmResponse` (`output` / `structuredOutput` / `toolCalls`). The model call then converts that response into `parsedOutput`; optional `parsedToolCalls` is reserved for intermediate tool results that callers need to inspect. For `single_character_chat`, the final result is produced via `response_format: json_schema` and folded into `parsedOutput` as `{ displayText, events }`, so it is not duplicated in `parsedToolCalls`.
 
 Main chat flow:
 
 1. `PersonaFlowChatTurnService.chatTurn()` receives user, character, conversation, and message input.
 2. `prepareChatTurnContext()` validates character and conversation, resolves the sender actor, optionally appends the user message, and builds `PromptContext`.
 3. `resolveModelCall()` selects the registered handler for the requested purpose and interaction mode. Today that is `chat.main:single_character_chat`.
-4. The handler assembles LLM messages and requests the terminal `submit_turn_events` tool. `ModelRuntime.chat()` resolves provider and model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves the API key from `providerCredential`, then calls `ModelClient`.
-5. The model call parses the returned tool call arguments as `SubmitTurnEventsArgs` and returns a chat-specific `parsedOutput` containing normalized display text plus the ordered `TurnEvent[]`.
-6. `PersonaFlowChatTurnService` consumes that parsed result without knowing the underlying tool implementation. The complete ordered turn event list is persisted with the assistant turn.
+4. The handler assembles LLM messages and requests structured output via `structuredOutputSchema` (built from the `submit_turn_events` event schema). `ModelRuntime.chat()` resolves provider and model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves the API key from `providerCredential`, then calls `ModelClient`.
+5. The model call parses `llmResponse.structuredOutput` as `SubmitTurnEventsArgs` and returns a chat-specific `parsedOutput` containing normalized display text plus the ordered `TurnEvent[]`.
+6. `PersonaFlowChatTurnService` consumes that parsed result without knowing the underlying output format. The complete ordered turn event list is persisted with the assistant turn.
 7. Assistant turns are appended to the chat store as the conversation self actor via `appendAssistantTurn()`, which writes both the timeline message and the structured turn events.
 
-Streaming is not complete for `single_character_chat` yet. The `/v1/chat/stream` endpoint and frontend SSE path exist, but the current implementation still falls back to the same tool-call model path and emits the full `replyText` as one SSE chunk. The final SSE `done` event includes the submitted `turnEvents`.
+The `single_character_chat` streaming path has migrated to structured output: `/v1/chat/stream` lets the provider stream the JSON text channel token by token under `response_format: json_schema`. `createSubmitTurnEventsPreviewParser` incrementally parses that JSON and emits `chunk` (decoded `replyText.text` characters) and `turnEventPreview` SSE events; the final `done` event still carries the canonical `turnEvents`.
 
 Interaction modes are shared from `@ss-ai/contracts`. Only `single_character_chat` is currently registered for runtime use. Other modes exist in contracts and UI as placeholders but are not wired into prompt or model-call dispatch yet.
 
@@ -196,7 +196,7 @@ Important tables:
 
 `messages` is the conversation timeline and stores `kind`, `display_text`, sender actor, conversation id, and timestamp. Assistant turns with structured events are stored as `kind = "assistant_turn_events"`.
 
-`turn_events` stores the ordered event payloads submitted by `submit_turn_events`. Each row belongs to one assistant message and stores `seq`, `type`, JSON payload, schema version, and timestamp. `SQLiteChatStore.appendAssistantTurn()` writes the message and its turn events together; recent-message reads rehydrate assistant messages with their `turnEvents`.
+`turn_events` stores the ordered event payloads emitted by the model (historically called `submit_turn_events`, now produced as structured JSON output). Each row belongs to one assistant message and stores `seq`, `type`, JSON payload, schema version, and timestamp. `SQLiteChatStore.appendAssistantTurn()` writes the message and its turn events together; recent-message reads rehydrate assistant messages with their `turnEvents`.
 
 ### `packages/persona-flow-model-client`
 
@@ -207,8 +207,8 @@ Responsibilities:
 - Implements the `ModelClient` interface from `persona-flow`.
 - `DefaultModelClient` dispatches by provider.
 - Mistral is the current concrete provider via `MistralModelClient`.
-- Supports non-structured generation, non-structured streaming, structured generation, tool calls, and model listing.
-- Converts provider-neutral `ModelToolDefinition` values to Mistral function tools in `src/mistral/mistralToolAdapter.ts`.
+- Supports non-structured generation, structured generation (`response_format: json_schema`) for both non-streaming and streaming, tool calls, model listing, and structured-output streaming over the text channel.
+- Converts provider-neutral `ModelToolDefinition` values to Mistral function tools in `src/mistral/mistralToolAdapter.ts` (kept for future query-style tool calls).
 
 The provider list and API URLs come from runtime config. API keys are stored per user and provider in the credential store. SQLite currently runs them through no-op encrypt/decrypt helpers, so the stored value remains plaintext until real encryption is added.
 
@@ -242,8 +242,8 @@ Important behavior:
 - Auth supports two modes through `config.auth.mode`: `default-user` and `local-password`.
 - `default-user` skips real sign-in and treats every request as the configured default user.
 - `local-password` enables a small built-in username/password plus session-cookie auth flow.
-- `/v1/chat` uses the `submit_turn_events` tool internally and returns the unified `output + turnEvents` chat contract.
-- `/v1/chat/stream` keeps the SSE response shape, but the current `single_character_chat` implementation still emits a full reply once rather than token by token. The final `done` event carries `turnEvents`.
+- `/v1/chat` uses `response_format: json_schema` structured output internally and returns the unified `output + turnEvents` chat contract.
+- `/v1/chat/stream` keeps the SSE response shape and now streams `chunk` / `turnEventPreview` events token by token as the provider emits the structured-output JSON text channel. The final `done` event carries `turnEvents`.
 - `/v1/chat/dry-run` assembles prompt messages without LLM calls or persistence.
 - Prompt logs are controlled by `promptLog` config.
 
@@ -414,13 +414,13 @@ Start here when reviewing or changing behavior:
 
 - The `AI_FUNCTIONS` / `AiFunction` to `MODEL_CALL_PURPOSES` / `ModelCallPurpose` rename is complete in the contracts, web, server, and store layers.
 - The SQLite model assignment column is `model_assignments_json`; old model-assignment storage compatibility has been removed.
-- The single-character chat model output path now uses the terminal `submit_turn_events` tool instead of `singleCharacterChatStructuredOutputSchema`.
-- Chat-turn/model-call layering is intentionally split: chat services consume model-call `parsedOutput`, while each model call owns provider response/tool parsing for its purpose. This keeps future interaction modes free to use different tools or structured output without changing chat-turn persistence code.
+- The single-character chat model output path now uses `response_format: json_schema` structured output (event schema still sourced from `submitTurnEventsTool.argsSchema`). The tool-call path is no longer the terminal output channel, but the `ModelToolDefinition` abstraction is kept for future intermediate query-style tools.
+- Chat-turn/model-call layering is intentionally split: chat services consume model-call `parsedOutput`, while each model call owns provider response parsing (structured output or tool arguments) for its purpose. This keeps future interaction modes free to use different output formats without changing chat-turn persistence code.
 - `messages` is now a timeline/display table with `kind` and `display_text`; structured assistant facts are stored in `turn_events`.
 - Prompt history currently reuses only `replyText` events from assistant turns. TODO: include selected latest non-text state, such as expression or scene atmosphere, once prompt format and UI needs are settled.
 - API key encryption hooks exist in the SQLite credential store, but currently return the input unchanged.
 - Low-priority TODO: replace the current no-op API key encryption and decryption with a real at-rest protection scheme once deployment and key-management expectations are settled.
-- `single_character_chat` streaming is not complete yet. The SSE route exists, but it currently falls back to one tool-call response and emits one full reply chunk.
+- `single_character_chat` streaming now flows token by token from the provider's structured-output JSON text channel; SSE `chunk` events are produced by an incremental JSON preview parser that extracts `replyText.text` as it appears.
 - Interaction modes other than `single_character_chat` are declared but not registered in runtime model-call dispatch yet.
 - Speaker-tag helpers and richer multi-actor prompt shaping are reserved for later interaction modes; the current `single_character_chat` path intentionally stays simpler.
 - TODO: i18n access currently relies on shared module-level helpers in web components; migrate to a `useI18n`-style hook or provider when SSR, per-app instances, or stricter test isolation become requirements.

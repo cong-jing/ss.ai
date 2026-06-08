@@ -68,7 +68,22 @@ export interface ModelStreamCallbacks {
 }
 
 export interface ModelStreamResult {
+    /**
+     * Raw text accumulated from the provider stream. For text/tool-call
+     * responses this is the assistant message text. For structured
+     * (`response_format: json_schema`) responses this is the raw JSON
+     * text emitted by the provider; the parsed object is exposed
+     * separately via {@link ModelStreamResult.structuredOutput}.
+     */
     output?: string;
+    /**
+     * Parsed object from a structured (`response_format: json_schema`)
+     * response. Adapters parse `output` before returning so callers
+     * have a uniform place to read the final structured result, in
+     * the same way `ModelGenerationResult.structuredOutput` works
+     * for non-streaming calls.
+     */
+    structuredOutput?: unknown;
     toolCalls: ModelToolCall[];
     usage?: ModelUsage;
     completed: boolean;

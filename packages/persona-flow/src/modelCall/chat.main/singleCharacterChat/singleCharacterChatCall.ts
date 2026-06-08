@@ -1,14 +1,15 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { toJSONSchema } from "zod";
 import type { ModelCall, ModelCallRunInput, ModelCallRunResult, ModelCallStreamRunInput } from "../../modelCall.js";
 import type { PromptContext } from "../../../prompt/promptContext.js";
 import type { RenderedMessage } from "../../../prompt/promptTypes.js";
 import type { SubmitTurnEventsArgs } from "@ss-ai/contracts";
 import { renderPromptTemplate } from "../../../prompt/renderPromptTemplate.js";
-import { getTurnEventsReplyText } from "../../../chatTurn/events/turnEventText.js";
+import { getTurnEventsReplyText, mergeConsecutiveReplyTextEvents } from "../../../chatTurn/events/turnEventText.js";
 import { parseSubmitTurnEventsArgs } from "../../../chatTurn/events/submitTurnEventsParser.js";
 import { SUBMIT_TURN_EVENTS_TOOL_NAME, submitTurnEventsTool } from "../../../llm/tools/submitTurnEventsTool.js";
-import type { ModelToolCall } from "../../../llm/modelClient.js";
+import type { StructuredOutputSchema } from "../../../llm/modelClient.js";
 import {
     createSubmitTurnEventsPreviewParser,
 } from "../../../chatTurn/events/submitTurnEventsStreamPreview.js";
@@ -123,19 +124,28 @@ export const singleCharacterChatCall: ModelCall<SingleCharacterChatResult> = {
         }
 
         const preview = createSubmitTurnEventsPreviewParser();
+        // Track which `replyText` event the previous streamed text fragment
+        // belonged to so we can inject a `\n` separator when the model moves
+        // on to the next replyText event. This keeps the live SSE display
+        // aligned with the merged canonical text returned by `parsedOutput`.
+        let lastReplyTextEventIndex: number | undefined;
         const llmResponse = await input.runtime.chatStream({
             ...llmRequest,
-            onToolCallDelta: (delta) => {
-                // Only follow our terminal `submit_turn_events` tool. When the
-                // model declares a different tool name, ignore its deltas for
-                // preview purposes (final parse will still validate).
-                if (delta.functionNameDelta && delta.functionNameDelta !== SUBMIT_TURN_EVENTS_TOOL_NAME) {
-                    return;
-                }
-                if (!delta.argumentsDelta) return;
-
-                for (const event of preview.push(delta.argumentsDelta)) {
+            onTextDelta: (delta) => {
+                if (!delta) return;
+                // The model is constrained by `response_format: json_schema`,
+                // so each text delta is a fragment of the final JSON object.
+                // Feed it through the preview parser to extract incremental
+                // reply text and completed turn events.
+                for (const event of preview.push(delta)) {
                     if (event.type === "replyTextDelta") {
+                        if (
+                            lastReplyTextEventIndex !== undefined
+                            && lastReplyTextEventIndex !== event.eventIndex
+                        ) {
+                            input.onDisplayTextDelta?.("\n");
+                        }
+                        lastReplyTextEventIndex = event.eventIndex;
                         input.onDisplayTextDelta?.(event.text);
                     } else if (event.type === "turnEventPreview") {
                         input.onTurnEventPreview?.(event);
@@ -171,10 +181,20 @@ async function buildSingleCharacterChatRequest(input: ModelCallRunInput): Promis
         characterId: input.characterId,
         messages,
         modelCallPurpose: singleCharacterChatCall.purpose,
-        tools: [submitTurnEventsTool],
-        toolChoice: {
-            type: "function",
-            functionName: SUBMIT_TURN_EVENTS_TOOL_NAME,
+        structuredOutputSchema: buildSubmitTurnEventsStructuredOutputSchema(),
+    };
+}
+
+function buildSubmitTurnEventsStructuredOutputSchema(): StructuredOutputSchema {
+    const jsonSchema = toJSONSchema(submitTurnEventsTool.argsSchema, { io: "input" }) as Record<string, unknown>;
+    const { $schema: _schemaUri, ...schemaDefinition } = jsonSchema;
+    return {
+        type: "json_schema",
+        jsonSchema: {
+            name: SUBMIT_TURN_EVENTS_TOOL_NAME,
+            description: submitTurnEventsTool.description,
+            schemaDefinition,
+            strict: false,
         },
     };
 }
@@ -183,12 +203,13 @@ function parseSingleCharacterChatResponse(
     llmResponse: PersonaModelResponse,
     promptContext: PromptContext,
 ): SingleCharacterChatResult {
-    const toolCall = findSubmitTurnEventsToolCall(llmResponse.toolCalls);
-    if (!toolCall) {
-        throw new Error(`Model response did not call ${SUBMIT_TURN_EVENTS_TOOL_NAME}.`);
+    if (llmResponse.structuredOutput === undefined) {
+        throw new Error(
+            `Model response did not include structured output for ${SUBMIT_TURN_EVENTS_TOOL_NAME}.`,
+        );
     }
 
-    const submitTurnEventsOutput = parseSubmitTurnEventsArgs(toolCall.arguments);
+    const submitTurnEventsOutput = parseSubmitTurnEventsArgs(llmResponse.structuredOutput);
     return toSingleCharacterChatResult({
         submitTurnEventsOutput,
         promptContext,
@@ -200,16 +221,17 @@ function toSingleCharacterChatResult(input: {
     promptContext: PromptContext;
 }): SingleCharacterChatResult {
     const selfActor = Array.from(input.promptContext.actorMap.values()).find(actor => actor.role === "self");
+    // Streaming providers tend to emit one `replyText` per paragraph; collapse
+    // any consecutive run with the same speaker into a single event so the
+    // canonical persisted events and the derived displayText match the shape
+    // of a non-streaming response.
+    const mergedEvents = mergeConsecutiveReplyTextEvents(input.submitTurnEventsOutput.events);
     return {
-        displayText: normalizeSingleCharacterReply(getTurnEventsReplyText(input.submitTurnEventsOutput.events), [
+        displayText: normalizeSingleCharacterReply(getTurnEventsReplyText(mergedEvents), [
             selfActor?.displayName,
             input.promptContext.character?.displayName,
             input.promptContext.character?.name,
         ]),
-        events: input.submitTurnEventsOutput.events,
+        events: mergedEvents,
     };
-}
-
-function findSubmitTurnEventsToolCall(toolCalls: ModelToolCall[]): ModelToolCall | undefined {
-    return toolCalls.find(toolCall => toolCall.functionName === SUBMIT_TURN_EVENTS_TOOL_NAME);
 }

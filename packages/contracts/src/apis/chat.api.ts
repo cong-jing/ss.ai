@@ -50,9 +50,10 @@ export type ChatStreamEvent =
     | {
         type: "chunk";
         /**
-         * Speculative display-text preview parsed from streaming tool-call arguments.
-         * Clients must reconcile it with the final canonical `done.output`, which
-         * may apply normalization such as assistant-name prefix stripping.
+         * Speculative display-text preview parsed from the streaming
+         * structured-output JSON channel. Clients must reconcile it with
+         * the final canonical `done.output`, which may apply normalization
+         * such as assistant-name prefix stripping.
          */
         content: string;
     }
