@@ -27,6 +27,7 @@ export * from "./llm/modelClient.js";
 export * from "./llm/tools/modelTool.js";
 export * from "./llm/tools/submitTurnEventsTool.js";
 export * from "./chatTurn/events/submitTurnEventsParser.js";
+export * from "./chatTurn/events/submitTurnEventsStreamPreview.js";
 export * from "./chatTurn/events/turnEventText.js";
 export * from "./chatTurn/chatTurnService.js";
 export * from "./chatTurn/chatTurnPreparation.js";

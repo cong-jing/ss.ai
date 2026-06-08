@@ -54,7 +54,13 @@ function onScroll() {
 watch(
   () => {
     const last = props.messages[props.messages.length - 1];
-    return `${props.messages.length}:${last?.content?.length ?? 0}:${props.showDebug ? 1 : 0}`;
+    // Stream updates now flow through `displaySegments` rather than
+    // `content`; include the segment count and the trailing text length
+    // so scroll-to-bottom fires while the bubble grows.
+    const segments = last?.displaySegments;
+    const lastSegment = segments?.[segments.length - 1];
+    const lastSegmentTextLen = lastSegment?.kind === "text" ? lastSegment.text.length : 0;
+    return `${props.messages.length}:${last?.content?.length ?? 0}:${segments?.length ?? 0}:${lastSegmentTextLen}:${props.showDebug ? 1 : 0}`;
   },
   async () => {
     await nextTick();

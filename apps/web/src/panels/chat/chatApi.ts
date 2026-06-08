@@ -43,17 +43,34 @@ export async function apiDryRunChat(
     return callApi(ApiChatDryRun, { characterId, conversationId, userMessageText, senderActorId, interactionMode });
 }
 
+export interface StreamChatResult {
+    requestId: string;
+    model: string;
+    apiKeySource: "user" | "default" | null;
+    output?: string;
+    userMessageId?: string;
+    assistantMessageId?: string;
+    turnEvents?: TurnEvent[];
+    streamCompleted?: boolean;
+    streamFinishReason?: string;
+}
+
+export interface StreamChatCallbacks {
+    onChunk: (content: string) => void;
+    onAssembledMessages?: (messages: { role: string; content: string }[]) => void;
+    onTurnEventPreview?: (preview: { eventIndex: number; event: TurnEvent }) => void;
+}
+
 export async function apiStreamChatMessage(
     characterId: string,
     conversationId: string,
     userMessageText: string,
     senderActorId: string | undefined,
-    onChunk: (content: string) => void,
+    callbacks: StreamChatCallbacks,
     signal?: AbortSignal,
     includeAssembledMessages = false,
-    onAssembledMessages?: (messages: { role: string; content: string }[]) => void,
     interactionMode?: InteractionMode
-): Promise<{ requestId: string; model: string; apiKeySource: "user" | "default" | null; turnEvents?: TurnEvent[] }> {
+): Promise<StreamChatResult> {
     const response = await fetch(ApiChatStream.apiUrl, {
         method: ApiChatStream.method,
         credentials: "same-origin",
@@ -72,11 +89,12 @@ export async function apiStreamChatMessage(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    let result: { requestId: string; model: string; apiKeySource: "user" | "default" | null; turnEvents?: TurnEvent[] } = {
+    let result: StreamChatResult = {
         requestId: "",
         model: "",
         apiKeySource: null,
     };
+    let streamErrorMessage: string | null = null;
 
     while (true) {
         const { done, value } = await reader.read();
@@ -90,13 +108,31 @@ export async function apiStreamChatMessage(
             if (!line.startsWith("data: ")) continue;
             const event = JSON.parse(line.slice(6)) as ChatStreamEvent;
             if (event.type === "chunk") {
-                onChunk(event.content);
-            } else if (event.type === "done") {
-                result = { requestId: event.requestId, model: event.model, apiKeySource: event.apiKeySource ?? null, turnEvents: event.turnEvents };
+                callbacks.onChunk(event.content);
+            } else if (event.type === "turnEventPreview") {
+                callbacks.onTurnEventPreview?.({ eventIndex: event.eventIndex, event: event.event });
             } else if (event.type === "assembledMessages") {
-                onAssembledMessages?.(event.messages);
+                callbacks.onAssembledMessages?.(event.messages);
+            } else if (event.type === "done") {
+                result = {
+                    requestId: event.requestId,
+                    model: event.model,
+                    apiKeySource: event.apiKeySource ?? null,
+                    output: event.output,
+                    userMessageId: event.userMessageId,
+                    assistantMessageId: event.assistantMessageId,
+                    turnEvents: event.turnEvents,
+                    streamCompleted: event.streamCompleted,
+                    streamFinishReason: event.streamFinishReason,
+                };
+            } else if (event.type === "error") {
+                streamErrorMessage = event.message;
             }
         }
+    }
+
+    if (streamErrorMessage) {
+        throw new Error(streamErrorMessage);
     }
 
     return result;

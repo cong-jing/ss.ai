@@ -2,8 +2,8 @@
 
 ## Higher priority follow-ups
 
-- Chat stream is still an SSE fallback path for `single_character_chat`, not true token streaming yet. This includes the current "SSE error event looks like done" behavior from review issue 8.
 - Character-level `modelConfig` is stored and editable, but chat model selection still does not consume it. Decide whether to implement that priority chain or hide the field until it becomes real.
+- Richer streaming UX for `single_character_chat`: sync character avatar expression to `expression` events, sync scene background/overlay to `sceneAtmosphere` events, and add a side debug panel that renders the live `turnEvents` stream as it arrives (currently inline marker chips in the bubble + post-stream debug block are the only surfaces).
 
 ## Lower priority follow-ups
 

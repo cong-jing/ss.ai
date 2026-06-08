@@ -115,7 +115,8 @@ describe("model runtime", () => {
             structuredOutputSchema,
         });
 
-        assert.equal(response.output, "structured");
+        assert.equal(response.output, "");
+        assert.deepEqual(response.structuredOutput, { replyText: "structured" });
         assert.equal(response.apiKeySource, "user");
         assert.equal(capturedInputs[0].model, "sum-model");
         assert.equal(capturedInputs[0].provider, "mistral");

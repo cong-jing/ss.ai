@@ -45,16 +45,39 @@ export interface ChatStreamRequest {
     includeAssembledMessages?: boolean;
 }
 
-/** SSE stream event â€?one per `data:` line */
+/** SSE stream event â€” one per `data:` line */
 export type ChatStreamEvent =
-    | { type: "chunk"; content: string }
-    | { type: "done"; requestId: string; model: string; apiKeySource?: "user" | "default"; turnEvents?: TurnEvent[] }
-    | { type: "assembledMessages"; messages: ChatDryRunMessage[] };
+    | {
+        type: "chunk";
+        /**
+         * Speculative display-text preview parsed from the streaming
+         * structured-output JSON channel. Clients must reconcile it with
+         * the final canonical `done.output`, which may apply normalization
+         * such as assistant-name prefix stripping.
+         */
+        content: string;
+    }
+    | { type: "turnEventPreview"; eventIndex: number; event: TurnEvent }
+    | { type: "assembledMessages"; messages: ChatDryRunMessage[] }
+    | {
+        type: "done";
+        requestId: string;
+        model: string;
+        apiKeySource?: "user" | "default";
+        /** Final canonical assistant display text derived from the complete turn events. */
+        output?: string;
+        userMessageId?: string;
+        assistantMessageId?: string;
+        turnEvents?: TurnEvent[];
+        streamCompleted?: boolean;
+        streamFinishReason?: string;
+    }
+    | { type: "error"; requestId: string; message: string };
 
 export const ApiChat = new ApiDefine<ChatRequest, ChatResponse>("/v1/chat", "POST");
 
 /**
- * SSE streaming endpoint. Not used with callApi â€?use fetch + ReadableStream.
+ * SSE streaming endpoint. Not used with callApi ï¿½?use fetch + ReadableStream.
  * Exported so frontend and backend share the same URL / method.
  */
 export const ApiChatStream = new ApiDefine<ChatStreamRequest, never>("/v1/chat/stream", "POST");

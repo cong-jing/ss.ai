@@ -2,6 +2,12 @@ import { ref, watch } from "vue";
 import { DEFAULT_INTERACTION_MODE, type TurnEvent } from "@ss-ai/contracts";
 import { apiDryRunChat, apiSendChatMessage, apiStreamChatMessage, apiGetMessages, apiDeleteMessage } from "./chatApi";
 import type { ChatMessage } from "./chatTypes";
+import {
+    appendTextDeltaToSegments,
+    buildSegmentsFromTurnEvents,
+    eventToMarkerSegment,
+    isInlineMarkerEvent,
+} from "./turnEventDisplay";
 import { contextVersion } from "../../shared/state/appState";
 import { activeConversationId } from "../sidebar/viewmodels/useConversationViewModel";
 import { activeCharacter, activeCharacterId } from "../character/useCharacterViewModel";
@@ -13,6 +19,7 @@ import { localizeApiError } from "../../shared/api/localizeApiError";
 
 export const chatDraftInput = ref("");
 export const chatReplyNotice = ref<string | null>(null);
+const STREAM_RENDER_INTERVAL_MS = 28;
 
 function createId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -35,29 +42,66 @@ function toRawDebugMessages(input?: { role: string; content: string }[], turnEve
     return debugMessages;
 }
 
-function formatTurnEventsForMessage(turnEvents: TurnEvent[] | undefined, fallback: string): string {
-    if (!turnEvents?.length) return fallback;
+function getReplyTextFromTurnEvents(turnEvents: TurnEvent[] | undefined): string {
+    if (!turnEvents?.length) return "";
+    return turnEvents
+        .filter((event): event is Extract<TurnEvent, { type: "replyText" }> => event.type === "replyText")
+        .map(event => event.text.trim())
+        .filter(Boolean)
+        .join("\n");
+}
 
-    return turnEvents.map(event => {
-        switch (event.type) {
-            case "replyText":
-                return `replyText: ${event.text}`;
-            case "expression": {
-                const fields = [`expression: ${event.expression}`];
-                if (event.intensity !== undefined) fields.push(`intensity: ${event.intensity}`);
-                return fields.join("\n");
-            }
-            case "sceneAtmosphere": {
-                const fields = [`sceneAtmosphere: ${event.atmosphere}`];
-                if (event.note) fields.push(`note: ${event.note}`);
-                return fields.join("\n");
-            }
-            case "stateUpdate":
-                return `stateUpdate: ${JSON.stringify(event.update)}`;
-            default:
-                return JSON.stringify(event);
+function isAsciiWordChar(char: string): boolean {
+    return /[A-Za-z0-9]/.test(char);
+}
+
+function isCjkLikeChar(char: string): boolean {
+    return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(char);
+}
+
+function tokenizeStreamChunk(chunk: string): string[] {
+    const tokens: string[] = [];
+    const chars = Array.from(chunk);
+    let index = 0;
+
+    while (index < chars.length) {
+        const char = chars[index];
+        if (!char) {
+            index++;
+            continue;
         }
-    }).join("\n");
+
+        if (isAsciiWordChar(char)) {
+            let token = char;
+            index++;
+            while (index < chars.length && isAsciiWordChar(chars[index] ?? "")) {
+                token += chars[index];
+                index++;
+            }
+            while (index < chars.length && /\s/u.test(chars[index] ?? "")) {
+                token += chars[index];
+                index++;
+            }
+            tokens.push(token);
+            continue;
+        }
+
+        if (isCjkLikeChar(char)) {
+            let token = char;
+            index++;
+            while (index < chars.length && /\s/u.test(chars[index] ?? "")) {
+                token += chars[index];
+                index++;
+            }
+            tokens.push(token);
+            continue;
+        }
+
+        tokens.push(char);
+        index++;
+    }
+
+    return tokens;
 }
 
 export function useChatViewModel() {
@@ -104,43 +148,126 @@ export function useChatViewModel() {
 
         if (stream) {
             const msgId = createId("assistant");
+            // The stream queue holds either text tokens (paced one per timer
+            // tick so CJK / latin look smooth) or completed inline markers
+            // (expression / sceneAtmosphere). Both come from the SSE stream
+            // in document order; pacing them through the same queue keeps
+            // markers interleaved at the right point in the rendered bubble.
+            type StreamOp =
+                | { kind: "text"; token: string }
+                | { kind: "marker"; event: Extract<TurnEvent, { type: "expression" | "sceneAtmosphere" | "stateUpdate" }> };
+            const pendingOps: StreamOp[] = [];
+            let renderTimer: number | undefined;
+
+            const stopRenderTimer = () => {
+                if (renderTimer !== undefined) {
+                    window.clearInterval(renderTimer);
+                    renderTimer = undefined;
+                }
+            };
+
+            const ensureRenderTimer = () => {
+                if (renderTimer !== undefined) return;
+                renderTimer = window.setInterval(() => {
+                    const msg = messages.value.find(m => m.id === msgId);
+                    if (!msg) {
+                        stopRenderTimer();
+                        pendingOps.length = 0;
+                        return;
+                    }
+                    const nextOp = pendingOps.shift();
+                    if (!nextOp) {
+                        stopRenderTimer();
+                        return;
+                    }
+                    const segments = msg.displaySegments ? [...msg.displaySegments] : [];
+                    if (nextOp.kind === "text") {
+                        appendTextDeltaToSegments(segments, nextOp.token);
+                    } else {
+                        segments.push(eventToMarkerSegment(nextOp.event));
+                    }
+                    msg.displaySegments = segments;
+                }, STREAM_RENDER_INTERVAL_MS);
+            };
+
             messages.value.push({
                 id: msgId,
                 role: "assistant",
                 senderDisplayName: assistantDisplayName,
                 senderSourceType: "ai_character",
                 content: "",
+                displaySegments: [],
                 createdAt: new Date().toISOString(),
                 status: "streaming"
             });
 
             try {
                 let capturedAssembledMessages: import("./chatTypes").DebugMessage[] | undefined;
+
                 const result = await apiStreamChatMessage(
                     characterId,
                     conversationId,
                     userMessageText,
                     senderActorId,
-                    (chunk) => {
-                        const msg = messages.value.find(m => m.id === msgId);
-                        if (msg) msg.content += chunk;
+                    {
+                        onChunk: (chunk) => {
+                            for (const token of tokenizeStreamChunk(chunk)) {
+                                pendingOps.push({ kind: "text", token });
+                            }
+                            ensureRenderTimer();
+                        },
+                        onAssembledMessages: (msgs) => { capturedAssembledMessages = msgs; },
+                        // Preview events are best-effort speculative updates;
+                        // the canonical turnEvents arrive on `done`. Only
+                        // inline-renderable markers (expression /
+                        // sceneAtmosphere) feed the segments queue here so
+                        // they appear in the bubble at the same point in the
+                        // text where the model emitted them. stateUpdate is
+                        // skipped to avoid noisy/duplicated chips and is
+                        // still surfaced in the per-turn debug panel.
+                        onTurnEventPreview: (preview) => {
+                            const msg = messages.value.find(m => m.id === msgId);
+                            if (!msg) return;
+                            const previews = msg.turnEvents ? [...msg.turnEvents] : [];
+                            previews[preview.eventIndex] = preview.event;
+                            msg.turnEvents = previews;
+
+                            if (isInlineMarkerEvent(preview.event)) {
+                                pendingOps.push({ kind: "marker", event: preview.event });
+                                ensureRenderTimer();
+                            }
+                        },
                     },
                     undefined,
                     true,
-                    (msgs) => { capturedAssembledMessages = msgs; },
                     activeCharacter.value?.interactionMode ?? DEFAULT_INTERACTION_MODE,
                 );
 
                 const msg = messages.value.find(m => m.id === msgId);
                 if (msg) {
+                    stopRenderTimer();
+                    pendingOps.length = 0;
                     msg.status = "normal";
-                    msg.id = result.requestId || msgId;
+                    // Prefer the assistant message id from the database so later
+                    // edits/deletes target the same row across reloads.
+                    msg.id = result.assistantMessageId || result.requestId || msgId;
                     if (result.turnEvents) msg.turnEvents = result.turnEvents;
-                    msg.content = formatTurnEventsForMessage(result.turnEvents, msg.content);
+                    // Snap to the canonical segments derived from the final
+                    // turnEvents so any speculative preview drift is replaced
+                    // by the authoritative result.
+                    const finalSegments = buildSegmentsFromTurnEvents(result.turnEvents);
+                    if (finalSegments.length > 0) {
+                        msg.displaySegments = finalSegments;
+                        msg.content = getReplyTextFromTurnEvents(result.turnEvents);
+                    } else if (result.output) {
+                        msg.displaySegments = [{ kind: "text", text: result.output }];
+                        msg.content = result.output;
+                    }
                 }
                 const debugMessages = toRawDebugMessages(capturedAssembledMessages, result.turnEvents);
                 if (debugMessages.length > 0) {
-                    const assistantIndex = messages.value.findIndex(m => m.id === (result.requestId || msgId));
+                    const finalId = result.assistantMessageId || result.requestId || msgId;
+                    const assistantIndex = messages.value.findIndex(m => m.id === finalId);
                     const insertIndex = assistantIndex >= 0 ? assistantIndex : messages.value.length;
                     messages.value.splice(insertIndex, 0, {
                         role: "debug",
@@ -159,9 +286,12 @@ export function useChatViewModel() {
                 const message = localizeApiError(e);
                 console.error("[chat/stream] error:", e);
                 error.value = message;
+                stopRenderTimer();
+                pendingOps.length = 0;
                 const msg = messages.value.find(m => m.id === msgId);
                 if (msg) {
                     msg.content = message;
+                    msg.displaySegments = undefined;
                     msg.status = "failed";
                 }
             } finally {
@@ -184,12 +314,16 @@ export function useChatViewModel() {
             let assistantInsertIndex = messages.value.length;
             if (response.assistantMessageId || response.output.trim().length > 0) {
                 assistantInsertIndex = messages.value.length;
+                const segments = buildSegmentsFromTurnEvents(response.turnEvents);
                 messages.value.push({
                     id: response.assistantMessageId || response.requestId,
                     role: "assistant",
                     senderDisplayName: assistantDisplayName,
                     senderSourceType: "ai_character",
-                    content: formatTurnEventsForMessage(response.turnEvents, response.output),
+                    content: getReplyTextFromTurnEvents(response.turnEvents) || response.output,
+                    displaySegments: segments.length > 0
+                        ? segments
+                        : [{ kind: "text", text: response.output }],
                     createdAt: new Date().toISOString(),
                     status: "normal",
                     ...(response.turnEvents ? { turnEvents: response.turnEvents } : {}),
@@ -303,17 +437,23 @@ export function useChatViewModel() {
         isLoading.value = true;
         try {
             const res = await apiGetMessages(convId);
-            messages.value = res.messages.map(m => ({
-                id: m.id,
-                role: m.role,
-                senderActorId: m.senderActorId,
-                senderDisplayName: m.senderDisplayName,
-                senderSourceType: m.senderSourceType,
-                content: formatTurnEventsForMessage(m.turnEvents, m.content),
-                createdAt: m.createdAt,
-                turnEvents: m.turnEvents,
-                status: "normal" as const,
-            }));
+            messages.value = res.messages.map(m => {
+                const segments = buildSegmentsFromTurnEvents(m.turnEvents);
+                return {
+                    id: m.id,
+                    role: m.role,
+                    senderActorId: m.senderActorId,
+                    senderDisplayName: m.senderDisplayName,
+                    senderSourceType: m.senderSourceType,
+                    content: segments.length > 0
+                        ? getReplyTextFromTurnEvents(m.turnEvents)
+                        : m.content,
+                    ...(segments.length > 0 ? { displaySegments: segments } : {}),
+                    createdAt: m.createdAt,
+                    turnEvents: m.turnEvents,
+                    status: "normal" as const,
+                };
+            });
         } catch (e) {
             toast.error(localizeApiError(e));
             messages.value = [];

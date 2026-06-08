@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { extractText, isMistralMessageContentEmpty } from "../src/mistral/messageTransforms.js";
+import {
+    accumulateToolCallDelta,
+    extractText,
+    isMistralMessageContentEmpty,
+    normalizeStreamToolCallDeltas,
+    type ToolCallAccumulator,
+} from "../src/mistral/messageTransforms.js";
 
 describe("mistral message transforms", () => {
     it("treats missing or blank message content as empty", () => {
@@ -22,5 +28,121 @@ describe("mistral message transforms", () => {
     it("extracts text from string and array content", () => {
         assert.equal(extractText({ choices: [{ message: { content: "hello" } }] }), "hello");
         assert.equal(extractText({ choices: [{ message: { content: [{ type: "text", text: "hello" }, " world"] } }] }), "hello world");
+    });
+
+    it("normalizes stream tool call deltas from camelCase and snake_case fields", () => {
+        const camelCaseDeltas = normalizeStreamToolCallDeltas({
+            toolCalls: [
+                {
+                    index: 0,
+                    id: "call-0",
+                    type: "function",
+                    function: {
+                        name: "submit_turn_events",
+                        arguments: "{\"events\":[",
+                    },
+                },
+            ],
+        });
+
+        assert.deepEqual(camelCaseDeltas, [
+            {
+                index: 0,
+                id: "call-0",
+                type: "function",
+                functionNameDelta: "submit_turn_events",
+                argumentsDelta: "{\"events\":[",
+                raw: {
+                    index: 0,
+                    id: "call-0",
+                    type: "function",
+                    function: {
+                        name: "submit_turn_events",
+                        arguments: "{\"events\":[",
+                    },
+                },
+            },
+        ]);
+
+        const snakeCaseDeltas = normalizeStreamToolCallDeltas({
+            tool_calls: [
+                {
+                    index: 1,
+                    function: {
+                        name_delta: "submit_",
+                        arguments_delta: "{\"type\":\"replyText\"",
+                    },
+                },
+            ],
+        });
+
+        assert.equal(snakeCaseDeltas.length, 1);
+        assert.equal(snakeCaseDeltas[0].index, 1);
+        assert.equal(snakeCaseDeltas[0].functionNameDelta, "submit_");
+        assert.equal(snakeCaseDeltas[0].argumentsDelta, "{\"type\":\"replyText\"");
+    });
+
+    it("accumulates fragmented stream tool calls by index", () => {
+        const accumulators = new Map<number, ToolCallAccumulator>();
+        const deltas = [
+            ...normalizeStreamToolCallDeltas({
+                toolCalls: [
+                    {
+                        index: 0,
+                        id: "call-0",
+                        type: "function",
+                        function: {
+                            name: "submit_turn_events",
+                            arguments: "{\"events\":[",
+                        },
+                    },
+                    {
+                        index: 1,
+                        id: "call-1",
+                        type: "function",
+                        function: {
+                            name: "other_tool",
+                            arguments: "{\"value\":",
+                        },
+                    },
+                ],
+            }),
+            ...normalizeStreamToolCallDeltas({
+                tool_calls: [
+                    {
+                        index: 0,
+                        function: {
+                            arguments_delta: "{\"type\":\"replyText\",\"text\":\"hello\"}]}",
+                        },
+                    },
+                    {
+                        index: 1,
+                        function: {
+                            arguments_delta: "\"ok\"}",
+                        },
+                    },
+                ],
+            }),
+        ];
+
+        for (const delta of deltas) {
+            accumulateToolCallDelta(accumulators, delta);
+        }
+
+        assert.equal(accumulators.size, 2);
+        assert.deepEqual(accumulators.get(0), {
+            index: 0,
+            id: "call-0",
+            type: "function",
+            functionName: "submit_turn_events",
+            argumentsBuffer: "{\"events\":[{\"type\":\"replyText\",\"text\":\"hello\"}]}",
+        });
+        assert.deepEqual(accumulators.get(1), {
+            index: 1,
+            id: "call-1",
+            type: "function",
+            functionName: "other_tool",
+            argumentsBuffer: "{\"value\":\"ok\"}",
+        });
     });
 });

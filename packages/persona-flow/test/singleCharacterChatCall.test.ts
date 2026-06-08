@@ -70,17 +70,13 @@ describe("singleCharacterChatCall", () => {
                 model: "m1",
                 requestId: "req1",
                 apiKeySource: "default" as const,
-                toolCalls: [
-                    {
-                        functionName: "submit_turn_events",
-                        arguments: {
-                            events: [
-                                { type: "replyText" as const, characterId: "c1", text: "诗诗: hello back" },
-                                { type: "expression" as const, characterId: "c1", expression: "happy" },
-                            ],
-                        },
-                    },
-                ],
+                structuredOutput: {
+                    events: [
+                        { type: "replyText" as const, characterId: "c1", text: "诗诗: hello back" },
+                        { type: "expression" as const, characterId: "c1", expression: "happy" },
+                    ],
+                },
+                toolCalls: [],
             }),
         } as unknown as ModelRuntime;
 

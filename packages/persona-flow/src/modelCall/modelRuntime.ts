@@ -3,6 +3,7 @@ import type {
     ModelClient,
     StructuredOutputSchema,
     ModelToolCall,
+    ModelToolCallDelta,
     ModelUsage,
     ModelStreamResult,
 } from "../llm/modelClient.js";
@@ -41,14 +42,6 @@ export interface PersonaModelRuntimeDependencies {
     logger?: PersonaFlowLogger;
     defaultModelAssignments?: ModelAssignmentMap;
     defaultProviderApiKeys?: Record<string, string>;
-}
-
-function extractStructuredOutputText(output: unknown): string {
-    if (!output || typeof output !== "object") {
-        return "";
-    }
-    const replyText = (output as { replyText?: unknown }).replyText;
-    return typeof replyText === "string" ? replyText : "";
 }
 
 export class ModelRuntime {
@@ -200,7 +193,11 @@ export class ModelRuntime {
                 structuredOutput = result.structuredOutput;
                 toolCalls = result.toolCalls;
                 usage = result.usage;
-                output = extractStructuredOutputText(structuredOutput);
+                // For structured responses, the canonical business result lives in
+                // `structuredOutput`. We deliberately do not synthesize a display
+                // string from it here — the model-call layer owns shaping any
+                // user-facing text from its specific structured payload.
+                output = "";
             } else {
                 if (!("output" in result)) {
                     throw new Error("Model client returned structured result for non-structured request.");
@@ -266,7 +263,10 @@ export class ModelRuntime {
         };
     }
 
-    async chatStream(request: PersonaModelRequest & { onTextDelta?: (delta: string) => void }): Promise<PersonaModelResponse & ModelStreamResult> {
+    async chatStream(request: PersonaModelRequest & {
+        onTextDelta?: (delta: string) => void;
+        onToolCallDelta?: (delta: ModelToolCallDelta) => void;
+    }): Promise<PersonaModelResponse & ModelStreamResult> {
         const requestId = crypto.randomUUID();
         const modelCallPurpose = request.modelCallPurpose ?? "chat.main";
         const { provider, model, encryptedApiKey, apiKeySource } = await this.resolveProviderModelRuntime(
@@ -291,13 +291,15 @@ export class ModelRuntime {
                     model,
                     encryptedApiKey,
                     messages: request.messages,
+                    structuredOutputSchema: request.structuredOutputSchema,
                     tools: request.tools,
                     toolChoice: request.toolChoice,
                 },
                 {
                     onTextDelta: request.onTextDelta,
+                    onToolCallDelta: request.onToolCallDelta,
                     onToolCall: (toolCall) => {
-                        this.logger.debug("persona-flow/model: stream tool call requested (TODO)", {
+                        this.logger.debug("persona-flow/model: stream tool call completed", {
                             requestId,
                             modelCallPurpose,
                             toolCall,
@@ -317,6 +319,7 @@ export class ModelRuntime {
             this.writePromptLog(requestId, request, model, {
                 status: streamError ? "failed" : "completed",
                 outputText: streamResult?.output ?? "",
+                structuredOutput: streamResult?.structuredOutput,
                 toolCalls: streamResult?.toolCalls ?? [],
                 usage: streamResult?.usage,
                 streamCompleted: streamResult?.completed,
@@ -337,6 +340,7 @@ export class ModelRuntime {
             requestId,
             modelCallPurpose,
             outputLength: streamResult.output?.length ?? 0,
+            hasStructuredOutput: streamResult.structuredOutput !== undefined,
             toolCallCount: streamResult.toolCalls.length,
             usage: streamResult.usage,
             streamCompleted: streamResult.completed,
@@ -362,6 +366,9 @@ export class ModelRuntime {
             finishReason: streamResult.finishReason,
             streamCompleted: streamResult.completed,
             streamFinishReason: streamResult.finishReason,
+            ...(streamResult.structuredOutput !== undefined
+                ? { structuredOutput: streamResult.structuredOutput }
+                : {}),
         };
     }
 }
