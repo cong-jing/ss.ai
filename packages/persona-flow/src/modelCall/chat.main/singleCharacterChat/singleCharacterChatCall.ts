@@ -1,6 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ModelCall, ModelCallRunResult } from "../../modelCall.js";
+import type { ModelCall, ModelCallRunInput, ModelCallRunResult, ModelCallStreamRunInput } from "../../modelCall.js";
 import type { PromptContext } from "../../../prompt/promptContext.js";
 import type { RenderedMessage } from "../../../prompt/promptTypes.js";
 import type { SubmitTurnEventsArgs } from "@ss-ai/contracts";
@@ -9,8 +9,11 @@ import { getTurnEventsReplyText } from "../../../chatTurn/events/turnEventText.j
 import { parseSubmitTurnEventsArgs } from "../../../chatTurn/events/submitTurnEventsParser.js";
 import { SUBMIT_TURN_EVENTS_TOOL_NAME, submitTurnEventsTool } from "../../../llm/tools/submitTurnEventsTool.js";
 import type { ModelToolCall } from "../../../llm/modelClient.js";
+import {
+    createSubmitTurnEventsPreviewParser,
+} from "../../../chatTurn/events/submitTurnEventsStreamPreview.js";
 import { buildPromptViewModel } from "./promptViewModel.js";
-import { PersonaModelRequest } from "../../modelRuntime.js";
+import { PersonaModelRequest, PersonaModelResponse } from "../../modelRuntime.js";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const SYSTEM_TEMPLATE_PATH = resolve(
@@ -94,44 +97,14 @@ function stripRepeatedPrefix(text: string, regex: RegExp): string {
 export const singleCharacterChatCall: ModelCall<SingleCharacterChatResult> = {
     purpose: "chat.main",
     async run(input): Promise<ModelCallRunResult<SingleCharacterChatResult>> {
-        const viewModel = buildPromptViewModel({
-            character: input.promptContext.character,
-            userProfile: input.promptContext.userProfile,
-        });
-        const systemPrompt = (await renderPromptTemplate(SYSTEM_TEMPLATE_PATH, viewModel)).trim();
-
-        const messages: RenderedMessage[] = [
-            ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
-            ...buildConversationMessages(input.promptContext),
-        ];
-
-        const llmRequest: PersonaModelRequest = {
-            userId: input.userId,
-            characterId: input.characterId,
-            messages,
-            modelCallPurpose: this.purpose,
-            tools: [submitTurnEventsTool],
-            toolChoice: {
-                type: "function",
-                functionName: SUBMIT_TURN_EVENTS_TOOL_NAME,
-            },
-        };
+        const llmRequest = await buildSingleCharacterChatRequest(input);
 
         if (input.dryRun) {
             return { llmRequestSnapshot: llmRequest };
         }
 
         const llmResponse = await input.runtime.chat(llmRequest);
-        const toolCall = findSubmitTurnEventsToolCall(llmResponse.toolCalls);
-        if (!toolCall) {
-            throw new Error(`Model response did not call ${SUBMIT_TURN_EVENTS_TOOL_NAME}.`);
-        }
-
-        const submitTurnEventsOutput = parseSubmitTurnEventsArgs(toolCall.arguments);
-        const parsedOutput = toSingleCharacterChatResult({
-            submitTurnEventsOutput,
-            promptContext: input.promptContext,
-        });
+        const parsedOutput = parseSingleCharacterChatResponse(llmResponse, input.promptContext);
 
         return {
             llmRequestSnapshot: llmRequest,
@@ -141,7 +114,85 @@ export const singleCharacterChatCall: ModelCall<SingleCharacterChatResult> = {
             parsedOutput,
         };
     },
+    async runStream(input: ModelCallStreamRunInput): Promise<ModelCallRunResult<SingleCharacterChatResult>> {
+        const llmRequest = await buildSingleCharacterChatRequest(input);
+
+        if (input.dryRun) {
+            return { llmRequestSnapshot: llmRequest };
+        }
+
+        const preview = createSubmitTurnEventsPreviewParser();
+        const llmResponse = await input.runtime.chatStream({
+            ...llmRequest,
+            onToolCallDelta: (delta) => {
+                // Only follow our terminal `submit_turn_events` tool. When the
+                // model declares a different tool name, ignore its deltas for
+                // preview purposes (final parse will still validate).
+                if (delta.functionNameDelta && delta.functionNameDelta !== SUBMIT_TURN_EVENTS_TOOL_NAME) {
+                    return;
+                }
+                if (!delta.argumentsDelta) return;
+
+                for (const event of preview.push(delta.argumentsDelta)) {
+                    if (event.type === "replyTextDelta") {
+                        input.onDisplayTextDelta?.(event.text);
+                    } else if (event.type === "turnEventPreview") {
+                        input.onTurnEventPreview?.(event);
+                    }
+                }
+            },
+        });
+
+        const parsedOutput = parseSingleCharacterChatResponse(llmResponse, input.promptContext);
+
+        return {
+            llmRequestSnapshot: llmRequest,
+            llmResponse,
+            parsedOutput,
+        };
+    },
 };
+
+async function buildSingleCharacterChatRequest(input: ModelCallRunInput): Promise<PersonaModelRequest> {
+    const viewModel = buildPromptViewModel({
+        character: input.promptContext.character,
+        userProfile: input.promptContext.userProfile,
+    });
+    const systemPrompt = (await renderPromptTemplate(SYSTEM_TEMPLATE_PATH, viewModel)).trim();
+
+    const messages: RenderedMessage[] = [
+        ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
+        ...buildConversationMessages(input.promptContext),
+    ];
+
+    return {
+        userId: input.userId,
+        characterId: input.characterId,
+        messages,
+        modelCallPurpose: singleCharacterChatCall.purpose,
+        tools: [submitTurnEventsTool],
+        toolChoice: {
+            type: "function",
+            functionName: SUBMIT_TURN_EVENTS_TOOL_NAME,
+        },
+    };
+}
+
+function parseSingleCharacterChatResponse(
+    llmResponse: PersonaModelResponse,
+    promptContext: PromptContext,
+): SingleCharacterChatResult {
+    const toolCall = findSubmitTurnEventsToolCall(llmResponse.toolCalls);
+    if (!toolCall) {
+        throw new Error(`Model response did not call ${SUBMIT_TURN_EVENTS_TOOL_NAME}.`);
+    }
+
+    const submitTurnEventsOutput = parseSubmitTurnEventsArgs(toolCall.arguments);
+    return toSingleCharacterChatResult({
+        submitTurnEventsOutput,
+        promptContext,
+    });
+}
 
 function toSingleCharacterChatResult(input: {
     submitTurnEventsOutput: SubmitTurnEventsArgs;

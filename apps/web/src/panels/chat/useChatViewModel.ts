@@ -121,26 +121,42 @@ export function useChatViewModel() {
                     conversationId,
                     userMessageText,
                     senderActorId,
-                    (chunk) => {
-                        const msg = messages.value.find(m => m.id === msgId);
-                        if (msg) msg.content += chunk;
+                    {
+                        onChunk: (chunk) => {
+                            const msg = messages.value.find(m => m.id === msgId);
+                            if (msg) msg.content += chunk;
+                        },
+                        onAssembledMessages: (msgs) => { capturedAssembledMessages = msgs; },
+                        // Preview events are best-effort speculative updates; the
+                        // canonical turnEvents come on `done`. Skip stateUpdate
+                        // previews to avoid showing transient/duplicated state.
+                        onTurnEventPreview: (preview) => {
+                            if (preview.event.type === "stateUpdate") return;
+                            const msg = messages.value.find(m => m.id === msgId);
+                            if (!msg) return;
+                            const previews = msg.turnEvents ? [...msg.turnEvents] : [];
+                            previews[preview.eventIndex] = preview.event;
+                            msg.turnEvents = previews;
+                        },
                     },
                     undefined,
                     true,
-                    (msgs) => { capturedAssembledMessages = msgs; },
                     activeCharacter.value?.interactionMode ?? DEFAULT_INTERACTION_MODE,
                 );
 
                 const msg = messages.value.find(m => m.id === msgId);
                 if (msg) {
                     msg.status = "normal";
-                    msg.id = result.requestId || msgId;
+                    // Prefer the assistant message id from the database so later
+                    // edits/deletes target the same row across reloads.
+                    msg.id = result.assistantMessageId || result.requestId || msgId;
                     if (result.turnEvents) msg.turnEvents = result.turnEvents;
-                    msg.content = formatTurnEventsForMessage(result.turnEvents, msg.content);
+                    msg.content = formatTurnEventsForMessage(result.turnEvents, result.output ?? msg.content);
                 }
                 const debugMessages = toRawDebugMessages(capturedAssembledMessages, result.turnEvents);
                 if (debugMessages.length > 0) {
-                    const assistantIndex = messages.value.findIndex(m => m.id === (result.requestId || msgId));
+                    const finalId = result.assistantMessageId || result.requestId || msgId;
+                    const assistantIndex = messages.value.findIndex(m => m.id === finalId);
                     const insertIndex = assistantIndex >= 0 ? assistantIndex : messages.value.length;
                     messages.value.splice(insertIndex, 0, {
                         role: "debug",

@@ -4,19 +4,22 @@ import type {
     ModelStreamCallbacks,
     ModelStreamResult,
     ModelToolCall,
+    ModelToolCallDelta,
     ModelUsage,
     PersonaFlowLogger,
 } from "@ss-ai/persona-flow";
 import type { Mistral as MistralSDKClient } from "@mistralai/mistralai";
 import {
+    accumulateToolCallDelta,
     extractStructuredOutput,
     extractText,
     extractTextDelta,
     extractToolCallsFromMessage,
     extractUsage,
     isMistralMessageContentEmpty,
-    normalizeToolCall,
+    normalizeStreamToolCallDeltas,
     toSdkMessages,
+    type ToolCallAccumulator,
 } from "./messageTransforms.js";
 import { toMistralToolRequest } from "./mistralToolAdapter.js";
 import { withTimeout } from "./timeout.js";
@@ -107,14 +110,96 @@ export class MistralModelClient implements ModelAdapter {
         };
     }
 
-    async generateStream(_input: ModelGenerationInput, _callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
-        // TODO: implement real streaming once we settle on tool-call delta accumulation.
-        // The previous draft tried to forward `submit_turn_events` tools to Mistral's stream API,
-        // but Mistral returns toolCall arguments as fragmented deltas that need to be merged by
-        // `index` before they can be JSON.parse-d. Until that's done, fall back to the non-stream
-        // path via `ModelRuntime.chat()` / `ChatTurnService.streamTurn()` (which already emits the
-        // full reply once) instead of producing partial / corrupt turnEvents.
-        throw new Error("MistralModelClient.generateStream is not implemented yet.");
+    async generateStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
+        const client = await this.getClient();
+        const toolRequest = toMistralToolRequest(input);
+
+        const stream = await withTimeout(
+            client.chat.stream({
+                model: input.model,
+                messages: toSdkMessages(input),
+                ...toolRequest,
+            }),
+            this.options.timeoutMs,
+            "Mistral stream request",
+        );
+
+        let output = "";
+        const toolAccumulators = new Map<number, ToolCallAccumulator>();
+        let usage: ModelUsage | undefined;
+        let finishReason: string | undefined;
+        let completed = false;
+
+        try {
+            for await (const event of stream) {
+                const chunk = (event && typeof event === "object" && "data" in event)
+                    ? (event as { data?: unknown }).data
+                    : event;
+                const choice = (chunk as {
+                    choices?: Array<{
+                        delta?: unknown;
+                        finishReason?: unknown;
+                        finish_reason?: unknown;
+                    }>;
+                })?.choices?.[0];
+
+                if (!choice) {
+                    const possibleUsage = extractUsage(chunk);
+                    if (possibleUsage) usage = possibleUsage;
+                    continue;
+                }
+
+                const delta = (choice as { delta?: unknown }).delta;
+                if (delta) {
+                    const textDelta = extractTextDelta((delta as { content?: unknown }).content);
+                    if (textDelta) {
+                        output += textDelta;
+                        callbacks?.onTextDelta?.(textDelta);
+                    }
+
+                    const toolDeltas = normalizeStreamToolCallDeltas(delta);
+                    for (const toolDelta of toolDeltas) {
+                        accumulateToolCallDelta(toolAccumulators, toolDelta);
+                        callbacks?.onToolCallDelta?.(toolDelta);
+                    }
+                }
+
+                const choiceFinish = (choice as { finishReason?: unknown; finish_reason?: unknown });
+                const reason = typeof choiceFinish.finishReason === "string"
+                    ? choiceFinish.finishReason
+                    : (typeof choiceFinish.finish_reason === "string" ? choiceFinish.finish_reason : undefined);
+                if (reason) {
+                    finishReason = reason;
+                    completed = true;
+                }
+
+                const chunkUsage = extractUsage(chunk);
+                if (chunkUsage) {
+                    usage = chunkUsage;
+                }
+            }
+        } catch (err: unknown) {
+            this.options.logger?.error("Mistral stream iteration failed", {
+                error: err instanceof Error ? err.message : "Unknown error",
+            });
+            throw err;
+        }
+
+        const toolCalls: ModelToolCall[] = Array.from(toolAccumulators.values())
+            .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+            .map(toModelToolCall);
+
+        for (const toolCall of toolCalls) {
+            callbacks?.onToolCall?.(toolCall);
+        }
+
+        return {
+            output,
+            toolCalls,
+            usage,
+            completed,
+            finishReason,
+        };
     }
 
     async listModels(): Promise<string[]> {
@@ -137,4 +222,16 @@ export class MistralModelClient implements ModelAdapter {
 
         return names;
     }
+}
+
+function toModelToolCall(accumulator: ToolCallAccumulator): ModelToolCall {
+    return {
+        ...(accumulator.id ? { id: accumulator.id } : {}),
+        ...(accumulator.type ? { type: accumulator.type } : {}),
+        ...(accumulator.index !== undefined ? { index: accumulator.index } : {}),
+        ...(accumulator.functionName ? { functionName: accumulator.functionName } : {}),
+        // Mistral / OpenAI tool-call arguments are JSON text emitted as multiple
+        // fragments. Preserve the merged string so downstream callers can JSON.parse it.
+        ...(accumulator.argumentsBuffer ? { arguments: accumulator.argumentsBuffer } : {}),
+    };
 }

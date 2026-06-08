@@ -170,7 +170,7 @@ describe("persona-flow chat turn service", () => {
         assert.deepEqual(assistantMessages[0].turnEvents, result.turnEvents);
     });
 
-    it("streamTurn emits the full normalized reply once and persists assistant message", async () => {
+    it("streamTurn drives chunks from submit_turn_events tool-call deltas and persists assistant message", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -182,36 +182,64 @@ describe("persona-flow chat turn service", () => {
 
         const seenChunks: string[] = [];
         const seenPrompts: Array<Array<{ role: "system" | "user" | "assistant"; content: string }>> = [];
+        const seenPreviews: Array<{ eventIndex: number; eventType: string }> = [];
+
+        // Pre-compute the full arguments string and slice it into fragments so we
+        // can simulate provider-side streaming of tool-call argument deltas.
+        const fullArgs = JSON.stringify({
+            events: [
+                {
+                    type: "replyText",
+                    characterId: base.characterId,
+                    text: "SS: Hello World",
+                },
+                {
+                    type: "expression",
+                    characterId: base.characterId,
+                    expression: "happy",
+                },
+            ],
+        });
+        const fragmentSize = 8;
+        const fragments: string[] = [];
+        for (let i = 0; i < fullArgs.length; i += fragmentSize) {
+            fragments.push(fullArgs.slice(i, i + fragmentSize));
+        }
 
         const modelClient: ModelClient = {
-            generate: async (input) => {
+            generate: async () => ({
+                output: "",
+                toolCalls: [],
+            }),
+            generateStream: async (input, callbacks) => {
                 assert.equal(input.tools?.[0]?.name, "submit_turn_events");
-
+                // First delta announces the tool/function name.
+                callbacks?.onToolCallDelta?.({
+                    index: 0,
+                    id: "call_test",
+                    type: "function",
+                    functionNameDelta: "submit_turn_events",
+                });
+                for (const fragment of fragments) {
+                    callbacks?.onToolCallDelta?.({
+                        index: 0,
+                        argumentsDelta: fragment,
+                    });
+                }
+                const toolCall = {
+                    id: "call_test",
+                    type: "function",
+                    index: 0,
+                    functionName: "submit_turn_events",
+                    arguments: fullArgs,
+                };
+                callbacks?.onToolCall?.(toolCall);
                 return {
                     output: "",
-                    toolCalls: [
-                        {
-                            functionName: "submit_turn_events",
-                            arguments: JSON.stringify({
-                                events: [
-                                    {
-                                        type: "replyText",
-                                        characterId: base.characterId,
-                                        text: "SS: Hello World",
-                                    },
-                                    {
-                                        type: "expression",
-                                        characterId: base.characterId,
-                                        expression: "happy",
-                                    },
-                                ],
-                            }),
-                        },
-                    ],
+                    toolCalls: [toolCall],
+                    completed: true,
+                    finishReason: "tool_calls",
                 };
-            },
-            generateStream: async () => {
-                throw new Error("should not be called");
             },
             listModels: async () => [],
         };
@@ -235,13 +263,24 @@ describe("persona-flow chat turn service", () => {
             onChunk: (chunk) => {
                 seenChunks.push(chunk);
             },
+            onTurnEventPreview: (preview) => {
+                seenPreviews.push({ eventIndex: preview.eventIndex, eventType: preview.event.type });
+            },
         });
 
         assert.equal(result.model, "m1");
         assert.equal(result.apiKeySource, "user");
         assert.equal(result.output, "Hello World");
         assert.equal(result.turnEvents?.length, 2);
-        assert.equal(seenChunks.join(""), "Hello World");
+        // Concatenated chunks should reconstruct the full assistant text the
+        // preview parser saw inside the tool-call arguments stream.
+        assert.equal(seenChunks.join(""), "SS: Hello World");
+        // We should have received at least the expression event preview once
+        // its enclosing event object closed in the JSON stream.
+        assert.ok(
+            seenPreviews.some(p => p.eventIndex === 1 && p.eventType === "expression"),
+            `expected expression preview, got: ${JSON.stringify(seenPreviews)}`,
+        );
         assert.equal(seenPrompts.length, 1);
 
         const messages = fixture.inspect.messages(base.conversationId);

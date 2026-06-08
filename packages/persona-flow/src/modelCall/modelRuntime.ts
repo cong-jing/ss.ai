@@ -3,6 +3,7 @@ import type {
     ModelClient,
     StructuredOutputSchema,
     ModelToolCall,
+    ModelToolCallDelta,
     ModelUsage,
     ModelStreamResult,
 } from "../llm/modelClient.js";
@@ -266,7 +267,10 @@ export class ModelRuntime {
         };
     }
 
-    async chatStream(request: PersonaModelRequest & { onTextDelta?: (delta: string) => void }): Promise<PersonaModelResponse & ModelStreamResult> {
+    async chatStream(request: PersonaModelRequest & {
+        onTextDelta?: (delta: string) => void;
+        onToolCallDelta?: (delta: ModelToolCallDelta) => void;
+    }): Promise<PersonaModelResponse & ModelStreamResult> {
         const requestId = crypto.randomUUID();
         const modelCallPurpose = request.modelCallPurpose ?? "chat.main";
         const { provider, model, encryptedApiKey, apiKeySource } = await this.resolveProviderModelRuntime(
@@ -296,8 +300,9 @@ export class ModelRuntime {
                 },
                 {
                     onTextDelta: request.onTextDelta,
+                    onToolCallDelta: request.onToolCallDelta,
                     onToolCall: (toolCall) => {
-                        this.logger.debug("persona-flow/model: stream tool call requested (TODO)", {
+                        this.logger.debug("persona-flow/model: stream tool call completed", {
                             requestId,
                             modelCallPurpose,
                             toolCall,

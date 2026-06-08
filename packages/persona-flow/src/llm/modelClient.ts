@@ -30,6 +30,23 @@ export interface ModelToolCall {
     arguments?: unknown;
 }
 
+/**
+ * Provider-neutral incremental tool-call delta emitted during streaming.
+ *
+ * Providers (e.g. Mistral/OpenAI) typically emit tool-call updates as
+ * fragmented chunks identified by `index`. Downstream consumers merge
+ * them into a complete {@link ModelToolCall} but may also peek at
+ * `argumentsDelta` to drive token-level previews.
+ */
+export interface ModelToolCallDelta {
+    id?: string;
+    type?: string;
+    index?: number;
+    functionNameDelta?: string;
+    argumentsDelta?: string;
+    raw?: unknown;
+}
+
 export interface ModelUsage {
     promptTokens?: number;
     completionTokens?: number;
@@ -46,6 +63,7 @@ export interface ModelGenerationResult {
 
 export interface ModelStreamCallbacks {
     onTextDelta?: (delta: string) => void;
+    onToolCallDelta?: (delta: ModelToolCallDelta) => void;
     onToolCall?: (toolCall: ModelToolCall) => void;
 }
 

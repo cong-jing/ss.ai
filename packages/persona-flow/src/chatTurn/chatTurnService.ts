@@ -7,6 +7,7 @@ import type { SingleCharacterChatResult } from "../modelCall/chat.main/singleCha
 import type { ModelCallRunResult } from "../modelCall/modelCall.js";
 import { resolveModelCall } from "../modelCall/modelCallRegistry.js";
 import { ModelRuntime } from "../modelCall/modelRuntime.js";
+import type { SubmitTurnEventsTurnEventPreview } from "./events/submitTurnEventsStreamPreview.js";
 
 export interface PersonaFlowChatTurnServiceDependencies {
     stores: AppStores;
@@ -46,6 +47,13 @@ export interface PersonaStreamTurnRequest {
     includeAssembledMessages?: boolean;
     onAssembledMessages?: (messages: Array<{ role: "system" | "user" | "assistant"; content: string }>) => void;
     onChunk?: (chunk: string) => void;
+    /**
+     * Called when the model call surfaces a complete-but-not-yet-final
+     * `turnEventPreview`. Consumers (web UI, bots) may use these to update
+     * speculative state (expression, atmosphere) and reconcile against the
+     * authoritative `turnEvents` returned in the final result.
+     */
+    onTurnEventPreview?: (preview: SubmitTurnEventsTurnEventPreview) => void;
 }
 
 export class PersonaFlowChatTurnService {
@@ -203,8 +211,6 @@ export class PersonaFlowChatTurnService {
             interactionMode: input.interactionMode,
         });
 
-        // TODO: implement true turn-event streaming for chat.main/singleCharacterChat.
-        // For now stream requests use the terminal tool call and emit the full reply once.
         const prepared = await prepareChatTurnContext({
             stores: this.deps.stores,
             userId: input.userId,
@@ -220,23 +226,72 @@ export class PersonaFlowChatTurnService {
             purpose: "chat.main",
             interactionMode: input.interactionMode,
         });
-        const callResult = await modelCall.run({
+
+        const runStreamInput = {
             runtime: this.modelRuntime,
             userId: input.userId,
             characterId: input.characterId,
             promptContext: prepared.promptContext,
             interactionMode: input.interactionMode,
-        });
+            onDisplayTextDelta: input.onChunk,
+            onTurnEventPreview: input.onTurnEventPreview,
+        };
+
+        // Build assembled messages preview before calling the model so debug
+        // consumers can inspect the prompt while the model is still streaming.
+        let assembledEmitted = false;
+        const emitAssembledOnce = (
+            messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+        ) => {
+            if (assembledEmitted) return;
+            assembledEmitted = true;
+            if (input.includeAssembledMessages) {
+                input.onAssembledMessages?.(messages);
+            }
+        };
+
+        let callResult: ModelCallRunResult;
+        if (typeof modelCall.runStream === "function") {
+            // Dry-run the prompt once first so we can emit assembled messages
+            // before the actual stream call begins. The model call's stream
+            // path itself does not currently surface its assembled request
+            // until it returns.
+            if (input.includeAssembledMessages) {
+                const previewResult = await modelCall.run({
+                    runtime: this.modelRuntime,
+                    userId: input.userId,
+                    characterId: input.characterId,
+                    promptContext: prepared.promptContext,
+                    interactionMode: input.interactionMode,
+                    dryRun: true,
+                });
+                emitAssembledOnce(previewResult.llmRequestSnapshot.messages);
+            }
+            callResult = await modelCall.runStream(runStreamInput);
+        } else {
+            this.logger.warn(
+                "persona-flow/chat-turn: model call has no runStream; falling back to non-stream run()",
+                { purpose: modelCall.purpose },
+            );
+            callResult = await modelCall.run(runStreamInput);
+            if (input.includeAssembledMessages) {
+                emitAssembledOnce(callResult.llmRequestSnapshot.messages);
+            }
+            const chatResultFallback = getSingleCharacterChatResult(callResult);
+            input.onChunk?.(chatResultFallback.displayText);
+        }
+
         if (!callResult.llmResponse) {
             throw new Error("Model call must return llmResponse for stream turn.");
         }
+        // Ensure assembled messages are emitted at least once when requested,
+        // even when the runStream path didn't get a chance to call it earlier.
         if (input.includeAssembledMessages) {
-            input.onAssembledMessages?.(callResult.llmRequestSnapshot.messages);
+            emitAssembledOnce(callResult.llmRequestSnapshot.messages);
         }
         const chatResult = getSingleCharacterChatResult(callResult);
         const fullResponse = chatResult.displayText;
         const turnEvents = chatResult.events;
-        input.onChunk?.(fullResponse);
 
         const assistantMessageId = crypto.randomUUID();
         await this.deps.stores.chat.appendAssistantTurn({
@@ -251,7 +306,7 @@ export class PersonaFlowChatTurnService {
             events: turnEvents,
         });
 
-        this.logger.verbose("persona-flow/chat-turn: structured fallback assistant message appended for stream request", {
+        this.logger.verbose("persona-flow/chat-turn: assistant message appended for stream request", {
             requestId: callResult.llmResponse.requestId,
             conversationId: input.conversationId,
             assistantMessageId,
@@ -266,7 +321,10 @@ export class PersonaFlowChatTurnService {
             assistantMessageId,
             turnEvents,
             ...(input.includeAssembledMessages ? { assembledMessages: callResult.llmRequestSnapshot.messages } : {}),
-            streamCompleted: true,
+            streamCompleted: callResult.llmResponse.streamCompleted ?? true,
+            ...(callResult.llmResponse.streamFinishReason
+                ? { streamFinishReason: callResult.llmResponse.streamFinishReason }
+                : {}),
         };
     }
 

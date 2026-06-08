@@ -68,11 +68,19 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
                 const event: ChatStreamEvent = { type: "chunk", content: chunk };
                 res.write(`data: ${JSON.stringify(event)}\n\n`);
             },
+            onTurnEventPreview: (preview) => {
+                const event: ChatStreamEvent = {
+                    type: "turnEventPreview",
+                    eventIndex: preview.eventIndex,
+                    event: preview.event,
+                };
+                res.write(`data: ${JSON.stringify(event)}\n\n`);
+            },
         });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown error";
         context.logger.error("chat/stream: generation failed", { message });
-        const errEvent: ChatStreamEvent = { type: "done", requestId, model: "error" };
+        const errEvent: ChatStreamEvent = { type: "error", requestId, message };
         res.write(`data: ${JSON.stringify(errEvent)}\n\n`);
         res.end();
         return;
@@ -83,7 +91,12 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
         requestId: streamResult.requestId,
         model: streamResult.model,
         apiKeySource: streamResult.apiKeySource,
+        output: streamResult.output,
+        userMessageId: streamResult.userMessageId,
+        assistantMessageId: streamResult.assistantMessageId,
         turnEvents: streamResult.turnEvents,
+        streamCompleted: streamResult.streamCompleted,
+        ...(streamResult.streamFinishReason ? { streamFinishReason: streamResult.streamFinishReason } : {}),
     };
     res.write(`data: ${JSON.stringify(doneEvent)}\n\n`);
     res.end();
