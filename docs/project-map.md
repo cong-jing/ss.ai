@@ -151,7 +151,7 @@ Main chat flow:
 
 The `single_character_chat` streaming path has migrated to structured output: `/v1/chat/stream` lets the provider stream the JSON text channel token by token under `response_format: json_schema`. `createSubmitTurnEventsPreviewParser` incrementally parses that JSON and emits `chunk` (decoded `replyText.text` characters) and `turnEventPreview` SSE events; the final `done` event still carries the canonical `turnEvents`.
 
-Interaction modes are shared from `@ss-ai/contracts`. Only `single_character_chat` is currently registered for runtime use. Other modes exist in contracts and UI as placeholders but are not wired into prompt or model-call dispatch yet.
+Interaction modes are shared from `@ss-ai/contracts`, and the broader architecture is intended to support multiple modes over time. Today only `single_character_chat` is actually implemented for runtime use. Other modes already exist in contracts and UI as planned placeholders, but are not wired into prompt or model-call dispatch yet.
 
 ### `packages/contracts`
 

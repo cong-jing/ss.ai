@@ -6,6 +6,8 @@
 
 Vue 3 を使ったフロントエンド、Express ベースの API、workspace 全体で共有される contracts、そして prompt の組み立てと chat turn のオーケストレーションを担うドメインパッケージによって構成された、アプリケーション設計と実装のサンプルとして読むのが適しています。
 
+全体アーキテクチャは将来的に複数の interaction mode へ拡張できるように設計していますが、現時点でエンドツーエンドに実装されているのは `single_character_chat` のみです。ほかの mode は contracts や UI 上の形は用意されているものの、ランタイムの prompt / model-call 実行系にはまだ接続されていません。
+
 ## Live Demo
 
 - GitHub: <https://github.com/cong-jing/ss.ai>
@@ -62,6 +64,7 @@ flowchart LR
 - provider credential 入力と purpose ごとのモデル割り当て
 - structured output ベースの chat 呼び出しと SSE ストリーミング preview 経路
 - Web チャット UI での `TurnEvent[]` ベース描画。`expression` / `sceneAtmosphere` のインライン表示と、stream 終了後の canonical `turnEvents` による最終整合も含む
+- `single_character_chat` のエンドツーエンド実装。ほかの interaction mode は現状まだ計画段階
 - 実際のモデル呼び出しなしで prompt 組み立てを確認できる dry-run 経路
 - staging / production 向けのデプロイ出力
 

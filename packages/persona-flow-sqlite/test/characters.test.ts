@@ -122,6 +122,7 @@ describe("SQLiteCharacterStore", () => {
             patch: {
                 displayName: "凛凛（更新）",
                 generationConfig: { temperature: 0.9, maxTokens: 1500 },
+                language: "en-US",
                 updatedAt: "2025-06-01T00:00:00.000Z",
             },
         });
@@ -132,6 +133,7 @@ describe("SQLiteCharacterStore", () => {
         assert.equal(updated.updatedAt, "2025-06-01T00:00:00.000Z");
         assert.equal(updated.name, "Rinrin");
         assert.equal(updated.personaPrompt.startsWith("你是凛凛"), true);
+        assert.equal(updated.language, "en-US");
         assert.deepEqual(updated.generationConfig, { temperature: 0.9, maxTokens: 1500 });
         assert.deepEqual(updated.modelConfig, { provider: "mistral", model: "mistral-large-latest" });
     });

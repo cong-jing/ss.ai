@@ -6,6 +6,8 @@ English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 It is best read as an application architecture and implementation exercise: Vue 3 on the frontend, an Express API on the backend, shared contracts across the workspace, and a domain package that owns prompt composition and chat-turn orchestration.
 
+The architecture is intended to grow toward multiple interaction modes, but at the moment only `single_character_chat` is fully implemented end to end. Other modes are planned in contracts and UI shape, but are not yet wired into runtime prompt/model-call execution.
+
 ## Live Demo
 
 - GitHub: <https://github.com/cong-jing/ss.ai>
@@ -60,6 +62,7 @@ flowchart LR
 - Provider credential input and per-purpose model assignment
 - Structured-output chat calls and SSE streaming previews
 - Turn-event rendering in the web chat UI, including inline expression / scene-atmosphere markers and final canonical reconciliation from `turnEvents`
+- End-to-end runtime support for `single_character_chat`; other interaction modes remain planned rather than implemented
 - Prompt dry-run path for debugging prompt assembly without sending a live model call
 - Deploy packaging for staging and production targets
 

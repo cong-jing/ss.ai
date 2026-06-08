@@ -151,7 +151,7 @@ pnpm --dir ./.deploy-prod/server start
 
 `single_character_chat` 的 streaming 路径已经迁移到结构化输出：`/v1/chat/stream` 通过 `response_format: json_schema` 让 provider 按 token 流式返回 JSON 文本；`createSubmitTurnEventsPreviewParser` 增量解析这段 JSON，把 `replyText.text` 字符和已完结的事件对象作为 SSE `chunk` / `turnEventPreview` 推送给前端，最终 `done` 事件再回传完整 `TurnEvent[]`。
 
-interaction modes 定义在 `@ss-ai/contracts` 中。当前只有 `single_character_chat` 真正注册到运行时；其他 mode 虽然已经在 contracts 和 UI 中存在，但还没有接入 prompt 和 model-call dispatch。
+interaction modes 定义在 `@ss-ai/contracts` 中，整体架构也预期后续支持多个 mode。当前真正落地到运行时的只有 `single_character_chat`；其他 mode 虽然已经在 contracts 和 UI 中存在，作为后续规划的占位，但还没有接入 prompt 和 model-call dispatch。
 
 ### `packages/contracts`
 

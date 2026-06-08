@@ -122,6 +122,7 @@ export class SQLiteCharacterStore implements CharacterStore {
         if (patch.interactionMode !== undefined) values.interactionMode = patch.interactionMode ?? DEFAULT_INTERACTION_MODE;
         if (patch.generationConfig !== undefined) values.generationConfigJson = JSON.stringify(patch.generationConfig);
         if (patch.memoryConfig !== undefined) values.memoryConfigJson = JSON.stringify(patch.memoryConfig);
+        if (patch.language !== undefined) values.language = patch.language ?? "zh-CN";
         if (patch.status !== undefined) values.status = patch.status;
         if (patch.updatedAt !== undefined) values.updatedAt = patch.updatedAt;
 

@@ -6,6 +6,8 @@
 
 你可以把它理解为一次完整的应用架构与实现练习：前端使用 Vue 3，后端使用 Express，工作区内通过共享 contracts 维持前后端一致性，而领域层包负责 prompt 组合与 chat turn 编排。
 
+整体架构是按将来支持多个 interaction mode 来设计的，但当前真正端到端落地的只有 `single_character_chat`。其他 mode 在 contracts 和 UI 形状上已有预留，但还没有接入运行时 prompt / model-call 执行链路。
+
 ## 在线体验
 
 - GitHub：<https://github.com/cong-jing/ss.ai>
@@ -60,6 +62,7 @@ flowchart LR
 - Provider credential 输入与按用途保存的模型分配
 - 基于 structured output 的 chat 调用与 SSE 流式预览链路
 - 前端基于 `TurnEvent[]` 渲染聊天内容，支持 expression / sceneAtmosphere 的内联显示，并在流式阶段结束后用 canonical `turnEvents` 校正最终显示
+- `single_character_chat` 已经具备端到端运行时支持；其他 interaction mode 目前仍属于规划中而非已实装
 - 用于调试 prompt 组装的 dry-run 路径，不必真的发起模型调用
 - 面向 staging 和 production 的部署打包输出
 
