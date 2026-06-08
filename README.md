@@ -6,6 +6,8 @@ English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 It is best read as an application architecture and implementation exercise: Vue 3 on the frontend, an Express API on the backend, shared contracts across the workspace, and a domain package that owns prompt composition and chat-turn orchestration.
 
+The architecture is intended to grow toward multiple interaction modes, but at the moment only `single_character_chat` is fully implemented end to end. Other modes are planned in contracts and UI shape, but are not yet wired into runtime prompt/model-call execution.
+
 ## Live Demo
 
 - GitHub: <https://github.com/cong-jing/ss.ai>
@@ -15,9 +17,9 @@ It is best read as an application architecture and implementation exercise: Vue 
 
 - TypeScript/Node.js monorepo organized with pnpm workspace packages and clear package boundaries
 - Vue 3 + Vite frontend separated from an Express-based API server
-- SSE-based chat response path alongside structured model-call handling
+- Structured-output turn-event chat flow with SSE streaming previews
 - SQLite-backed persistence for conversations, characters, user preferences, and provider credentials
-- LLM provider abstraction and per-purpose model assignment design
+- LLM provider abstraction, per-purpose model assignment, and retained tool-call interfaces for future agent/query tools
 - Prompt composition and chat-turn orchestration centered in a reusable domain package
 - End-to-end project scope including logging, config management, tests, and deployment scripts
 
@@ -58,13 +60,15 @@ flowchart LR
 - Character chat UI with conversation and context panels
 - Conversation, character, and user-preference persistence on SQLite
 - Provider credential input and per-purpose model assignment
-- Structured chat calls and SSE response route wiring
+- Structured-output chat calls and SSE streaming previews
+- Turn-event rendering in the web chat UI, including inline expression / scene-atmosphere markers and final canonical reconciliation from `turnEvents`
+- End-to-end runtime support for `single_character_chat`; other interaction modes remain planned rather than implemented
 - Prompt dry-run path for debugging prompt assembly without sending a live model call
 - Deploy packaging for staging and production targets
 
 ## Current Limitations
 
-- `single_character_chat` streaming is not token-by-token yet; the SSE path currently emits a full reply chunk
+- Only `single_character_chat` is wired into runtime model-call dispatch; other interaction modes remain placeholders
 - Several API and runtime assumptions are still effectively single-user oriented
 - Provider credential encryption hooks exist, but at-rest encryption is still a placeholder
 - This repository is a portfolio and implementation study, not a stabilized general-purpose OSS framework
@@ -86,5 +90,5 @@ The local server defaults to `http://127.0.0.1:8999`.
 
 - [Project Map](docs/project-map.md)
 - [Project Map (简体中文)](docs/project-map.zh-CN.md)
-- [Code Review Notes](docs/code-review-2026-05-31.md)
+- [Project Map (日本語)](docs/project-map.ja.md)
 - [TODO / Roadmap Notes](docs/todo.md)

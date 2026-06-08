@@ -23,9 +23,11 @@ const showSettings = ref(false)
   align-items: center;
   gap: 6px;
   width: 100%;
+  min-height: 40px;
   padding: 10px 12px;
   border: none;
-  border-top: 1px solid #e5e7eb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
   background: #fff;
   font-size: 12px;
   color: #6b7280;

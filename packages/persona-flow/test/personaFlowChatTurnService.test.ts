@@ -98,7 +98,7 @@ function seedModelRuntime(fixture: ReturnType<typeof createTestFixture>, userId:
 }
 
 describe("persona-flow chat turn service", () => {
-    it("chatTurn appends assistant reply from single-character structured output", async () => {
+    it("chatTurn appends assistant reply from submit_turn_events tool call", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -110,16 +110,22 @@ describe("persona-flow chat turn service", () => {
 
         const modelClient: ModelClient = {
             generate: async (input) => {
-                if (input.structuredOutputSchema) {
-                    return {
-                        structuredOutput: {
-                            replyText: "SS: hello back",
-                        },
-                        toolCalls: [],
-                    };
-                }
+                assert.equal(input.structuredOutputSchema?.jsonSchema?.name, "submit_turn_events");
+                assert.equal(input.tools, undefined);
+                assert.equal(input.toolChoice, undefined);
 
-                return { output: "", toolCalls: [] };
+                return {
+                    structuredOutput: {
+                        events: [
+                            {
+                                type: "replyText",
+                                characterId: base.characterId,
+                                text: "SS: hello back",
+                            },
+                        ],
+                    },
+                    toolCalls: [],
+                };
             },
             generateStream: async () => ({ output: "", toolCalls: [], completed: true }),
             listModels: async () => [],
@@ -136,21 +142,28 @@ describe("persona-flow chat turn service", () => {
             characterId: base.characterId,
             conversationId: base.conversationId,
             userMessageText: "hello",
-            llmResponseMode: "structured",
             senderActorId: base.userActorId,
         });
 
         assert.equal(result.output, "hello back");
         assert.equal(result.apiKeySource, "user");
         assert.ok(result.assistantMessageId);
+        assert.deepEqual(result.turnEvents, [
+            {
+                type: "replyText",
+                characterId: base.characterId,
+                text: "SS: hello back",
+            },
+        ]);
 
         const messages = fixture.inspect.messages(base.conversationId);
         const assistantMessages = messages.filter(message => message.senderActorId === base.selfActorId);
         assert.equal(assistantMessages.length, 1);
-        assert.equal(assistantMessages[0].content, "hello back");
+        assert.equal(assistantMessages[0].displayText, "hello back");
+        assert.deepEqual(assistantMessages[0].turnEvents, result.turnEvents);
     });
 
-    it("streamTurn emits normalized chunks and persists assistant message", async () => {
+    it("streamTurn drives chunks from structured-output JSON text deltas and persists assistant message", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -162,22 +175,50 @@ describe("persona-flow chat turn service", () => {
 
         const seenChunks: string[] = [];
         const seenPrompts: Array<Array<{ role: "system" | "user" | "assistant"; content: string }>> = [];
+        const seenPreviews: Array<{ eventIndex: number; eventType: string }> = [];
+
+        // Pre-compute the full JSON object the model will stream and slice it
+        // into fragments so we can simulate provider-side streaming of the
+        // structured-output text channel.
+        const structuredObject = {
+            events: [
+                {
+                    type: "replyText",
+                    characterId: base.characterId,
+                    text: "SS: Hello World",
+                },
+                {
+                    type: "expression",
+                    characterId: base.characterId,
+                    expression: "happy",
+                },
+            ],
+        };
+        const fullJson = JSON.stringify(structuredObject);
+        const fragmentSize = 8;
+        const fragments: string[] = [];
+        for (let i = 0; i < fullJson.length; i += fragmentSize) {
+            fragments.push(fullJson.slice(i, i + fragmentSize));
+        }
 
         const modelClient: ModelClient = {
-            generate: async (input) => {
-                if (input.structuredOutputSchema) {
-                    return {
-                        structuredOutput: {
-                            replyText: "SS: Hello World",
-                        },
-                        toolCalls: [],
-                    };
+            generate: async () => ({
+                output: "",
+                toolCalls: [],
+            }),
+            generateStream: async (input, callbacks) => {
+                assert.equal(input.structuredOutputSchema?.jsonSchema?.name, "submit_turn_events");
+                assert.equal(input.tools, undefined);
+                for (const fragment of fragments) {
+                    callbacks?.onTextDelta?.(fragment);
                 }
-
-                return { output: "unused", toolCalls: [] };
-            },
-            generateStream: async () => {
-                throw new Error("should not be called");
+                return {
+                    output: fullJson,
+                    structuredOutput: structuredObject,
+                    toolCalls: [],
+                    completed: true,
+                    finishReason: "stop",
+                };
             },
             listModels: async () => [],
         };
@@ -193,7 +234,6 @@ describe("persona-flow chat turn service", () => {
             characterId: base.characterId,
             conversationId: base.conversationId,
             userMessageText: "stream me",
-            llmResponseMode: "non-structured",
             senderActorId: base.userActorId,
             includeAssembledMessages: true,
             onAssembledMessages: (messages) => {
@@ -202,17 +242,110 @@ describe("persona-flow chat turn service", () => {
             onChunk: (chunk) => {
                 seenChunks.push(chunk);
             },
+            onTurnEventPreview: (preview) => {
+                seenPreviews.push({ eventIndex: preview.eventIndex, eventType: preview.event.type });
+            },
         });
 
         assert.equal(result.model, "m1");
         assert.equal(result.apiKeySource, "user");
         assert.equal(result.output, "Hello World");
-        assert.equal(seenChunks.join(""), "Hello World");
+        assert.equal(result.turnEvents?.length, 2);
+        // Concatenated chunks should reconstruct the assistant text the
+        // preview parser saw inside the structured-output JSON stream.
+        assert.equal(seenChunks.join(""), "SS: Hello World");
+        // We should have received at least the expression event preview once
+        // its enclosing event object closed in the JSON stream.
+        assert.ok(
+            seenPreviews.some(p => p.eventIndex === 1 && p.eventType === "expression"),
+            `expected expression preview, got: ${JSON.stringify(seenPreviews)}`,
+        );
         assert.equal(seenPrompts.length, 1);
 
         const messages = fixture.inspect.messages(base.conversationId);
         const assistantMessages = messages.filter(message => message.senderActorId === base.selfActorId);
         assert.equal(assistantMessages.length, 1);
-        assert.equal(assistantMessages[0].content, "Hello World");
+        assert.equal(assistantMessages[0].displayText, "Hello World");
+        assert.equal(assistantMessages[0].turnEvents?.length, 2);
+    });
+
+    it("streamTurn merges consecutive replyText events and inserts boundary separators on the stream", async () => {
+        const fixture = createTestFixture();
+        const base = createBaseData();
+        fixture.seed.character(base.character);
+        fixture.seed.conversation(base.conversation);
+        fixture.seed.actor(base.selfActor);
+        fixture.seed.actor(base.userActor);
+        fixture.seed.userProfile(base.profile);
+        seedModelRuntime(fixture, base.userId);
+
+        const seenChunks: string[] = [];
+
+        const structuredObject = {
+            events: [
+                { type: "replyText", characterId: base.characterId, text: "alpha" },
+                { type: "replyText", characterId: base.characterId, text: "beta" },
+                { type: "expression", characterId: base.characterId, expression: "neutral" },
+                { type: "replyText", characterId: base.characterId, text: "gamma" },
+            ],
+        };
+        const fullJson = JSON.stringify(structuredObject);
+        const fragmentSize = 6;
+        const fragments: string[] = [];
+        for (let i = 0; i < fullJson.length; i += fragmentSize) {
+            fragments.push(fullJson.slice(i, i + fragmentSize));
+        }
+
+        const modelClient: ModelClient = {
+            generate: async () => ({ output: "", toolCalls: [] }),
+            generateStream: async (_input, callbacks) => {
+                for (const fragment of fragments) {
+                    callbacks?.onTextDelta?.(fragment);
+                }
+                return {
+                    output: fullJson,
+                    structuredOutput: structuredObject,
+                    toolCalls: [],
+                    completed: true,
+                    finishReason: "stop",
+                };
+            },
+            listModels: async () => [],
+        };
+
+        const service = new PersonaFlowChatTurnService({
+            stores: fixture.stores,
+            modelClient,
+            promptLogger: { writePromptLog: async () => { } },
+        });
+
+        const result = await service.streamTurn({
+            userId: base.userId,
+            characterId: base.characterId,
+            conversationId: base.conversationId,
+            userMessageText: "stream me",
+            senderActorId: base.userActorId,
+            onChunk: (chunk) => {
+                seenChunks.push(chunk);
+            },
+        });
+
+        // The two adjacent `alpha` + `beta` replyText events collapse into one;
+        // the `expression` between `beta` and `gamma` breaks the run, so the
+        // final list keeps three entries (replyText, expression, replyText).
+        assert.equal(result.turnEvents?.length, 3);
+        assert.equal(result.turnEvents?.[0].type, "replyText");
+        assert.equal((result.turnEvents?.[0] as { text: string }).text, "alpha\nbeta");
+        assert.equal(result.turnEvents?.[1].type, "expression");
+        assert.equal(result.turnEvents?.[2].type, "replyText");
+        assert.equal((result.turnEvents?.[2] as { text: string }).text, "gamma");
+
+        // Final canonical display text matches a non-stream render of the same
+        // event list (merged blocks + getTurnEventsReplyText join with "\n").
+        assert.equal(result.output, "alpha\nbeta\ngamma");
+
+        // Concatenated stream chunks should reproduce the same text, including
+        // the boundary separator inserted when crossing replyText events.
+        assert.equal(seenChunks.join(""), "alpha\nbeta\ngamma");
     });
 });

@@ -10,3 +10,4 @@ logs/
 app.log
 .vscode
 qq-bot.env
+apps/prompt-debug-cli/.apikey.yaml

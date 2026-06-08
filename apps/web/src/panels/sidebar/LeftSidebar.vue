@@ -222,48 +222,54 @@ watch(
 
 <template>
   <div class="sidebar">
-    <CharacterSection
-      :is-open="characterOpen"
-      :active-character="activeCharacter"
-      :is-editing="isCharacterEditing"
-      :interaction-modes="interactionModes"
-      :edit-draft="editDraft"
-      :is-dirty="isDirty"
-      :is-saving-character="isSavingCharacter"
-      @character:toggle-open="handleCharacterToggleOpen"
-      @character:open-picker="handleCharacterOpenPicker"
-      @character:create="handleCharacterCreate"
-      @character:start-edit="handleCharacterStartEdit"
-      @character:cancel-edit="handleCharacterCancelEdit"
-      @character:save="handleCharacterSave"
-      @character:remove="handleCharacterRemove"
-    />
+    <div class="sidebar-scroll">
+      <CharacterSection
+        :is-open="characterOpen"
+        :active-character="activeCharacter"
+        :is-editing="isCharacterEditing"
+        :interaction-modes="interactionModes"
+        :edit-draft="editDraft"
+        :is-dirty="isDirty"
+        :is-saving-character="isSavingCharacter"
+        @character:toggle-open="handleCharacterToggleOpen"
+        @character:open-picker="handleCharacterOpenPicker"
+        @character:create="handleCharacterCreate"
+        @character:start-edit="handleCharacterStartEdit"
+        @character:cancel-edit="handleCharacterCancelEdit"
+        @character:save="handleCharacterSave"
+        @character:remove="handleCharacterRemove"
+      />
 
-    <ConversationSection
-      :is-open="conversationOpen"
-      :active-character-id="activeCharacterId"
-      :is-loading-conversations="isLoadingConversations"
-      :conversations="conversations"
-      :active-conversation-id="activeConversationId"
-      @conversation:toggle-open="handleConversationToggleOpen"
-      @conversation:create="handleConversationCreate"
-      @conversation:select="handleConversationSelect"
-      @conversation:rename="handleConversationRename"
-      @conversation:delete="handleConversationDelete"
-    />
+      <ConversationSection
+        :is-open="conversationOpen"
+        :active-character-id="activeCharacterId"
+        :is-loading-conversations="isLoadingConversations"
+        :conversations="conversations"
+        :active-conversation-id="activeConversationId"
+        @conversation:toggle-open="handleConversationToggleOpen"
+        @conversation:create="handleConversationCreate"
+        @conversation:select="handleConversationSelect"
+        @conversation:rename="handleConversationRename"
+        @conversation:delete="handleConversationDelete"
+      />
 
-    <ActorSection
-      :is-open="actorOpen"
-      :active-conversation-id="activeConversationId"
-      :is-loading-actors="isLoadingActors"
-      :is-saving-actor="isSavingActor"
-      :actors="actors"
-      :selected-actor-id="selectedActorId"
-      @actor:toggle-open="handleActorToggleOpen"
-      @actor:create="handleActorCreate"
-      @actor:select="handleActorSelect"
-      @actor:delete="handleActorDelete"
-    />
+      <ActorSection
+        :is-open="actorOpen"
+        :active-conversation-id="activeConversationId"
+        :is-loading-actors="isLoadingActors"
+        :is-saving-actor="isSavingActor"
+        :actors="actors"
+        :selected-actor-id="selectedActorId"
+        @actor:toggle-open="handleActorToggleOpen"
+        @actor:create="handleActorCreate"
+        @actor:select="handleActorSelect"
+        @actor:delete="handleActorDelete"
+      />
+    </div>
+
+    <div v-if="$slots.footer" class="sidebar-footer">
+      <slot name="footer" />
+    </div>
   </div>
 
   <CharacterPickerPopup
@@ -283,9 +289,24 @@ watch(
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: auto;
   background: #f8fafc;
   padding: 8px;
   gap: 8px;
+}
+
+.sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
 }
 </style>

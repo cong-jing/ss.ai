@@ -1,23 +1,26 @@
 import type { RenderedMessage } from "../prompt/promptTypes.js";
 import type {
-    GenerationMode as LlmResponseMode,
     ModelClient,
     StructuredOutputSchema,
     ModelToolCall,
+    ModelToolCallDelta,
     ModelUsage,
     ModelStreamResult,
 } from "../llm/modelClient.js";
+import type { ModelToolChoice, ModelToolDefinition } from "../llm/tools/modelTool.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "../chatTurn/personaFlowLogger.js";
 import type { ModelAssignmentMap, ModelCallPurpose } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
+import { toJSONSchema } from "zod";
 
 export interface PersonaModelRequest {
     userId: string;
     characterId: string;
     messages: RenderedMessage[];
     modelCallPurpose: ModelCallPurpose;
-    llmResponseMode?: LlmResponseMode;
     structuredOutputSchema?: StructuredOutputSchema;
+    tools?: ModelToolDefinition[];
+    toolChoice?: ModelToolChoice;
 }
 
 export interface PersonaModelResponse {
@@ -25,7 +28,6 @@ export interface PersonaModelResponse {
     model: string;
     requestId: string;
     apiKeySource: "user" | "default";
-    llmResponseMode: LlmResponseMode;
     structuredOutput?: unknown;
     toolCalls: ModelToolCall[];
     usage?: ModelUsage;
@@ -40,14 +42,6 @@ export interface PersonaModelRuntimeDependencies {
     logger?: PersonaFlowLogger;
     defaultModelAssignments?: ModelAssignmentMap;
     defaultProviderApiKeys?: Record<string, string>;
-}
-
-function extractStructuredOutputText(output: unknown): string {
-    if (!output || typeof output !== "object") {
-        return "";
-    }
-    const replyText = (output as { replyText?: unknown }).replyText;
-    return typeof replyText === "string" ? replyText : "";
 }
 
 export class ModelRuntime {
@@ -135,8 +129,16 @@ export class ModelRuntime {
             model: model,
             messages: request.messages,
             output: JSON.stringify({
-                mode: request.llmResponseMode ?? "non-structured",
+                outputMode: request.structuredOutputSchema ? "structured" : "text_or_tools",
                 modelCallPurpose: request.modelCallPurpose ?? "chat.main",
+                tools: request.tools?.map(tool => ({
+                    kind: tool.kind,
+                    name: tool.name,
+                    terminal: tool.terminal,
+                    purpose: tool.purpose,
+                    argsSchema: toJSONSchema(tool.argsSchema, { io: "input" }),
+                })),
+                toolChoice: request.toolChoice,
                 status: payload.status,
                 outputText: payload.outputText,
                 structuredOutput: payload.structuredOutput,
@@ -153,8 +155,7 @@ export class ModelRuntime {
 
     async chat(request: PersonaModelRequest): Promise<PersonaModelResponse> {
         const requestId = crypto.randomUUID();
-        const llmResponseMode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
-        const isStructuredResponse = llmResponseMode === "structured";
+        const isStructuredResponse = Boolean(request.structuredOutputSchema);
         const { provider, model, encryptedApiKey, apiKeySource } = await this.resolveProviderModelRuntime(
             request.userId,
             request.characterId,
@@ -163,7 +164,7 @@ export class ModelRuntime {
 
         this.logger.verbose("persona-flow/model: chat request", {
             requestId,
-            llmResponseMode,
+            outputMode: isStructuredResponse ? "structured" : "text_or_tools",
             modelCallPurpose: request.modelCallPurpose,
             messages: request.messages,
         });
@@ -180,6 +181,8 @@ export class ModelRuntime {
                 encryptedApiKey,
                 messages: request.messages,
                 structuredOutputSchema: isStructuredResponse ? request.structuredOutputSchema : undefined,
+                tools: request.tools,
+                toolChoice: request.toolChoice,
             });
 
             if (isStructuredResponse) {
@@ -190,7 +193,11 @@ export class ModelRuntime {
                 structuredOutput = result.structuredOutput;
                 toolCalls = result.toolCalls;
                 usage = result.usage;
-                output = extractStructuredOutputText(structuredOutput);
+                // For structured responses, the canonical business result lives in
+                // `structuredOutput`. We deliberately do not synthesize a display
+                // string from it here — the model-call layer owns shaping any
+                // user-facing text from its specific structured payload.
+                output = "";
             } else {
                 if (!("output" in result)) {
                     throw new Error("Model client returned structured result for non-structured request.");
@@ -204,7 +211,7 @@ export class ModelRuntime {
             const errorMessage = err instanceof Error ? err.message : "Unknown error";
             this.logger.error("persona-flow/model: chat failed", {
                 requestId,
-                llmResponseMode: llmResponseMode,
+                outputMode: isStructuredResponse ? "structured" : "text_or_tools",
                 modelCallPurpose: request.modelCallPurpose,
                 error: errorMessage,
             });
@@ -229,7 +236,7 @@ export class ModelRuntime {
 
         this.logger.verbose("persona-flow/model: chat completed", {
             requestId,
-            llmResponseMode,
+            outputMode: isStructuredResponse ? "structured" : "text_or_tools",
             modelCallPurpose: request.modelCallPurpose,
             output,
             structuredOutput,
@@ -250,16 +257,17 @@ export class ModelRuntime {
             model: model,
             requestId,
             apiKeySource,
-            llmResponseMode: llmResponseMode,
             toolCalls,
             usage,
             ...(structuredOutput ? { structuredOutput } : {}),
         };
     }
 
-    async chatStream(request: PersonaModelRequest & { onTextDelta?: (delta: string) => void }): Promise<PersonaModelResponse & ModelStreamResult> {
+    async chatStream(request: PersonaModelRequest & {
+        onTextDelta?: (delta: string) => void;
+        onToolCallDelta?: (delta: ModelToolCallDelta) => void;
+    }): Promise<PersonaModelResponse & ModelStreamResult> {
         const requestId = crypto.randomUUID();
-        const mode: LlmResponseMode = request.llmResponseMode ?? "non-structured";
         const modelCallPurpose = request.modelCallPurpose ?? "chat.main";
         const { provider, model, encryptedApiKey, apiKeySource } = await this.resolveProviderModelRuntime(
             request.userId,
@@ -267,18 +275,8 @@ export class ModelRuntime {
             modelCallPurpose as ModelCallPurpose,
         );
 
-        if (mode !== "non-structured") {
-            this.logger.warn("persona-flow/model: chatStream called with unsupported mode", {
-                requestId,
-                mode,
-                modelCallPurpose,
-            });
-            throw new Error("PersonaFlow chatStream currently supports only non-structured mode.");
-        }
-
         this.logger.verbose("persona-flow/model: chatStream request", {
             requestId,
-            mode,
             modelCallPurpose,
             messages: request.messages,
         });
@@ -293,11 +291,15 @@ export class ModelRuntime {
                     model,
                     encryptedApiKey,
                     messages: request.messages,
+                    structuredOutputSchema: request.structuredOutputSchema,
+                    tools: request.tools,
+                    toolChoice: request.toolChoice,
                 },
                 {
                     onTextDelta: request.onTextDelta,
+                    onToolCallDelta: request.onToolCallDelta,
                     onToolCall: (toolCall) => {
-                        this.logger.debug("persona-flow/model: stream tool call requested (TODO)", {
+                        this.logger.debug("persona-flow/model: stream tool call completed", {
                             requestId,
                             modelCallPurpose,
                             toolCall,
@@ -309,7 +311,6 @@ export class ModelRuntime {
             streamError = err instanceof Error ? err.message : "Unknown error";
             this.logger.error("persona-flow/model: chatStream failed", {
                 requestId,
-                mode,
                 modelCallPurpose,
                 error: streamError,
             });
@@ -318,6 +319,7 @@ export class ModelRuntime {
             this.writePromptLog(requestId, request, model, {
                 status: streamError ? "failed" : "completed",
                 outputText: streamResult?.output ?? "",
+                structuredOutput: streamResult?.structuredOutput,
                 toolCalls: streamResult?.toolCalls ?? [],
                 usage: streamResult?.usage,
                 streamCompleted: streamResult?.completed,
@@ -329,7 +331,6 @@ export class ModelRuntime {
         if (!streamResult) {
             this.logger.error("persona-flow/model: chatStream missing stream result", {
                 requestId,
-                mode,
                 modelCallPurpose,
             });
             throw new Error("PersonaFlow chatStream ended without a stream result.");
@@ -337,9 +338,9 @@ export class ModelRuntime {
 
         this.logger.verbose("persona-flow/model: chatStream completed", {
             requestId,
-            mode,
             modelCallPurpose,
             outputLength: streamResult.output?.length ?? 0,
+            hasStructuredOutput: streamResult.structuredOutput !== undefined,
             toolCallCount: streamResult.toolCalls.length,
             usage: streamResult.usage,
             streamCompleted: streamResult.completed,
@@ -359,13 +360,15 @@ export class ModelRuntime {
             model: model,
             requestId,
             apiKeySource,
-            llmResponseMode: mode,
             toolCalls: streamResult.toolCalls,
             usage: streamResult.usage,
             completed: streamResult.completed,
             finishReason: streamResult.finishReason,
             streamCompleted: streamResult.completed,
             streamFinishReason: streamResult.finishReason,
+            ...(streamResult.structuredOutput !== undefined
+                ? { structuredOutput: streamResult.structuredOutput }
+                : {}),
         };
     }
 }

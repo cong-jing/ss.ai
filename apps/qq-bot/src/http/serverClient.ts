@@ -1,3 +1,4 @@
+import { DEFAULT_INTERACTION_MODE } from "@ss-ai/contracts";
 import type {
     Character,
     ListCharactersResponse,
@@ -30,6 +31,8 @@ function createMockCharacter(): Character {
         personaPrompt: "",
         greetingMessage: null,
         modelConfig: {},
+        interactionMode: DEFAULT_INTERACTION_MODE,
+        language: "zh-CN",
         status: "active",
         createdAt: now,
         updatedAt: now,
@@ -180,17 +183,25 @@ export async function chat(
         characterId,
         conversationId,
         userMessageText,
-        llmResponseMode: "structured",
         ...(senderActorId ? { senderActorId } : {}),
     });
 
-    if (res.structuredOutput?.action === "skip") {
+    const replyText = res.turnEvents
+        ?.filter(event => event.type === "replyText")
+        .map(event => event.text.trim())
+        .filter(Boolean)
+        .join("\n");
+
+    if (replyText) {
+        return replyText;
+    }
+
+    // The model can intentionally produce a turn without any replyText (e.g. expression-only
+    // events). Treat that as "no reply" so the bot keeps quiet instead of sending empty text.
+    if (res.turnEvents && res.turnEvents.length > 0) {
         return null;
     }
 
-    if (res.structuredOutput?.replyText?.trim()) {
-        return res.structuredOutput.replyText;
-    }
-
-    return res.output;
+    const fallback = res.output.trim();
+    return fallback ? fallback : null;
 }

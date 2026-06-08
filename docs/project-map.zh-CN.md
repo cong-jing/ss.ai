@@ -1,6 +1,6 @@
 # ss.ai 项目地图
 
-[English](project-map.md) | 简体中文
+[English](project-map.md) | 简体中文 | [日本語](project-map.ja.md)
 
 这份文档是 `ss.ai` 的维护者导向项目地图。
 当你需要在冷启动状态下快速理解工作区结构、主聊天流程、运行时配置，以及当前由哪些文件控制行为时，应该先看这里。
@@ -19,7 +19,7 @@
 - LLM API 集成
 - 基于 SSE 的流式聊天
 - prompt 组合与模板管理
-- structured output 与类似 tool-call 的事件设计
+- 以 structured output 为主、并保留 provider-neutral tool-call 抽象供未来 agent 工具复用的 turn event 设计
 - 用 SQLite 持久化对话与角色数据
 - 角色对话与 TRPG 风格交互设计
 - LLM provider abstraction
@@ -131,23 +131,27 @@ pnpm --dir ./.deploy-prod/server start
 - 定义 `AppStores`，作为应用层注入的聚合依赖边界
 - 通过 `PromptContextBuilder` 从 stores 构建 prompt context
 - 通过 `modelCallRegistry` 解析 model-call handlers
-- 实现当前 `chat.main/single_character_chat` 的 prompt 组装和输出归一化流程
+- 实现当前 `chat.main/single_character_chat` 的 prompt 组装和结构化事件输出流程
 - 通过 `PersonaFlowChatTurnService` 负责编排 chat turn
 - 通过 `ModelRuntime` 解析模型运行时并调用注入的 `ModelClient`
 - 在 `src/llm/modelClient.ts` 中定义 LLM client interfaces
+- 定义 provider-neutral 的 tool 描述（保留给未来查询类工具使用）、`submit_turn_events` 事件 schema，以及模型提交 turn events 的解析逻辑
+
+层级关系需要特别注意：`PersonaFlowChatTurnService` 负责 turn 编排和持久化，但不直接解析 provider tool calls 或 structured output。已注册的 `ModelCall<TParsedOutput>` 负责本 purpose 的 prompt 组装、要求的输出格式（`structuredOutputSchema` 或 `tools`）、以及业务级解析。`ModelRuntime` 只负责 provider/model/API key 解析和调用 `ModelClient`，返回 provider-neutral 的原始 `llmResponse`（`output` / `structuredOutput` / `toolCalls`）。随后 model call 把响应转换为 `parsedOutput`；可选的 `parsedToolCalls` 只用于调用方确实需要检查的中间工具结果。对当前 `single_character_chat` 来说，最终输出使用 `response_format: json_schema` 结构化事件，被折叠成 `{ displayText, events }` 作为 `parsedOutput`，因此不会再重复写入 `parsedToolCalls`。
 
 主聊天流程：
 
 1. `PersonaFlowChatTurnService.chatTurn()` 接收 user、character、conversation 和 message 输入。
 2. `prepareChatTurnContext()` 校验角色和会话、解析发送方 actor、按需追加用户消息，并构建 `PromptContext`。
 3. `resolveModelCall()` 根据请求的 purpose 和 interaction mode 选择已注册 handler。目前实际使用的是 `chat.main:single_character_chat`。
-4. handler 组装 LLM messages，随后 `ModelRuntime.chat()` 从 `userPreferences.modelAssignments[modelCallPurpose]` 解析 provider 和 model，从 `providerCredential` 解析 API key，最后调用 `ModelClient`。
-5. structured 回复会做归一化处理；如果 structured 输出为空，就不会追加 assistant 消息。
-6. 未被跳过的回复会作为 conversation 的 `self` actor 消息写入 chat store。
+4. handler 组装 LLM messages，并通过 `structuredOutputSchema`（基于 `submit_turn_events` 的事件 schema）要求模型以结构化 JSON 形式提交本回合事件。`ModelRuntime.chat()` 根据 `userPreferences.modelAssignments[modelCallPurpose]` 解析 provider / model，根据 provider credential 或默认 API key 解析密钥，然后调用 `ModelClient`。
+5. model call 把返回的 `llmResponse.structuredOutput` 解析为 `SubmitTurnEventsArgs`，并返回 chat 专用的 `parsedOutput`：归一化后的展示文本和有序 `TurnEvent[]`。
+6. `PersonaFlowChatTurnService` 只消费这个 parsed result，不需要知道底层是 structured output、tool call 还是未来别的形式。
+7. 回复会作为 conversation 的 `self` actor 消息写入 chat store，同时结构化事件写入 `turn_events`。
 
-`single_character_chat` 的 streaming 还没有真正完成。虽然 `/v1/chat/stream` 和前端 SSE 路径已经存在，但当前实现仍然会退回到一次 structured model call，然后把完整回复作为单个 SSE chunk 发出。
+`single_character_chat` 的 streaming 路径已经迁移到结构化输出：`/v1/chat/stream` 通过 `response_format: json_schema` 让 provider 按 token 流式返回 JSON 文本；`createSubmitTurnEventsPreviewParser` 增量解析这段 JSON，把 `replyText.text` 字符和已完结的事件对象作为 SSE `chunk` / `turnEventPreview` 推送给前端，最终 `done` 事件再回传完整 `TurnEvent[]`。
 
-interaction modes 定义在 `@ss-ai/contracts` 中。当前只有 `single_character_chat` 真正注册到运行时；其他 mode 虽然已经在 contracts 和 UI 中存在，但还没有接入 prompt 和 model-call dispatch。
+interaction modes 定义在 `@ss-ai/contracts` 中，整体架构也预期后续支持多个 mode。当前真正落地到运行时的只有 `single_character_chat`；其他 mode 虽然已经在 contracts 和 UI 中存在，作为后续规划的占位，但还没有接入 prompt 和 model-call dispatch。
 
 ### `packages/contracts`
 
@@ -159,8 +163,11 @@ interaction modes 定义在 `@ss-ai/contracts` 中。当前只有 `single_charac
 - 在 `src/apis/*.api.ts` 中定义请求和响应类型
 - 定义 `INTERACTION_MODES`、`DEFAULT_INTERACTION_MODE` 和 `InteractionMode`
 - 定义 `MODEL_CALL_PURPOSES`、`ModelCallPurpose` 以及模型分配相关类型
+- 定义 `TurnEvent`、`SubmitTurnEventsArgs`、`MessageKind`，以及用于模型提交事件和落库读取校验的 Zod schemas
 
 模型调用配置使用 `MODEL_CALL_PURPOSES` / `ModelCallPurpose`，以及 `ModelAssignment` / `ModelAssignmentMap`。
+
+Turn event 的纯类型与字面量常量位于 `packages/contracts/src/turnEvents.ts`；需要运行时校验的 Zod schema 位于 `packages/contracts/src/turnEvents.schema.ts`，通过 `@ss-ai/contracts/turnEvents.schema` 子入口使用。这样 web 可以引用纯 contracts 而不把 Zod 运行时代码打进主 bundle。
 
 ### `packages/persona-flow-sqlite`
 
@@ -179,12 +186,17 @@ interaction modes 定义在 `@ss-ai/contracts` 中。当前只有 `single_charac
 - `conversations`
 - `conversation_actors`
 - `messages`
+- `turn_events`
 - `user_profiles`
 - `user_preferences`
 - `user_character_states`
 - `user_provider_credentials`
 
 `user_preferences.model_assignments_json` 用于保存从 model-call purpose 到 `{ provider, model }` 的映射。
+
+`messages` 是会话 timeline/display 表，保存 `kind`、`display_text`、发送 actor、conversation id 和时间戳。assistant turn 使用 `kind = "assistant_turn_events"`。
+
+`turn_events` 保存事件类输出折合后的有序事件 payload（历史上叫 `submit_turn_events`，现在以结构化输出提交）。每行属于一个 assistant message，并保存 `seq`、`type`、JSON payload、schema version 和时间戳。`SQLiteChatStore.appendAssistantTurn()` 会在同一个事务中写入 message 和 turn events；读取 recent messages 时会把 assistant message 的 `turnEvents` 重新组装出来。
 
 ### `packages/persona-flow-model-client`
 
@@ -195,7 +207,8 @@ interaction modes 定义在 `@ss-ai/contracts` 中。当前只有 `single_charac
 - 实现 `persona-flow` 中定义的 `ModelClient` interface
 - 由 `DefaultModelClient` 按 provider 分发
 - 当前实际 provider 是通过 `MistralModelClient` 接入的 Mistral
-- 支持普通生成、非结构化流式生成、structured 输出和模型列表获取
+- 支持普通生成、structured 输出（`response_format: json_schema`，同时适用于非流和流路径）、tool calls、模型列表获取，以及基于结构化输出文本通道的流式输出。对 structured stream，会先累积原始 JSON text 供 preview 使用，再把最终 parse 后的对象暴露为 `ModelStreamResult.structuredOutput`
+- 在 `src/mistral/mistralToolAdapter.ts` 中把 provider-neutral `ModelToolDefinition` 转成 Mistral function tools（保留给未来查询类工具调用使用）
 
 provider 列表和 API URL 来自 runtime config。API key 按用户和 provider 保存在 credential store 中。SQLite 目前仍然通过空实现的 encrypt/decrypt helpers 处理它们，因此落库值依然是明文，直到后续补上真正的加密方案。
 
@@ -229,8 +242,8 @@ Express HTTP 服务。
 - 认证支持两种模式，通过 `config.auth.mode` 切换：`default-user` 和 `local-password`
 - `default-user` 不做真实登录，所有请求都视为配置中的默认用户
 - `local-password` 提供一个简单的用户名密码加 session-cookie 的认证流程
-- `/v1/chat` 默认使用 structured output
-- `/v1/chat/stream` 在 HTTP 层保持 SSE 响应形状并拒绝 structured mode，但当前 `single_character_chat` 实现仍然是一次性吐出完整回复
+- `/v1/chat` 内部使用 `response_format: json_schema` 结构化输出，并返回统一的 `output + turnEvents` 聊天契约
+- `/v1/chat/stream` 在 HTTP 层保持 SSE 响应形状，`single_character_chat` 现在会随 provider 的 structured-output 文本流逐 token 推送 `chunk` / `turnEventPreview`；最终 `done` 事件携带完整 `turnEvents`
 - `/v1/chat/dry-run` 只组装 prompt messages，不做 LLM 调用，也不持久化
 - prompt logs 由 `promptLog` 配置控制
 
@@ -244,12 +257,13 @@ Vue 3 + Vite 前端。
 - 使用 `@ss-ai/contracts` 中的 API types 和 constants
 - 允许用户配置 provider API keys 和 model assignments
 - 发送 chat 请求、stream 请求、dry-run 请求和消息删除请求
+- 从 `TurnEvent[]` 渲染 assistant 输出：`replyText` 渲染为文本段，`expression` 和 `sceneAtmosphere` 渲染为内联 marker chip，完整 `turnEvents` 仍保留在 debug block 中
 
 重要 UI 状态：
 
 - `src/shared/state/appState.ts` 中的 `contextVersion` 会在角色或会话上下文变化时触发聊天历史重载
 - 当前激活的角色、会话和 actor 状态保存在各面板 view-model 模块中
-- 聊天目前可以走 structured 非流式路径；虽然 UI 中已经有非结构化 streaming 路径，但当前 `single_character_chat` 后端仍然只返回一个完整 chunk
+- 聊天支持非 stream 和 stream UI 模式。两条路径在有 `turnEvents` 时都会优先从中推导显示内容。stream 模式会接收 structured-output JSON preview parser 发出的 token 级 `chunk`，通过一个小型 render queue 做平滑排队显示，并在 `turnEventPreview` 到达时插入内联 marker，最终再用 `done.turnEvents` 生成的 canonical `displaySegments` 对消息做一次权威校正
 
 当前设置行为：
 
@@ -328,13 +342,13 @@ QQ bot 集成。
 - `other`：登录用户或本地 actor
 - `system`：保留的系统 actor 角色
 
-messages 只保存 `senderActorId`、`conversationId`、内容和时间戳。prompt 渲染阶段会把 actors 映射到 LLM roles：
+messages 保存 `senderActorId`、`conversationId`、`kind`、`displayText`、可选 `turnEvents` 和时间戳。prompt 渲染阶段会把 actors 映射到 LLM roles：
 
 - `self` -> `assistant`
 - `system` -> `system`
 - 其他 actor -> `user`
 
-`packages/persona-flow/src/prompt/speakerTag.ts` 中有共享的 speaker-tag helper，为未来更复杂的 interaction mode 预留。当前 `single_character_chat` prompt 路径不会给发往 LLM 的消息加 speaker tag；不过在输出归一化时，仍会移除 assistant 风格的名字前缀，避免回复里重复出现标签。
+`packages/persona-flow/src/prompt/speakerTag.ts` 中有共享的 speaker-tag helper，为未来更复杂的 interaction mode 预留。当前 `single_character_chat` prompt 路径不会给发往 LLM 的消息加 speaker tag。assistant 历史如果带有 `turnEvents`，当前只会把其中的 `replyText` 重新用于 prompt history；expression、scene atmosphere 等非文本事件会持久化下来，留给后续 prompt/state 设计使用。在输出归一化时，仍会移除 assistant 风格的名字前缀，避免回复里重复出现标签。
 
 ## 模型分配
 
@@ -371,33 +385,46 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 
 - `packages/contracts/src/modelCallPurpose.ts`
 - `packages/contracts/src/interactionMode.ts`
+- `packages/contracts/src/turnEvents.ts`
+- `packages/contracts/src/turnEvents.schema.ts`
 - `packages/contracts/src/apis/*.api.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnService.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnPreparation.ts`
+- `packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts`
+- `packages/persona-flow/src/chatTurn/events/turnEventText.ts`
+- `packages/persona-flow/src/llm/tools/modelTool.ts`
+- `packages/persona-flow/src/llm/tools/submitTurnEventsTool.ts`
 - `packages/persona-flow/src/modelCall/modelRuntime.ts`
 - `packages/persona-flow/src/modelCall/modelCallRegistry.ts`
 - `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.ts`
 - `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/promptViewModel.ts`
-- `packages/persona-flow/src/modelCall/chat.main/singleCharacterChat/singleCharacterChatOutput.ts`
 - `packages/persona-flow/src/stores/appStores.ts`
 - `packages/persona-flow-sqlite/src/db/schema.ts`
+- `packages/persona-flow-sqlite/src/db/SQLiteMessageStore.ts`
 - `packages/persona-flow-sqlite/src/db/CharacterDbRouter.ts`
 - `packages/persona-flow-sqlite/src/createSqliteStores.ts`
 - `packages/persona-flow-model-client/src/defaultModelClient.ts`
 - `packages/persona-flow-model-client/src/mistral/mistralModelClient.ts`
+- `packages/persona-flow-model-client/src/mistral/mistralToolAdapter.ts`
 - `apps/server/src/http/apis/chat/*.ts`
 - `apps/server/src/http/apis/userPreference.route.ts`
 - `apps/web/src/panels/chat/useChatViewModel.ts`
+- `apps/web/src/panels/chat/turnEventDisplay.ts`
+- `apps/web/src/panels/chat/chatTypes.ts`
 - `apps/web/src/panels/userPreference/useUserPreferenceViewModel.ts`
 
 ## 当前维护备注
 
 - `AI_FUNCTIONS` / `AiFunction` 到 `MODEL_CALL_PURPOSES` / `ModelCallPurpose` 的重命名已经在 contracts、web、server 和 store 层完成
 - SQLite 中模型分配对应的列是 `model_assignments_json`，旧的 model-assignment 存储兼容逻辑已经移除
+- 当前 single-character chat 模型输出路径使用 `response_format: json_schema` 结构化输出（事件 schema 来源仍是 `submitTurnEventsTool.argsSchema`）；tool-call 路径不再用于终端输出，但 `ModelToolDefinition` 抽象保留给未来中间查询类工具
+- chatTurn/modelCall 的层级边界是刻意拆开的：chat service 消费 model call 的 `parsedOutput`，每个 model call 自己负责解析 provider response（structured output 或 tool arguments）。这样未来 interaction mode 即使用不同输出格式，也不需要改 chat-turn 持久化代码
+- `messages` 现在是 timeline/display 表，结构化 assistant 事实存储在 `turn_events` 中
+- Prompt history 当前只复用 assistant turn 里的 `replyText` events。TODO：等 prompt 格式和 UI 需求明确后，再把 expression、scene atmosphere 等非文本状态选择性注入 prompt
 - SQLite credential store 已经预留 API key 加密钩子，但目前仍然是原样返回
 - 低优先级 TODO：等部署与密钥管理方案明确后，把当前空实现的 API key encrypt/decrypt 替换成真正的静态加密方案
-- Tool calls 目前只会被检测和记录为 TODO，并不会真的执行
-- `single_character_chat` streaming 还没有真正完成；SSE route 虽然已存在，但当前仍然只返回一个完整回复 chunk
+- `single_character_chat` streaming 现在随 provider 的 structured-output 文本流逐 token 推送；SSE `chunk` 由增量 JSON 预解析器从 `replyText.text` 中提取
+- web 聊天 UI 会把 canonical `TurnEvent[]` 渲染成 `displaySegments`；stream 期间的文本和内联 marker 预览都只是推测性的，最终会由 `done.turnEvents` 覆盖校正
 - 除 `single_character_chat` 之外的 interaction modes 虽然已经声明，但尚未接入运行时 model-call dispatch
 - speaker-tag helper 和更丰富的多 actor prompt shaping 预留给后续 interaction modes；当前 `single_character_chat` 故意保持更简单的 prompt 路径
 - TODO：web 组件里的 i18n 目前仍依赖共享的模块级 helpers；如果后续要支持 SSR、per-app i18n instance 或更严格的测试隔离，建议迁移为 `useI18n` 风格的 hook 或 provider
@@ -424,5 +451,5 @@ curl http://127.0.0.1:8999/health
 ```bash
 curl -X POST http://127.0.0.1:8999/v1/chat/dry-run \
   -H "Content-Type: application/json" \
-  -d '{"characterId":"<character-id>","conversationId":"<conversation-id>","userMessageText":"hello","llmResponseMode":"structured"}'
+  -d '{"characterId":"<character-id>","conversationId":"<conversation-id>","userMessageText":"hello"}'
 ```

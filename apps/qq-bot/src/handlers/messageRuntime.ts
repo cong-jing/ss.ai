@@ -41,7 +41,7 @@ export async function chatForMessage(
 
     const reply = await chat(characterId, conversationId, userMessageText, senderActorId);
     if (reply == null) {
-        getGlobalLogger().info("[bot] chat skipped by structured decision");
+        getGlobalLogger().info("[bot] chat skipped: assistant turn had no replyText");
         return null;
     }
 

@@ -37,7 +37,9 @@ export async function handleGetConversationMessages(context: HttpApiContext, req
                 senderActorId: m.senderActorId,
                 senderDisplayName,
                 senderSourceType,
-                content: m.content,
+                kind: m.kind,
+                content: m.displayText,
+                turnEvents: m.turnEvents,
                 createdAt: m.createdAt,
             };
         }),

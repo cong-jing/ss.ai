@@ -20,6 +20,13 @@ export class InMemoryChatStore implements ChatStore {
         this.messagesByConv.set(key, [...existing, message]);
     }
 
+    async appendAssistantTurn(input: { message: Message; events: NonNullable<Message["turnEvents"]> }): Promise<void> {
+        await this.appendMessage({
+            ...input.message,
+            turnEvents: input.events.map(event => ({ ...event })),
+        });
+    }
+
     async getRecentMessages(input: {
         userId: string;
         conversationId: string;

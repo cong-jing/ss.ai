@@ -82,23 +82,28 @@ describe("Chat API target validation", () => {
             .expect(200);
 
         const assistantContent = "assistant with display name";
-        await app.stores.chat.appendMessage({
-            id: crypto.randomUUID(),
-            conversationId: char1ConvId,
-            senderActorId: char1SelfActorId,
-            content: assistantContent,
-            createdAt: new Date().toISOString(),
+        await app.stores.chat.appendAssistantTurn({
+            message: {
+                id: crypto.randomUUID(),
+                conversationId: char1ConvId,
+                senderActorId: char1SelfActorId,
+                kind: "assistant_turn_events",
+                displayText: assistantContent,
+                createdAt: new Date().toISOString(),
+            },
+            events: [{ type: "replyText", characterId: char1.id, text: assistantContent }],
         });
 
         const res = await app.agent
             .get(`/v1/conversations/${char1ConvId}/messages`)
             .expect(200);
 
-        const target = (res.body.messages as Array<{ content: string; senderDisplayName: string }>).find(
+        const target = (res.body.messages as Array<{ content: string; senderDisplayName: string; turnEvents?: unknown[] }>).find(
             message => message.content === assistantContent,
         );
         assert.ok(target, "expected seeded assistant message in list");
         assert.equal(target!.senderDisplayName, characterDisplayName);
+        assert.deepEqual(target!.turnEvents, [{ type: "replyText", characterId: char1.id, text: assistantContent }]);
     });
 
     it("DELETE /v1/conversations/:id/messages/:messageId deletes a single message", async () => {
@@ -111,14 +116,16 @@ describe("Chat API target validation", () => {
             id: keepId,
             conversationId: char1ConvId,
             senderActorId: char1UserActorId,
-            content: keepContent,
+            kind: "user_text",
+            displayText: keepContent,
             createdAt: new Date().toISOString(),
         });
         await app.stores.chat.appendMessage({
             id: deleteId,
             conversationId: char1ConvId,
             senderActorId: char1UserActorId,
-            content: deleteContent,
+            kind: "user_text",
+            displayText: deleteContent,
             createdAt: new Date().toISOString(),
         });
 

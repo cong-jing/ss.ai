@@ -1,4 +1,4 @@
-import { sqliteTable, text, primaryKey } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, primaryKey } from "drizzle-orm/sqlite-core";
 import { DEFAULT_INTERACTION_MODE } from "@ss-ai/contracts";
 
 // ── conversation_actors ───────────────────────────────────────────────────────
@@ -24,12 +24,27 @@ export const messages = sqliteTable("messages", {
     id: text("id").primaryKey(),
     conversationId: text("conversation_id").notNull(),
     senderActorId: text("sender_actor_id").notNull(),
-    content: text("content").notNull(),
+    kind: text("kind").notNull(),
+    displayText: text("display_text").notNull(),
     createdAt: text("created_at").notNull(),
 });
 
 export type MessageRow = typeof messages.$inferSelect;
 export type NewMessageRow = typeof messages.$inferInsert;
+
+export const turnEvents = sqliteTable("turn_events", {
+    id: text("id").primaryKey(),
+    messageId: text("message_id").notNull(),
+    conversationId: text("conversation_id").notNull(),
+    seq: integer("seq").notNull(),
+    type: text("type").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    schemaVersion: integer("schema_version").notNull().default(1),
+    createdAt: text("created_at").notNull(),
+});
+
+export type TurnEventRow = typeof turnEvents.$inferSelect;
+export type NewTurnEventRow = typeof turnEvents.$inferInsert;
 
 // ── conversations ─────────────────────────────────────────────────────────────
 export const conversations = sqliteTable("conversations", {

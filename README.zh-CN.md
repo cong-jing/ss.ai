@@ -6,6 +6,8 @@
 
 你可以把它理解为一次完整的应用架构与实现练习：前端使用 Vue 3，后端使用 Express，工作区内通过共享 contracts 维持前后端一致性，而领域层包负责 prompt 组合与 chat turn 编排。
 
+整体架构是按将来支持多个 interaction mode 来设计的，但当前真正端到端落地的只有 `single_character_chat`。其他 mode 在 contracts 和 UI 形状上已有预留，但还没有接入运行时 prompt / model-call 执行链路。
+
 ## 在线体验
 
 - GitHub：<https://github.com/cong-jing/ss.ai>
@@ -15,9 +17,9 @@
 
 - 使用 pnpm workspace 组织的 TypeScript/Node.js monorepo，package 边界明确
 - Vue 3 + Vite 前端与 Express API 服务分离
-- 同时具备 SSE 聊天响应路径和 structured model call 处理链路
+- 以 structured output 为核心的 turn-event 聊天链路，并支持 SSE 流式预览
 - 使用 SQLite 持久化会话、角色、用户偏好与 provider credentials
-- 按用途分配模型的 LLM provider abstraction 设计
+- 按用途分配模型的 LLM provider abstraction 设计，并保留 tool-call 接口供未来 agent / query tools 复用
 - 以可复用领域包为中心的 prompt 组合与 chat turn orchestration
 - 覆盖日志、配置管理、测试与部署脚本的端到端工程实现
 
@@ -58,13 +60,15 @@ flowchart LR
 - 角色对话 UI，以及围绕会话和上下文的面板组织
 - 基于 SQLite 的对话、角色和用户偏好持久化
 - Provider credential 输入与按用途保存的模型分配
-- Structured chat 调用与 SSE 响应路由接线
+- 基于 structured output 的 chat 调用与 SSE 流式预览链路
+- 前端基于 `TurnEvent[]` 渲染聊天内容，支持 expression / sceneAtmosphere 的内联显示，并在流式阶段结束后用 canonical `turnEvents` 校正最终显示
+- `single_character_chat` 已经具备端到端运行时支持；其他 interaction mode 目前仍属于规划中而非已实装
 - 用于调试 prompt 组装的 dry-run 路径，不必真的发起模型调用
 - 面向 staging 和 production 的部署打包输出
 
 ## 当前限制
 
-- `single_character_chat` 还没有做到逐 token streaming；当前 SSE 路径仍然是一次性返回完整回复
+- 目前只有 `single_character_chat` 真正接入了运行时 model-call dispatch，其他 interaction mode 仍然主要是占位
 - 一些 API 与运行时设计仍然默认接近单用户场景
 - Provider credential 的加密钩子已经预留，但落盘加密目前仍是占位实现
 - 这个仓库更适合作为作品集与实现验证项目，而不是一个稳定的通用 OSS 框架
@@ -86,5 +90,5 @@ pnpm run test
 
 - [项目地图（中文）](docs/project-map.zh-CN.md)
 - [Project Map (English)](docs/project-map.md)
-- [代码审查记录](docs/code-review-2026-05-31.md)
+- [プロジェクトマップ（日本語）](docs/project-map.ja.md)
 - [TODO / Roadmap Notes](docs/todo.md)

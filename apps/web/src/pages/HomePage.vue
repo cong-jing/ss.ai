@@ -4,6 +4,7 @@ import ChatPanel from "../panels/chat/ChatPanel.vue";
 import LeftSidebar from "../panels/sidebar/LeftSidebar.vue";
 import ContextInspectorPanel from "../panels/inspector/ContextInspectorPanel.vue";
 import UserPreferencePopup from "../panels/userPreference/UserPreferencePopup.vue";
+import DebugOverlay from "../shared/debug/DebugOverlay.vue";
 import { useCharacterViewModel } from "../panels/character/useCharacterViewModel";
 import { useLocalStorage } from "../shared/ui/useLocalStorage";
 
@@ -55,6 +56,8 @@ onBeforeUnmount(() => {
   document.removeEventListener("mousemove", onMouseMove);
   document.removeEventListener("mouseup", onMouseUp);
 });
+
+const showDebugOverlay = import.meta.env.DEV;
 </script>
 
 <template>
@@ -62,7 +65,11 @@ onBeforeUnmount(() => {
 
     <!-- LEFT: Workspace sidebar -->
     <aside class="conversations-area" :style="{ width: leftWidth + 'px', minWidth: leftWidth + 'px' }">
-      <LeftSidebar :auto-open-create-when-empty="true" />
+      <LeftSidebar :auto-open-create-when-empty="true">
+        <template #footer>
+          <UserPreferencePopup />
+        </template>
+      </LeftSidebar>
     </aside>
 
     <!-- LEFT resize handle -->
@@ -76,12 +83,14 @@ onBeforeUnmount(() => {
     <!-- RIGHT resize handle -->
     <div class="resize-handle" @mousedown="onMouseDown($event, 'right')" />
 
-    <!-- RIGHT: Context inspector + Settings trigger -->
+    <!-- RIGHT: Context inspector -->
     <aside class="info-area" :style="{ width: rightWidth + 'px', minWidth: rightWidth + 'px' }">
       <div class="info-scrollable">
         <ContextInspectorPanel />
       </div>
-      <UserPreferencePopup />
+      <div v-if="showDebugOverlay" class="info-footer">
+        <DebugOverlay embedded />
+      </div>
     </aside>
 
   </main>
@@ -128,6 +137,12 @@ onBeforeUnmount(() => {
     flex: 1;
     overflow-y: auto;
     min-height: 0;
+}
+
+.info-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px;
 }
 
 .resize-handle {

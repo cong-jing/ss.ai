@@ -1,4 +1,5 @@
 import { ApiDefine } from "../apiBase.js";
+import type { MessageKind, TurnEvent } from "../turnEvents.js";
 
 // ── Shared projection ──────────────────────────────────────────────────────────
 
@@ -152,6 +153,8 @@ export interface ConversationMessage {
     senderDisplayName: string;
     senderSourceType: ConversationActorSourceType;
     content: string;
+    kind?: MessageKind;
+    turnEvents?: TurnEvent[];
     createdAt: string;
 }
 

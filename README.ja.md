@@ -6,6 +6,8 @@
 
 Vue 3 を使ったフロントエンド、Express ベースの API、workspace 全体で共有される contracts、そして prompt の組み立てと chat turn のオーケストレーションを担うドメインパッケージによって構成された、アプリケーション設計と実装のサンプルとして読むのが適しています。
 
+全体アーキテクチャは将来的に複数の interaction mode へ拡張できるように設計していますが、現時点でエンドツーエンドに実装されているのは `single_character_chat` のみです。ほかの mode は contracts や UI 上の形は用意されているものの、ランタイムの prompt / model-call 実行系にはまだ接続されていません。
+
 ## Live Demo
 
 - GitHub: <https://github.com/cong-jing/ss.ai>
@@ -17,9 +19,9 @@ Vue 3 を使ったフロントエンド、Express ベースの API、workspace �
 
 - pnpm workspace を使った TypeScript/Node.js モノレポ構成と明確な package 境界
 - Vue 3 + Vite フロントエンドと Express API サーバーの分離構成
-- SSE ベースのチャット応答経路と structured model call の両立
+- structured output を中核にした turn-event チャットフローと SSE によるストリーミング preview
 - 会話、キャラクター、ユーザー設定、provider credential を扱う SQLite 永続化
-- purpose ごとのモデル割り当てを含む LLM provider abstraction 設計
+- purpose ごとのモデル割り当てを含む LLM provider abstraction 設計と、将来の agent / query tools に再利用できる tool-call インターフェース保持
 - 再利用可能なドメインパッケージを中心にした prompt composition と chat turn orchestration
 - ログ、設定管理、テスト、デプロイスクリプトまで含めたエンドツーエンドの実装
 
@@ -60,13 +62,15 @@ flowchart LR
 - キャラクター会話 UI と、会話・コンテキスト向けの各種パネル
 - SQLite による会話、キャラクター、ユーザー設定の永続化
 - provider credential 入力と purpose ごとのモデル割り当て
-- structured chat 呼び出しと SSE レスポンス経路
+- structured output ベースの chat 呼び出しと SSE ストリーミング preview 経路
+- Web チャット UI での `TurnEvent[]` ベース描画。`expression` / `sceneAtmosphere` のインライン表示と、stream 終了後の canonical `turnEvents` による最終整合も含む
+- `single_character_chat` のエンドツーエンド実装。ほかの interaction mode は現状まだ計画段階
 - 実際のモデル呼び出しなしで prompt 組み立てを確認できる dry-run 経路
 - staging / production 向けのデプロイ出力
 
 ## Current Limitations
 
-- `single_character_chat` はまだ token 単位の streaming ではなく、SSE 経路でも現状は返信全体を 1 回で返します
+- 実行時の model-call dispatch に本格接続されている interaction mode は現状 `single_character_chat` のみで、他の mode はまだプレースホルダー寄りです
 - API とランタイムの一部には、実質的に single-user 前提の箇所が残っています
 - provider credential 用の暗号化フックはあるものの、保存時暗号化はまだプレースホルダー実装です
 - このリポジトリは安定化した汎用 OSS フレームワークではなく、ポートフォリオ兼実装検証プロジェクトです
@@ -88,5 +92,5 @@ pnpm run test
 
 - [Project Map](docs/project-map.md)
 - [Project Map (简体中文)](docs/project-map.zh-CN.md)
-- [Code Review Notes](docs/code-review-2026-05-31.md)
+- [Project Map (日本語)](docs/project-map.ja.md)
 - [TODO / Roadmap Notes](docs/todo.md)

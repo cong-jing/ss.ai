@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from "vue";
 import type { ChatMessage } from "./chatTypes";
 import { t } from "../../shared/i18n/i18n";
 
@@ -10,9 +9,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   deleteMessage: [messageId: string];
+  debugToggle: [];
 }>();
-
-const showPrompt = ref(false);
 
 function handleDeleteMessage() {
   if (!props.message.id) return;
@@ -33,15 +31,28 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
       return "";
   }
 }
+
+function markerTypeLabel(markerType: string): string {
+  switch (markerType) {
+    case "expression":
+      return t("chat.message.marker.expression");
+    case "sceneAtmosphere":
+      return t("chat.message.marker.sceneAtmosphere");
+    case "stateUpdate":
+      return t("chat.message.marker.stateUpdate");
+    default:
+      return markerType;
+  }
+}
 </script>
 
 <template>
-  <!-- Debug message: expandable prompt preview -->
+  <!-- Debug message: expandable raw data -->
   <article v-if="message.role === 'debug'" class="message-block role-debug">
     <div v-if="showDebug && message.id" class="message-id-row">id: {{ message.id }}</div>
-    <details>
+    <details @toggle="emit('debugToggle')">
       <summary class="debug-summary">
-        <span>{{ message.structuredOutput ? t("chat.message.structuredOutput") : t("chat.message.promptPreview") }}</span>
+        <span>{{ t("chat.message.debugData") }}</span>
         <span class="debug-count">{{ t("chat.message.countMessages", { count: message.debugMessages?.length ?? 0 }) }}</span>
         <time v-if="message.createdAt" class="debug-time">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
       </summary>
@@ -75,28 +86,24 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
         >
           {{ message.deleting ? t("chat.message.deleting") : t("common.delete") }}
         </button>
-        <button
-          v-if="message.role === 'assistant' && message.assembledMessages"
-          class="view-prompt-btn"
-          :class="{ active: showPrompt }"
-          @click="showPrompt = !showPrompt"
-        >
-          {{ showPrompt ? t("chat.message.hideAssembledInput") : t("chat.message.viewAssembledInput") }}
-        </button>
         <time v-if="message.createdAt">{{ new Date(message.createdAt).toLocaleTimeString() }}</time>
       </div>
     </header>
-    <p class="message-content">{{ message.content }}</p>
-    <div v-if="showPrompt && message.assembledMessages" class="prompt-expand">
-      <div
-        v-for="(m, i) in message.assembledMessages"
-        :key="i"
-        class="debug-msg"
-        :class="`debug-role-${m.role}`"
-      >
-        <span class="debug-role-label">{{ m.role }}</span>
-        <pre class="debug-content">{{ m.content }}</pre>
-      </div>
+    <p v-if="!message.displaySegments || message.displaySegments.length === 0" class="message-content">{{ message.content }}</p>
+    <div v-else class="message-content message-content--segmented">
+      <template v-for="(seg, idx) in message.displaySegments" :key="idx">
+        <span v-if="seg.kind === 'text'" class="segment-text">{{ seg.text }}</span>
+        <span
+          v-else
+          class="segment-marker"
+          :class="`marker-${seg.markerType}`"
+          :title="seg.detail || markerTypeLabel(seg.markerType)"
+        >
+          <span class="marker-type">{{ markerTypeLabel(seg.markerType) }}</span>
+          <span class="marker-label">{{ seg.label }}</span>
+          <span v-if="seg.detail" class="marker-detail">{{ seg.detail }}</span>
+        </span>
+      </template>
     </div>
   </article>
 </template>
@@ -132,7 +139,7 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
   background: #f0fdf4;
   border-radius: 8px;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .status-failed {
@@ -251,6 +258,65 @@ function sourceTypeLabel(sourceType: ChatMessage["senderSourceType"]): string {
   font-size: 14px;
 }
 
+.message-content--segmented {
+  white-space: normal;
+}
+
+.message-content--segmented .segment-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-content--segmented .segment-marker {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  line-height: 1.4;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.message-content--segmented .marker-type {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.message-content--segmented .marker-label {
+  font-weight: 500;
+}
+
+.message-content--segmented .marker-detail {
+  opacity: 0.75;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.message-content--segmented .segment-marker.marker-expression {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.message-content--segmented .segment-marker.marker-sceneAtmosphere {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #bfdbfe;
+}
+
+.message-content--segmented .segment-marker.marker-stateUpdate {
+  background: #ede9fe;
+  color: #5b21b6;
+  border-color: #ddd6fe;
+}
+
 /* Debug styles */
 .debug-summary {
   display: flex;
@@ -289,11 +355,16 @@ details[open] .debug-summary {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-height: min(60vh, 560px);
+  min-height: 96px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  resize: vertical;
 }
 
 .debug-msg {
   border-radius: 6px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid #d1fae5;
 }
 

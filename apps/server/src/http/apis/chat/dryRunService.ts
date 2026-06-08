@@ -5,7 +5,6 @@ import {
     createChatTurnService,
     requireNonEmptyString,
     requireUserMessageText,
-    resolveLlmResponseMode,
     resolveInteractionMode,
 } from "./chatUtil.js";
 
@@ -13,7 +12,6 @@ export async function handleDryRunChatRequest(context: HttpApiContext, req: Requ
     const userMessageText = requireUserMessageText(body?.userMessageText, "chat/dry-run");
     const characterId = requireNonEmptyString(body?.characterId, "characterId", "chat/dry-run");
     const conversationId = requireNonEmptyString(body?.conversationId, "conversationId", "chat/dry-run");
-    const llmResponseMode = resolveLlmResponseMode(body?.llmResponseMode, "chat/dry-run", "structured");
     const interactionMode = resolveInteractionMode(body?.interactionMode, "chat/dry-run");
     const userId = await resolveRequestUserId(req, context);
 
@@ -30,7 +28,6 @@ export async function handleDryRunChatRequest(context: HttpApiContext, req: Requ
         characterId,
         conversationId,
         userMessageText,
-        llmResponseMode,
         interactionMode,
         senderActorId: body?.senderActorId,
     });

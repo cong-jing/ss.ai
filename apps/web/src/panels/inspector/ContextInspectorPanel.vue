@@ -110,7 +110,6 @@ function currentPreviewKey(): string {
     activeCharacterId.value ?? "",
     activeConversationId.value ?? "",
     selectedActorId.value ?? "",
-    streamMode.value ? "non-structured" : "structured",
     chatDraftInput.value.trim(),
   ].join("::");
 }
@@ -147,8 +146,7 @@ async function refreshPromptPreview(force = false) {
   isRefreshing.value = true;
   previewError.value = null;
   try {
-    const llmResponseMode = streamMode.value ? "non-structured" : "structured";
-    const result = await apiDryRunChat(characterId, conversationId, userMessageText, senderActorId, llmResponseMode);
+    const result = await apiDryRunChat(characterId, conversationId, userMessageText, senderActorId);
     previewText.value = buildPreviewText(result.messages);
     previewUpdatedAt.value = new Date().toLocaleTimeString();
     lastPreviewKey.value = key;

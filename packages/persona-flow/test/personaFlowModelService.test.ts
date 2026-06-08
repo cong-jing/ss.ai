@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { submitTurnEventsTool } from "../src/index.js";
 import type {
     AppStores,
     ModelClient,
@@ -110,12 +111,12 @@ describe("model runtime", () => {
             userId: "u1",
             characterId: "c1",
             messages: [{ role: "user", content: "hello" }],
-            llmResponseMode: "structured",
             modelCallPurpose: "memory.summarize",
             structuredOutputSchema,
         });
 
-        assert.equal(response.output, "structured");
+        assert.equal(response.output, "");
+        assert.deepEqual(response.structuredOutput, { replyText: "structured" });
         assert.equal(response.apiKeySource, "user");
         assert.equal(capturedInputs[0].model, "sum-model");
         assert.equal(capturedInputs[0].provider, "mistral");
@@ -201,5 +202,61 @@ describe("model runtime", () => {
         assert.equal(capturedInputs[0].provider, "mistral");
         assert.equal(capturedInputs[0].model, "shared-model");
         assert.equal(capturedInputs[0].encryptedApiKey, "shared-key");
+    });
+
+    it("passes tools and tool choice to model client", async () => {
+        const capturedInputs: Array<Parameters<ModelClient["generate"]>[0]> = [];
+
+        const fakeClient: ModelClient = {
+            generate: async (input) => {
+                capturedInputs.push(input);
+                return {
+                    output: "",
+                    toolCalls: [
+                        {
+                            functionName: "submit_turn_events",
+                            arguments: {
+                                events: [
+                                    { type: "replyText", characterId: "c1", text: "hello" },
+                                ],
+                            },
+                        },
+                    ],
+                };
+            },
+            generateStream: async () => ({ output: "", toolCalls: [], completed: true }),
+            listModels: async () => [],
+        };
+
+        const executor = new ModelRuntime({
+            modelClient: fakeClient,
+            appStores: createStores({ preferences: null, credential: null }),
+            promptLogger: { writePromptLog: async () => { } },
+            defaultModelAssignments: {
+                "chat.main": { provider: "mistral", model: "shared-model" },
+            },
+            defaultProviderApiKeys: {
+                mistral: "shared-key",
+            },
+        });
+
+        const response = await executor.chat({
+            userId: "u1",
+            characterId: "c1",
+            messages: [{ role: "user", content: "hello" }],
+            modelCallPurpose: "chat.main",
+            tools: [submitTurnEventsTool],
+            toolChoice: {
+                type: "function",
+                functionName: "submit_turn_events",
+            },
+        });
+
+        assert.equal(response.toolCalls.length, 1);
+        assert.equal(capturedInputs[0].tools?.[0].name, "submit_turn_events");
+        assert.deepEqual(capturedInputs[0].toolChoice, {
+            type: "function",
+            functionName: "submit_turn_events",
+        });
     });
 });

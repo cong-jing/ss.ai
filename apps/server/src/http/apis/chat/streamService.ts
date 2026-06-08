@@ -1,14 +1,12 @@
-import type { ChatStreamEvent, LlmResponseMode } from "@ss-ai/contracts";
+import type { ChatStreamEvent } from "@ss-ai/contracts";
 import type { InteractionMode } from "@ss-ai/contracts";
 import type { Request, Response } from "express";
 import { resolveRequestUserId, type HttpApiContext } from "../apiContext.js";
 import {
     createChatTurnService,
     getStatusCode,
-    HttpStatusError,
     requireNonEmptyString,
     requireUserMessageText,
-    resolveLlmResponseMode,
     resolveInteractionMode,
 } from "./chatUtil.js";
 
@@ -19,20 +17,15 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
     let characterId: string;
     let conversationId: string;
     let senderActorId: string | undefined;
-    let llmResponseMode: LlmResponseMode;
     let interactionMode: InteractionMode;
     try {
         userMessageText = requireUserMessageText(req.body?.userMessageText, "chat/stream");
         characterId = requireNonEmptyString(req.body?.characterId, "characterId", "chat/stream");
         conversationId = requireNonEmptyString(req.body?.conversationId, "conversationId", "chat/stream");
-        llmResponseMode = resolveLlmResponseMode(req.body?.llmResponseMode, "chat/stream", "non-structured");
         interactionMode = resolveInteractionMode(req.body?.interactionMode, "chat/stream");
         senderActorId = typeof req.body?.senderActorId === "string"
             ? req.body.senderActorId
             : undefined;
-        if (llmResponseMode !== "non-structured") {
-            throw new HttpStatusError(400, "chat/stream only supports llmResponseMode=non-structured.");
-        }
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown error";
         context.logger.error("chat/stream: invalid request", { message });
@@ -64,7 +57,6 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
             characterId,
             conversationId,
             userMessageText,
-            llmResponseMode,
             interactionMode,
             senderActorId,
             includeAssembledMessages: Boolean(req.body?.includeAssembledMessages),
@@ -76,11 +68,19 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
                 const event: ChatStreamEvent = { type: "chunk", content: chunk };
                 res.write(`data: ${JSON.stringify(event)}\n\n`);
             },
+            onTurnEventPreview: (preview) => {
+                const event: ChatStreamEvent = {
+                    type: "turnEventPreview",
+                    eventIndex: preview.eventIndex,
+                    event: preview.event,
+                };
+                res.write(`data: ${JSON.stringify(event)}\n\n`);
+            },
         });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown error";
         context.logger.error("chat/stream: generation failed", { message });
-        const errEvent: ChatStreamEvent = { type: "done", requestId, model: "error" };
+        const errEvent: ChatStreamEvent = { type: "error", requestId, message };
         res.write(`data: ${JSON.stringify(errEvent)}\n\n`);
         res.end();
         return;
@@ -91,6 +91,12 @@ export async function handleStreamChatRequest(context: HttpApiContext, req: Requ
         requestId: streamResult.requestId,
         model: streamResult.model,
         apiKeySource: streamResult.apiKeySource,
+        output: streamResult.output,
+        userMessageId: streamResult.userMessageId,
+        assistantMessageId: streamResult.assistantMessageId,
+        turnEvents: streamResult.turnEvents,
+        streamCompleted: streamResult.streamCompleted,
+        ...(streamResult.streamFinishReason ? { streamFinishReason: streamResult.streamFinishReason } : {}),
     };
     res.write(`data: ${JSON.stringify(doneEvent)}\n\n`);
     res.end();
