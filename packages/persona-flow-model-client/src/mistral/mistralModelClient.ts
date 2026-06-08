@@ -130,8 +130,18 @@ export class MistralModelClient implements ModelAdapter {
         let finishReason: string | undefined;
         let completed = false;
 
+        const iterator = stream[Symbol.asyncIterator]();
+
         try {
-            for await (const event of stream) {
+            while (true) {
+                const next = await withTimeout(
+                    iterator.next(),
+                    this.options.timeoutMs,
+                    "Mistral stream chunk",
+                );
+                if (next.done) break;
+
+                const event = next.value;
                 const chunk = (event && typeof event === "object" && "data" in event)
                     ? (event as { data?: unknown }).data
                     : event;
@@ -179,6 +189,13 @@ export class MistralModelClient implements ModelAdapter {
                 }
             }
         } catch (err: unknown) {
+            try {
+                await iterator.return?.();
+            } catch (closeErr: unknown) {
+                this.options.logger?.warn("Mistral stream iterator close failed", {
+                    error: closeErr instanceof Error ? closeErr.message : "Unknown error",
+                });
+            }
             this.options.logger?.error("Mistral stream iteration failed", {
                 error: err instanceof Error ? err.message : "Unknown error",
             });

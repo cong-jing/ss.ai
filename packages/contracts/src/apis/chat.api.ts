@@ -47,7 +47,15 @@ export interface ChatStreamRequest {
 
 /** SSE stream event — one per `data:` line */
 export type ChatStreamEvent =
-    | { type: "chunk"; content: string }
+    | {
+        type: "chunk";
+        /**
+         * Speculative display-text preview parsed from streaming tool-call arguments.
+         * Clients must reconcile it with the final canonical `done.output`, which
+         * may apply normalization such as assistant-name prefix stripping.
+         */
+        content: string;
+    }
     | { type: "turnEventPreview"; eventIndex: number; event: TurnEvent }
     | { type: "assembledMessages"; messages: ChatDryRunMessage[] }
     | {

@@ -30,6 +30,7 @@ function normalizeSingleCharacterReply(
     replyText: string,
     names: Array<string | null | undefined>,
 ): string {
+    // Defensive cleanup for legacy/model-slip prefixes; replyText.text should normally contain only spoken text because characterId carries the speaker identity.
     let normalized = replyText.trimStart();
     normalized = stripRepeatedPrefix(normalized, /^p\d+\[[^\]]+\]\s*[:：]\s*/u);
 
