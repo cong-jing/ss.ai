@@ -190,7 +190,7 @@ async function buildSingleCharacterChatRequest(input: ModelCallRunInput): Promis
 
 function resolveSystemTemplatePath(promptContext: PromptContext): string {
     const language = promptContext.character?.language;
-    if (language && language in SYSTEM_TEMPLATE_PATHS) {
+    if (language && Object.hasOwn(SYSTEM_TEMPLATE_PATHS, language)) {
         return SYSTEM_TEMPLATE_PATHS[language as PromptLanguage];
     }
     return SYSTEM_TEMPLATE_PATHS[DEFAULT_PROMPT_LANGUAGE];
