@@ -8,13 +8,14 @@ function fixedIso(offset = 0): string {
     return new Date(Date.UTC(2026, 0, 1, 0, 0, offset)).toISOString();
 }
 
-function createPromptContext(): PromptContext {
+function createPromptContext(input: { language?: Character["language"] } = {}): PromptContext {
     const character: Character = {
         id: "c1",
         userId: "u1",
         name: "Shishi",
         displayName: "诗诗",
         personaPrompt: "friendly",
+        language: input.language,
         modelConfig: {},
         generationConfig: {},
         memoryConfig: {},
@@ -63,6 +64,40 @@ function createPromptContext(): PromptContext {
 }
 
 describe("singleCharacterChatCall", () => {
+    it("selects the system prompt template from the character language", async () => {
+        const runtime = {} as unknown as ModelRuntime;
+
+        const englishResult = await singleCharacterChatCall.run({
+            runtime,
+            userId: "u1",
+            characterId: "c1",
+            promptContext: createPromptContext({ language: "en-US" }),
+            dryRun: true,
+        });
+        assert.match(englishResult.llmRequestSnapshot?.messages[0]?.content ?? "", /You are a roleplay turn controller/);
+
+        const japaneseResult = await singleCharacterChatCall.run({
+            runtime,
+            userId: "u1",
+            characterId: "c1",
+            promptContext: createPromptContext({ language: "ja-JP" }),
+            dryRun: true,
+        });
+        assert.match(japaneseResult.llmRequestSnapshot?.messages[0]?.content ?? "", /あなたはロールプレイのターン制御役です/);
+    });
+
+    it("falls back to the Chinese system prompt when the character language is missing", async () => {
+        const result = await singleCharacterChatCall.run({
+            runtime: {} as unknown as ModelRuntime,
+            userId: "u1",
+            characterId: "c1",
+            promptContext: createPromptContext(),
+            dryRun: true,
+        });
+
+        assert.match(result.llmRequestSnapshot?.messages[0]?.content ?? "", /你是一个角色扮演回合控制器/);
+    });
+
     it("folds submit_turn_events into parsedOutput without duplicating parsedToolCalls", async () => {
         const runtime = {
             chat: async () => ({

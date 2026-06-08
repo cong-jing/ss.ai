@@ -151,7 +151,7 @@ pnpm --dir ./.deploy-prod/server start
 
 `single_character_chat` の streaming 経路は structured output に移行済みです。`/v1/chat/stream` は `response_format: json_schema` のもとで provider に JSON テキストチャネルを token 単位で流させます。`createSubmitTurnEventsPreviewParser` がその JSON を増分 parse し、`chunk`（`replyText.text` をデコードした文字列）と `turnEventPreview` SSE イベントを発行します。最終 `done` イベントには canonical な `turnEvents` が含まれます。
 
-interaction mode は `@ss-ai/contracts` に共有定義されています。実行時に登録されているのは現在 `single_character_chat` だけです。他の mode も contracts と UI にはありますが、prompt と model-call dispatch にはまだ接続されていません。
+interaction mode は `@ss-ai/contracts` に共有定義されており、全体アーキテクチャとしても将来的に複数 mode を支える前提で設計されています。実行時に実際に登録されているのは現在 `single_character_chat` だけです。他の mode も contracts と UI には将来計画のプレースホルダーとして存在しますが、prompt と model-call dispatch にはまだ接続されていません。
 
 ### `packages/contracts`
 

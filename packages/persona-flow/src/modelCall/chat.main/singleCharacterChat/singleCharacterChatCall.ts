@@ -4,6 +4,7 @@ import { toJSONSchema } from "zod";
 import type { ModelCall, ModelCallRunInput, ModelCallRunResult, ModelCallStreamRunInput } from "../../modelCall.js";
 import type { PromptContext } from "../../../prompt/promptContext.js";
 import type { RenderedMessage } from "../../../prompt/promptTypes.js";
+import type { PromptLanguage } from "../../../stores/character/character.js";
 import type { SubmitTurnEventsArgs } from "@ss-ai/contracts";
 import { renderPromptTemplate } from "../../../prompt/renderPromptTemplate.js";
 import { getTurnEventsReplyText, mergeConsecutiveReplyTextEvents } from "../../../chatTurn/events/turnEventText.js";
@@ -17,10 +18,12 @@ import { buildPromptViewModel } from "./promptViewModel.js";
 import { PersonaModelRequest, PersonaModelResponse } from "../../modelRuntime.js";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const SYSTEM_TEMPLATE_PATH = resolve(
-    __dir,
-    "./templates/system.zh-CN.md.hbs",
-);
+const DEFAULT_PROMPT_LANGUAGE: PromptLanguage = "zh-CN";
+const SYSTEM_TEMPLATE_PATHS: Record<PromptLanguage, string> = {
+    "zh-CN": resolve(__dir, "./templates/system.zh-CN.md.hbs"),
+    "en-US": resolve(__dir, "./templates/system.en-US.md.hbs"),
+    "ja-JP": resolve(__dir, "./templates/system.ja-JP.md.hbs"),
+};
 
 export type SingleCharacterChatResult = {
     displayText: string;
@@ -169,7 +172,7 @@ async function buildSingleCharacterChatRequest(input: ModelCallRunInput): Promis
         character: input.promptContext.character,
         userProfile: input.promptContext.userProfile,
     });
-    const systemPrompt = (await renderPromptTemplate(SYSTEM_TEMPLATE_PATH, viewModel)).trim();
+    const systemPrompt = (await renderPromptTemplate(resolveSystemTemplatePath(input.promptContext), viewModel)).trim();
 
     const messages: RenderedMessage[] = [
         ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
@@ -183,6 +186,14 @@ async function buildSingleCharacterChatRequest(input: ModelCallRunInput): Promis
         modelCallPurpose: singleCharacterChatCall.purpose,
         structuredOutputSchema: buildSubmitTurnEventsStructuredOutputSchema(),
     };
+}
+
+function resolveSystemTemplatePath(promptContext: PromptContext): string {
+    const language = promptContext.character?.language;
+    if (language && Object.hasOwn(SYSTEM_TEMPLATE_PATHS, language)) {
+        return SYSTEM_TEMPLATE_PATHS[language as PromptLanguage];
+    }
+    return SYSTEM_TEMPLATE_PATHS[DEFAULT_PROMPT_LANGUAGE];
 }
 
 function buildSubmitTurnEventsStructuredOutputSchema(): StructuredOutputSchema {
