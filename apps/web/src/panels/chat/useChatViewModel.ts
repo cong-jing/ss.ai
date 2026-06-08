@@ -13,6 +13,7 @@ import { localizeApiError } from "../../shared/api/localizeApiError";
 
 export const chatDraftInput = ref("");
 export const chatReplyNotice = ref<string | null>(null);
+const STREAM_RENDER_INTERVAL_MS = 28;
 
 function createId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -60,6 +61,59 @@ function formatTurnEventsForMessage(turnEvents: TurnEvent[] | undefined, fallbac
     }).join("\n");
 }
 
+function isAsciiWordChar(char: string): boolean {
+    return /[A-Za-z0-9]/.test(char);
+}
+
+function isCjkLikeChar(char: string): boolean {
+    return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(char);
+}
+
+function tokenizeStreamChunk(chunk: string): string[] {
+    const tokens: string[] = [];
+    const chars = Array.from(chunk);
+    let index = 0;
+
+    while (index < chars.length) {
+        const char = chars[index];
+        if (!char) {
+            index++;
+            continue;
+        }
+
+        if (isAsciiWordChar(char)) {
+            let token = char;
+            index++;
+            while (index < chars.length && isAsciiWordChar(chars[index] ?? "")) {
+                token += chars[index];
+                index++;
+            }
+            while (index < chars.length && /\s/u.test(chars[index] ?? "")) {
+                token += chars[index];
+                index++;
+            }
+            tokens.push(token);
+            continue;
+        }
+
+        if (isCjkLikeChar(char)) {
+            let token = char;
+            index++;
+            while (index < chars.length && /\s/u.test(chars[index] ?? "")) {
+                token += chars[index];
+                index++;
+            }
+            tokens.push(token);
+            continue;
+        }
+
+        tokens.push(char);
+        index++;
+    }
+
+    return tokens;
+}
+
 export function useChatViewModel() {
     const toast = useToast();
     const messages = ref<ChatMessage[]>([]);
@@ -104,6 +158,34 @@ export function useChatViewModel() {
 
         if (stream) {
             const msgId = createId("assistant");
+            const pendingTokens: string[] = [];
+            let renderTimer: number | undefined;
+
+            const stopRenderTimer = () => {
+                if (renderTimer !== undefined) {
+                    window.clearInterval(renderTimer);
+                    renderTimer = undefined;
+                }
+            };
+
+            const ensureRenderTimer = () => {
+                if (renderTimer !== undefined) return;
+                renderTimer = window.setInterval(() => {
+                    const msg = messages.value.find(m => m.id === msgId);
+                    if (!msg) {
+                        stopRenderTimer();
+                        pendingTokens.length = 0;
+                        return;
+                    }
+                    const nextToken = pendingTokens.shift();
+                    if (!nextToken) {
+                        stopRenderTimer();
+                        return;
+                    }
+                    msg.content += nextToken;
+                }, STREAM_RENDER_INTERVAL_MS);
+            };
+
             messages.value.push({
                 id: msgId,
                 role: "assistant",
@@ -116,6 +198,7 @@ export function useChatViewModel() {
 
             try {
                 let capturedAssembledMessages: import("./chatTypes").DebugMessage[] | undefined;
+
                 const result = await apiStreamChatMessage(
                     characterId,
                     conversationId,
@@ -123,8 +206,8 @@ export function useChatViewModel() {
                     senderActorId,
                     {
                         onChunk: (chunk) => {
-                            const msg = messages.value.find(m => m.id === msgId);
-                            if (msg) msg.content += chunk;
+                            pendingTokens.push(...tokenizeStreamChunk(chunk));
+                            ensureRenderTimer();
                         },
                         onAssembledMessages: (msgs) => { capturedAssembledMessages = msgs; },
                         // Preview events are best-effort speculative updates; the
@@ -146,6 +229,8 @@ export function useChatViewModel() {
 
                 const msg = messages.value.find(m => m.id === msgId);
                 if (msg) {
+                    stopRenderTimer();
+                    pendingTokens.length = 0;
                     msg.status = "normal";
                     // Prefer the assistant message id from the database so later
                     // edits/deletes target the same row across reloads.
@@ -175,6 +260,8 @@ export function useChatViewModel() {
                 const message = localizeApiError(e);
                 console.error("[chat/stream] error:", e);
                 error.value = message;
+                stopRenderTimer();
+                pendingTokens.length = 0;
                 const msg = messages.value.find(m => m.id === msgId);
                 if (msg) {
                     msg.content = message;

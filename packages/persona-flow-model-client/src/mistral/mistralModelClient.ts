@@ -21,11 +21,16 @@ import {
     toSdkMessages,
     type ToolCallAccumulator,
 } from "./messageTransforms.js";
+import { generateFakeSubmitTurnEventsStream } from "./fakeStream.js";
 import { toMistralToolRequest } from "./mistralToolAdapter.js";
 import { withTimeout } from "./timeout.js";
 import { ModelAdapter } from "../modelAdapter.js";
 
 type MistralSDKModule = typeof import("@mistralai/mistralai");
+
+// Local stream smoke-test switch. Set to true to bypass Mistral and emit fake
+// submit_turn_events tool-call argument deltas for roughly 10 seconds.
+const ENABLE_FAKE_STREAM_DELTAS = false;
 
 interface MistralModelClientOptions {
     apiKey: string;
@@ -111,6 +116,11 @@ export class MistralModelClient implements ModelAdapter {
     }
 
     async generateStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult> {
+        if (ENABLE_FAKE_STREAM_DELTAS) {
+            return generateFakeSubmitTurnEventsStream(input, callbacks);
+        }
+
+        const streamStartedAt = Date.now();
         const client = await this.getClient();
         const toolRequest = toMistralToolRequest(input);
 
@@ -129,6 +139,10 @@ export class MistralModelClient implements ModelAdapter {
         let usage: ModelUsage | undefined;
         let finishReason: string | undefined;
         let completed = false;
+        let firstTextDeltaAt: number | undefined;
+        let firstTextDeltaChars = 0;
+        let firstToolCallDeltaAt: number | undefined;
+        let firstToolCallDeltaBytes = 0;
 
         const iterator = stream[Symbol.asyncIterator]();
 
@@ -163,12 +177,20 @@ export class MistralModelClient implements ModelAdapter {
                 if (delta) {
                     const textDelta = extractTextDelta((delta as { content?: unknown }).content);
                     if (textDelta) {
+                        if (firstTextDeltaAt === undefined) {
+                            firstTextDeltaAt = Date.now();
+                            firstTextDeltaChars = textDelta.length;
+                        }
                         output += textDelta;
                         callbacks?.onTextDelta?.(textDelta);
                     }
 
                     const toolDeltas = normalizeStreamToolCallDeltas(delta);
                     for (const toolDelta of toolDeltas) {
+                        if (firstToolCallDeltaAt === undefined && toolDelta.argumentsDelta) {
+                            firstToolCallDeltaAt = Date.now();
+                            firstToolCallDeltaBytes = toolDelta.argumentsDelta.length;
+                        }
                         accumulateToolCallDelta(toolAccumulators, toolDelta);
                         callbacks?.onToolCallDelta?.(toolDelta);
                     }
@@ -209,6 +231,19 @@ export class MistralModelClient implements ModelAdapter {
         for (const toolCall of toolCalls) {
             callbacks?.onToolCall?.(toolCall);
         }
+
+        const streamCompletedAt = Date.now();
+        this.options.logger?.debug("Mistral stream timing", {
+            model: input.model,
+            firstTextDeltaChars,
+            firstToolCallDeltaBytes,
+            msToFirstTextDelta: firstTextDeltaAt !== undefined ? firstTextDeltaAt - streamStartedAt : null,
+            msToFirstToolCallDelta: firstToolCallDeltaAt !== undefined ? firstToolCallDeltaAt - streamStartedAt : null,
+            msToStreamComplete: streamCompletedAt - streamStartedAt,
+            toolCallCount: toolCalls.length,
+            completed,
+            finishReason,
+        });
 
         return {
             output,
