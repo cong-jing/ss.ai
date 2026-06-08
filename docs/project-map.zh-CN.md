@@ -1,6 +1,6 @@
 # ss.ai 项目地图
 
-[English](project-map.md) | 简体中文
+[English](project-map.md) | 简体中文 | [日本語](project-map.ja.md)
 
 这份文档是 `ss.ai` 的维护者导向项目地图。
 当你需要在冷启动状态下快速理解工作区结构、主聊天流程、运行时配置，以及当前由哪些文件控制行为时，应该先看这里。
@@ -19,7 +19,7 @@
 - LLM API 集成
 - 基于 SSE 的流式聊天
 - prompt 组合与模板管理
-- tool-call 驱动的 turn event 设计
+- 以 structured output 为主、并保留 provider-neutral tool-call 抽象供未来 agent 工具复用的 turn event 设计
 - 用 SQLite 持久化对话与角色数据
 - 角色对话与 TRPG 风格交互设计
 - LLM provider abstraction
@@ -207,7 +207,7 @@ Turn event 的纯类型与字面量常量位于 `packages/contracts/src/turnEven
 - 实现 `persona-flow` 中定义的 `ModelClient` interface
 - 由 `DefaultModelClient` 按 provider 分发
 - 当前实际 provider 是通过 `MistralModelClient` 接入的 Mistral
-- 支持普通生成、structured 输出（`response_format: json_schema`，同时适用于非流和流路径）、tool calls、模型列表获取，以及基于结构化输出文本通道的流式输出
+- 支持普通生成、structured 输出（`response_format: json_schema`，同时适用于非流和流路径）、tool calls、模型列表获取，以及基于结构化输出文本通道的流式输出。对 structured stream，会先累积原始 JSON text 供 preview 使用，再把最终 parse 后的对象暴露为 `ModelStreamResult.structuredOutput`
 - 在 `src/mistral/mistralToolAdapter.ts` 中把 provider-neutral `ModelToolDefinition` 转成 Mistral function tools（保留给未来查询类工具调用使用）
 
 provider 列表和 API URL 来自 runtime config。API key 按用户和 provider 保存在 credential store 中。SQLite 目前仍然通过空实现的 encrypt/decrypt helpers 处理它们，因此落库值依然是明文，直到后续补上真正的加密方案。
@@ -257,12 +257,13 @@ Vue 3 + Vite 前端。
 - 使用 `@ss-ai/contracts` 中的 API types 和 constants
 - 允许用户配置 provider API keys 和 model assignments
 - 发送 chat 请求、stream 请求、dry-run 请求和消息删除请求
+- 从 `TurnEvent[]` 渲染 assistant 输出：`replyText` 渲染为文本段，`expression` 和 `sceneAtmosphere` 渲染为内联 marker chip，完整 `turnEvents` 仍保留在 debug block 中
 
 重要 UI 状态：
 
 - `src/shared/state/appState.ts` 中的 `contextVersion` 会在角色或会话上下文变化时触发聊天历史重载
 - 当前激活的角色、会话和 actor 状态保存在各面板 view-model 模块中
-- 聊天目前无论非 stream 还是 stream UI 模式，都会收到由 `replyText` events 派生出的 assistant output；后端的 `single_character_chat` stream 路径仍然只返回一个完整 chunk
+- 聊天支持非 stream 和 stream UI 模式。两条路径在有 `turnEvents` 时都会优先从中推导显示内容。stream 模式会接收 structured-output JSON preview parser 发出的 token 级 `chunk`，通过一个小型 render queue 做平滑排队显示，并在 `turnEventPreview` 到达时插入内联 marker，最终再用 `done.turnEvents` 生成的 canonical `displaySegments` 对消息做一次权威校正
 
 当前设置行为：
 
@@ -385,6 +386,7 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 - `packages/contracts/src/modelCallPurpose.ts`
 - `packages/contracts/src/interactionMode.ts`
 - `packages/contracts/src/turnEvents.ts`
+- `packages/contracts/src/turnEvents.schema.ts`
 - `packages/contracts/src/apis/*.api.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnService.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnPreparation.ts`
@@ -407,6 +409,8 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 - `apps/server/src/http/apis/chat/*.ts`
 - `apps/server/src/http/apis/userPreference.route.ts`
 - `apps/web/src/panels/chat/useChatViewModel.ts`
+- `apps/web/src/panels/chat/turnEventDisplay.ts`
+- `apps/web/src/panels/chat/chatTypes.ts`
 - `apps/web/src/panels/userPreference/useUserPreferenceViewModel.ts`
 
 ## 当前维护备注
@@ -420,6 +424,7 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 - SQLite credential store 已经预留 API key 加密钩子，但目前仍然是原样返回
 - 低优先级 TODO：等部署与密钥管理方案明确后，把当前空实现的 API key encrypt/decrypt 替换成真正的静态加密方案
 - `single_character_chat` streaming 现在随 provider 的 structured-output 文本流逐 token 推送；SSE `chunk` 由增量 JSON 预解析器从 `replyText.text` 中提取
+- web 聊天 UI 会把 canonical `TurnEvent[]` 渲染成 `displaySegments`；stream 期间的文本和内联 marker 预览都只是推测性的，最终会由 `done.turnEvents` 覆盖校正
 - 除 `single_character_chat` 之外的 interaction modes 虽然已经声明，但尚未接入运行时 model-call dispatch
 - speaker-tag helper 和更丰富的多 actor prompt shaping 预留给后续 interaction modes；当前 `single_character_chat` 故意保持更简单的 prompt 路径
 - TODO：web 组件里的 i18n 目前仍依赖共享的模块级 helpers；如果后续要支持 SSR、per-app i18n instance 或更严格的测试隔离，建议迁移为 `useI18n` 风格的 hook 或 provider

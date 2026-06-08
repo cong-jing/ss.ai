@@ -1,6 +1,6 @@
 # ss.ai Project Map
 
-[English](project-map.md) | [简体中文](project-map.zh-CN.md)
+[English](project-map.md) | [简体中文](project-map.zh-CN.md) | [日本語](project-map.ja.md)
 
 This document is the maintainer-oriented project map for `ss.ai`.
 Use it when you need a cold-start overview of the workspace, the main chat flow, runtime configuration, and the files that currently anchor behavior.
@@ -19,7 +19,7 @@ Its main purpose is to demonstrate experience in the following areas:
 - LLM API integration
 - SSE-based streaming chat
 - prompt template composition and management
-- tool-call-based turn event design
+- structured-output turn event design with provider-neutral tool-call abstractions reserved for future agent tools
 - SQLite-backed persistence for conversations and character data
 - character chat and TRPG-style interaction design
 - LLM provider abstraction layer
@@ -167,7 +167,7 @@ Responsibilities:
 
 Model-call configuration uses `MODEL_CALL_PURPOSES` / `ModelCallPurpose` plus `ModelAssignment` / `ModelAssignmentMap`.
 
-Turn event schemas live in `packages/contracts/src/turnEvents.ts` and are the source of truth for the model tool argument schema, storage validation, and frontend/backend API types. Adding a new event type should start there, then flow outward through storage, prompt history assembly, and UI display.
+Turn event pure types and literal constants live in `packages/contracts/src/turnEvents.ts`. Runtime Zod schemas live in `packages/contracts/src/turnEvents.schema.ts` and are exposed through the `@ss-ai/contracts/turnEvents.schema` sub-entry. This keeps the web app able to import pure contracts without pulling Zod into its main bundle. Adding a new event type should start in contracts, then flow outward through runtime schema validation, storage, prompt history assembly, and UI display.
 
 ### `packages/persona-flow-sqlite`
 
@@ -207,7 +207,7 @@ Responsibilities:
 - Implements the `ModelClient` interface from `persona-flow`.
 - `DefaultModelClient` dispatches by provider.
 - Mistral is the current concrete provider via `MistralModelClient`.
-- Supports non-structured generation, structured generation (`response_format: json_schema`) for both non-streaming and streaming, tool calls, model listing, and structured-output streaming over the text channel.
+- Supports non-structured generation, structured generation (`response_format: json_schema`) for both non-streaming and streaming, tool calls, model listing, and structured-output streaming over the text channel. Streaming structured responses accumulate raw JSON text for preview and expose the parsed final object as `ModelStreamResult.structuredOutput`.
 - Converts provider-neutral `ModelToolDefinition` values to Mistral function tools in `src/mistral/mistralToolAdapter.ts` (kept for future query-style tool calls).
 
 The provider list and API URLs come from runtime config. API keys are stored per user and provider in the credential store. SQLite currently runs them through no-op encrypt/decrypt helpers, so the stored value remains plaintext until real encryption is added.
@@ -257,13 +257,13 @@ Responsibilities:
 - Uses `@ss-ai/contracts` for API types and constants.
 - Lets the user configure provider API keys and model assignments.
 - Sends chat requests, stream requests, dry-run requests, and message deletion requests.
-- Displays normal assistant text from `replyText` while keeping the full `turnEvents` payload available in the debug block.
+- Renders assistant output from `TurnEvent[]`: `replyText` becomes text segments, `expression` and `sceneAtmosphere` become inline marker chips, and the full `turnEvents` payload remains available in the debug block.
 
 Important UI state:
 
 - `contextVersion` in `src/shared/state/appState.ts` triggers chat history reload when character or conversation context changes.
 - Active character, conversation, and actor state lives in panel view-model modules.
-- Chat can run in non-streaming or streaming UI mode. Both paths currently receive assistant output derived from `replyText` events, and the streaming backend path still returns one full reply chunk.
+- Chat can run in non-streaming or streaming UI mode. Both paths derive display from `turnEvents` when available. Streaming mode receives token-level `chunk` events from the structured-output JSON preview parser, paces text through a small render queue, applies inline `turnEventPreview` markers as they arrive, and snaps the message to canonical `displaySegments` built from the final `done.turnEvents`.
 
 Current settings behavior:
 
@@ -386,6 +386,7 @@ Start here when reviewing or changing behavior:
 - `packages/contracts/src/modelCallPurpose.ts`
 - `packages/contracts/src/interactionMode.ts`
 - `packages/contracts/src/turnEvents.ts`
+- `packages/contracts/src/turnEvents.schema.ts`
 - `packages/contracts/src/apis/*.api.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnService.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnPreparation.ts`
@@ -408,6 +409,8 @@ Start here when reviewing or changing behavior:
 - `apps/server/src/http/apis/chat/*.ts`
 - `apps/server/src/http/apis/userPreference.route.ts`
 - `apps/web/src/panels/chat/useChatViewModel.ts`
+- `apps/web/src/panels/chat/turnEventDisplay.ts`
+- `apps/web/src/panels/chat/chatTypes.ts`
 - `apps/web/src/panels/userPreference/useUserPreferenceViewModel.ts`
 
 ## Current Maintenance Notes
@@ -421,6 +424,7 @@ Start here when reviewing or changing behavior:
 - API key encryption hooks exist in the SQLite credential store, but currently return the input unchanged.
 - Low-priority TODO: replace the current no-op API key encryption and decryption with a real at-rest protection scheme once deployment and key-management expectations are settled.
 - `single_character_chat` streaming now flows token by token from the provider's structured-output JSON text channel; SSE `chunk` events are produced by an incremental JSON preview parser that extracts `replyText.text` as it appears.
+- The web chat UI renders canonical `TurnEvent[]` into `displaySegments`; streamed text and inline marker previews are speculative until the final `done.turnEvents` replaces them.
 - Interaction modes other than `single_character_chat` are declared but not registered in runtime model-call dispatch yet.
 - Speaker-tag helpers and richer multi-actor prompt shaping are reserved for later interaction modes; the current `single_character_chat` path intentionally stays simpler.
 - TODO: i18n access currently relies on shared module-level helpers in web components; migrate to a `useI18n`-style hook or provider when SSR, per-app instances, or stricter test isolation become requirements.
