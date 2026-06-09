@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import Button from "../../shared/ui/Button.vue";
 import Panel from "../../shared/ui/Panel.vue";
 import TextInput from "../../shared/ui/TextInput.vue";
@@ -9,6 +9,9 @@ import { useUserProfileViewModel } from "../userProfile/useUserProfileViewModel"
 import type { ApiKeySource, ModelAssignmentSource, ModelCallPurpose } from "@ss-ai/contracts";
 import { isSupportedLocale, locale, setLocale, t } from "../../shared/i18n/i18n";
 import { SUPPORTED_LOCALES, type Locale } from "../../shared/i18n/messages";
+import { useAuthState } from "../../auth/useAuthState";
+import { localizeApiError } from "../../shared/api/localizeApiError";
+import { useToast } from "../../shared/ui/useToast";
 
 const vm = useUserPreferenceViewModel();
 const {
@@ -111,6 +114,23 @@ const { userInfo, isLoadingUser, isSavingUser, loadUserInfo, saveUserInfo } = us
 onMounted(() => {
   void loadUserInfo();
 });
+
+const { authMode, logout } = useAuthState();
+const toast = useToast();
+const isLoggingOut = ref(false);
+const showLogout = computed(() => authMode.value === "local-password");
+
+async function onLogout(): Promise<void> {
+  if (isLoggingOut.value) return;
+  isLoggingOut.value = true;
+  try {
+    await logout();
+  } catch (error) {
+    toast.error(localizeApiError(error));
+  } finally {
+    isLoggingOut.value = false;
+  }
+}
 </script>
 
 <template>
@@ -244,6 +264,12 @@ onMounted(() => {
           </div>
         </div>
       </CollapsibleSection>
+
+      <div v-if="showLogout" class="settings-footer">
+        <Button variant="danger" :disabled="isLoggingOut" @click="onLogout">
+          {{ isLoggingOut ? t("auth.signingOut") : t("auth.logout") }}
+        </Button>
+      </div>
     </div>
   </Panel>
 </template>
@@ -257,6 +283,12 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
 }
 
 .provider-block {
