@@ -86,8 +86,15 @@ export type StateUpdateEvent = {
 
 export type TurnEvent = ReplyTextEvent | ExpressionEvent | SceneAtmosphereEvent | StateUpdateEvent;
 
+import type { MemoryWriteCandidate } from "./memoryCandidates.js";
+
 export type SubmitTurnEventsArgs = {
     events: TurnEvent[];
+    // Optional long-term memory candidates surfaced by the model alongside
+    // this turn. They are emitted as part of the same structured output (not
+    // a separate tool call) so providers that gate tools and structured
+    // output as exclusive output channels still produce both.
+    memoryWriteCandidates?: MemoryWriteCandidate[];
 };
 
 export type MessageKind =

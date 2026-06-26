@@ -26,7 +26,6 @@ export * from "./modelCall/modelRuntime.js";
 export * from "./llm/modelClient.js";
 export * from "./llm/tools/modelTool.js";
 export * from "./llm/tools/submitTurnEventsTool.js";
-export * from "./llm/tools/submitMemoryCandidatesTool.js";
 export * from "./chatTurn/events/submitTurnEventsParser.js";
 export * from "./chatTurn/events/submitTurnEventsStreamPreview.js";
 export * from "./chatTurn/events/turnEventText.js";

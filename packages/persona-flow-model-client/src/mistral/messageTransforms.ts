@@ -105,7 +105,12 @@ export function extractStructuredOutput(response: unknown): unknown {
         return JSON.parse(content);
     }
 
-    throw new Error("Mistral structured response did not contain parsed or JSON content.");
+    // Models routinely return an empty `content` when they choose to call a
+    // tool instead of producing the requested structured output (especially
+    // under `tool_choice: auto`). Returning undefined here lets the
+    // model-call layer decide how to react: it can fall back, retry, or
+    // surface a domain-specific error that mentions the tool-call situation.
+    return undefined;
 }
 
 export function extractTextDelta(content: unknown): string {

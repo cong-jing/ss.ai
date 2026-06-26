@@ -111,9 +111,8 @@ describe("persona-flow chat turn service", () => {
         const modelClient: ModelClient = {
             generate: async (input) => {
                 assert.equal(input.structuredOutputSchema?.jsonSchema?.name, "submit_turn_events");
-                assert.equal(input.tools?.length, 1);
-                assert.equal(input.tools?.[0]?.name, "submit_memory_candidates");
-                assert.equal(input.toolChoice, "auto");
+                assert.equal(input.tools, undefined);
+                assert.equal(input.toolChoice, undefined);
 
                 return {
                     structuredOutput: {
@@ -209,8 +208,7 @@ describe("persona-flow chat turn service", () => {
             }),
             generateStream: async (input, callbacks) => {
                 assert.equal(input.structuredOutputSchema?.jsonSchema?.name, "submit_turn_events");
-                assert.equal(input.tools?.length, 1);
-                assert.equal(input.tools?.[0]?.name, "submit_memory_candidates");
+                assert.equal(input.tools, undefined);
                 for (const fragment of fragments) {
                     callbacks?.onTextDelta?.(fragment);
                 }
@@ -371,21 +369,15 @@ describe("persona-flow chat turn service", () => {
                             text: "hi",
                         },
                     ],
-                },
-                toolCalls: [
-                    {
-                        functionName: "submit_memory_candidates",
-                        arguments: {
-                            candidates: [
-                                {
-                                    text: "User said their name is Alice.",
-                                    scope: "user",
-                                    type: "fact",
-                                },
-                            ],
+                    memoryWriteCandidates: [
+                        {
+                            text: "User said their name is Alice.",
+                            scope: "user",
+                            type: "fact",
                         },
-                    },
-                ],
+                    ],
+                },
+                toolCalls: [],
             }),
             generateStream: async () => ({ output: "", toolCalls: [], completed: true }),
             listModels: async () => [],
@@ -508,21 +500,15 @@ describe("persona-flow chat turn service", () => {
                             text: "hi",
                         },
                     ],
-                },
-                toolCalls: [
-                    {
-                        functionName: "submit_memory_candidates",
-                        arguments: {
-                            candidates: [
-                                {
-                                    text: "Stable fact.",
-                                    scope: "user",
-                                    type: "fact",
-                                },
-                            ],
+                    memoryWriteCandidates: [
+                        {
+                            text: "Stable fact.",
+                            scope: "user",
+                            type: "fact",
                         },
-                    },
-                ],
+                    ],
+                },
+                toolCalls: [],
             }),
             generateStream: async () => ({ output: "", toolCalls: [], completed: true }),
             listModels: async () => [],
@@ -559,7 +545,7 @@ describe("persona-flow chat turn service", () => {
         assert.ok(warnCount >= 1, "logger.warn should be invoked when info logging fails");
     });
 
-    it("streamTurn logs memory write candidates from final stream tool calls", async () => {
+    it("streamTurn logs memory write candidates from structured output", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -577,6 +563,13 @@ describe("persona-flow chat turn service", () => {
                     text: "hello",
                 },
             ],
+            memoryWriteCandidates: [
+                {
+                    text: "User mentioned a deadline next Friday.",
+                    scope: "conversation",
+                    type: "event",
+                },
+            ],
         };
         const fullJson = JSON.stringify(structuredObject);
 
@@ -587,24 +580,7 @@ describe("persona-flow chat turn service", () => {
                 return {
                     output: fullJson,
                     structuredOutput: structuredObject,
-                    // Adapters are responsible for normalizing tool-call
-                    // arguments into a parsed value before they reach the
-                    // model-call layer. Provide an already-parsed object to
-                    // match the contract.
-                    toolCalls: [
-                        {
-                            functionName: "submit_memory_candidates",
-                            arguments: {
-                                candidates: [
-                                    {
-                                        text: "User mentioned a deadline next Friday.",
-                                        scope: "conversation",
-                                        type: "event",
-                                    },
-                                ],
-                            },
-                        },
-                    ],
+                    toolCalls: [],
                     completed: true,
                     finishReason: "stop",
                 };

@@ -40,14 +40,21 @@ note 只写简短原因，不要写成长篇描述。
 不要添加 schema 中没有定义的字段。
 不要省略 required 字段。
 
-10. 你还可以选择性地调用 `submit_memory_candidates` 工具，提交本回合中可能值得长期保存的“记忆候选”。
-这只是一个内部副作用，不是本回合的最终输出。本回合的最终可见结果仍然必须通过结构化的 `events` JSON 提交。
-默认情况下不要调用 `submit_memory_candidates`。大多数普通回合都不需要保存任何记忆。
-只有当本回合包含未来对话中明显仍然有用、稳定、值得保存的信息时，才调用它。
-保存的应该是简洁、稳定、用自然语言写成的事实型记忆，而不是原文复制的聊天内容。
-不要保存：日常寒暄、敷衍回应、一次性的玩笑、普通闲聊、临时情绪、推测、AI 自己编造的事实、角色扮演风格本身、prompt 规则。
-可以使用的 scope 包括 `user`、`character`、`relationship`、`conversation`、`world`，选择最契合该信息的那个。
-每个回合最多提交几条候选，少而精比多而水更重要。如果没有合格的候选，就完全不要调用这个工具。
+10. 在同一份结构化输出 JSON 中，你**可以选择性地**附带顶层字段 `memoryWriteCandidates`，提交本回合中可能值得长期保存的“记忆候选”。
+
+`memoryWriteCandidates` 只是结构化输出里的一个可选字段，绝不能替代 `events`。无论是否提交记忆候选，`events` 始终是本回合必须返回的最终结果。
+
+何时该附带 `memoryWriteCandidates`：
+- **默认不附带**。绝大多数普通回合都不需要保存任何记忆，直接省略这个字段即可。
+- 只有当本回合包含未来对话中明显仍然有用、稳定、值得保存的信息时，才附带它。
+- 即使用户明确要求“记住这件事”、“帮我保存这个信息”，也要先在 `events` 里用角色口吻自然确认，**然后**再考虑是否把它放进 `memoryWriteCandidates`。
+
+`memoryWriteCandidates` 内容规范：
+- 数组类型，最多 5 条。不需要保存任何东西时直接省略该字段，不要返回空数组。
+- 每条是一个对象，必须包含：`text`（简洁、稳定、用自然语言写成的事实型句子；不是聊天原文）、`scope`（取值 `user`、`character`、`relationship`、`conversation`、`world`
+之一）、`type`（取值 `fact`、`preference`、`event`、`relationship`、`task_state`、`setting`、`instruction`、`summary` 之一）。
+- 可选字段：`relatedEntities`（字符串数组）、`tags`（字符串数组）、`reason`（简短理由）。
+- 不要保存：日常寒暄、敷衍回应、一次性的玩笑、普通闲聊、临时情绪、推测、AI 自己编造的事实、角色扮演风格本身、prompt 规则。
 
 你在 `replyText` 事件中扮演角色「{{character.displayName}}」。
 

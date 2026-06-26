@@ -128,11 +128,13 @@ describe("singleCharacterChatCall", () => {
         assert.equal(result.parsedToolCalls, undefined);
     });
 
-    it("includes submitMemoryCandidatesTool in the request and parses memory candidates from tool calls", async () => {
-        let seenToolNames: string[] = [];
+    it("does not register any tools and parses memoryWriteCandidates from structured output", async () => {
+        let seenTools: unknown;
+        let seenToolChoice: unknown;
         const runtime = {
-            chat: async (request: { tools?: Array<{ name: string }>; toolChoice?: unknown }) => {
-                seenToolNames = (request.tools ?? []).map(tool => tool.name);
+            chat: async (request: { tools?: unknown; toolChoice?: unknown }) => {
+                seenTools = request.tools;
+                seenToolChoice = request.toolChoice;
                 return {
                     output: "",
                     model: "m1",
@@ -142,21 +144,15 @@ describe("singleCharacterChatCall", () => {
                         events: [
                             { type: "replyText" as const, characterId: "c1", text: "hello" },
                         ],
-                    },
-                    toolCalls: [
-                        {
-                            functionName: "submit_memory_candidates",
-                            arguments: {
-                                candidates: [
-                                    {
-                                        text: "User lives in Tokyo.",
-                                        scope: "user",
-                                        type: "fact",
-                                    },
-                                ],
+                        memoryWriteCandidates: [
+                            {
+                                text: "User lives in Tokyo.",
+                                scope: "user",
+                                type: "fact",
                             },
-                        },
-                    ],
+                        ],
+                    },
+                    toolCalls: [],
                 };
             },
         } as unknown as ModelRuntime;
@@ -168,14 +164,15 @@ describe("singleCharacterChatCall", () => {
             promptContext: createPromptContext(),
         });
 
-        assert.deepEqual(seenToolNames, ["submit_memory_candidates"]);
+        assert.equal(seenTools, undefined);
+        assert.equal(seenToolChoice, undefined);
         assert.equal(result.parsedOutput?.memoryWriteCandidates.length, 1);
         assert.equal(result.parsedOutput?.memoryWriteCandidates[0]?.text, "User lives in Tokyo.");
         assert.equal(result.parsedOutput?.memoryWriteCandidates[0]?.scope, "user");
         assert.equal(result.parsedOutput?.memoryWriteCandidates[0]?.type, "fact");
     });
 
-    it("returns empty memoryWriteCandidates when no matching tool call exists", async () => {
+    it("returns empty memoryWriteCandidates when the structured output omits the field", async () => {
         const runtime = {
             chat: async () => ({
                 output: "",
@@ -201,7 +198,12 @@ describe("singleCharacterChatCall", () => {
         assert.deepEqual(result.parsedOutput?.memoryWriteCandidates, []);
     });
 
-    it("ignores invalid memory candidate tool calls without failing chat parsing", async () => {
+    it("rejects invalid memoryWriteCandidates entries from structured output", async () => {
+        // Because memoryWriteCandidates now lives inside the strict
+        // SubmitTurnEventsArgs schema, an invalid candidate (e.g. empty
+        // `text`) causes the entire chat-turn parse to fail loudly. This
+        // matches the contract: `response_format: json_schema` binds the
+        // model to a valid shape, so an invalid candidate is a model bug.
         const runtime = {
             chat: async () => ({
                 output: "",
@@ -212,72 +214,21 @@ describe("singleCharacterChatCall", () => {
                     events: [
                         { type: "replyText" as const, characterId: "c1", text: "hi" },
                     ],
-                },
-                toolCalls: [
-                    {
-                        functionName: "submit_memory_candidates",
-                        arguments: {
-                            candidates: [
-                                { text: "", scope: "user", type: "fact" },
-                            ],
-                        },
-                    },
-                ],
-            }),
-        } as unknown as ModelRuntime;
-
-        const result = await singleCharacterChatCall.run({
-            runtime,
-            userId: "u1",
-            characterId: "c1",
-            promptContext: createPromptContext(),
-        });
-
-        assert.deepEqual(result.parsedOutput?.memoryWriteCandidates, []);
-        assert.equal(result.parsedOutput?.displayText, "hi");
-    });
-
-    it("treats string tool-call arguments as invalid (provider adapters must pre-parse them)", async () => {
-        // The ModelToolCall contract requires provider adapters to normalize
-        // JSON-text payloads into a structured `arguments` value. If a misbehaving
-        // adapter forwards the raw string, the model-call layer should ignore it
-        // rather than silently parse JSON on its behalf.
-        const runtime = {
-            chat: async () => ({
-                output: "",
-                model: "m1",
-                requestId: "req1",
-                apiKeySource: "default" as const,
-                structuredOutput: {
-                    events: [
-                        { type: "replyText" as const, characterId: "c1", text: "hi" },
+                    memoryWriteCandidates: [
+                        { text: "", scope: "user", type: "fact" },
                     ],
                 },
-                toolCalls: [
-                    {
-                        functionName: "submit_memory_candidates",
-                        arguments: JSON.stringify({
-                            candidates: [
-                                { text: "User lives in Tokyo.", scope: "user", type: "fact" },
-                            ],
-                        }),
-                        argumentsRaw: JSON.stringify({
-                            candidates: [
-                                { text: "User lives in Tokyo.", scope: "user", type: "fact" },
-                            ],
-                        }),
-                    },
-                ],
+                toolCalls: [],
             }),
         } as unknown as ModelRuntime;
 
-        const result = await singleCharacterChatCall.run({
-            runtime,
-            userId: "u1",
-            characterId: "c1",
-            promptContext: createPromptContext(),
-        });
-
-        assert.deepEqual(result.parsedOutput?.memoryWriteCandidates, []);
+        await assert.rejects(
+            singleCharacterChatCall.run({
+                runtime,
+                userId: "u1",
+                characterId: "c1",
+                promptContext: createPromptContext(),
+            }),
+        );
     });
 });

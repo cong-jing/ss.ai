@@ -6,12 +6,10 @@ import type { PromptContext } from "../../../prompt/promptContext.js";
 import type { RenderedMessage } from "../../../prompt/promptTypes.js";
 import type { PromptLanguage } from "../../../stores/character/character.js";
 import type { MemoryWriteCandidate, SubmitTurnEventsArgs } from "@ss-ai/contracts";
-import { SubmitMemoryCandidatesArgsSchema } from "@ss-ai/contracts/memoryCandidates.schema";
 import { renderPromptTemplate } from "../../../prompt/renderPromptTemplate.js";
 import { getTurnEventsReplyText, mergeConsecutiveReplyTextEvents } from "../../../chatTurn/events/turnEventText.js";
 import { parseSubmitTurnEventsArgs } from "../../../chatTurn/events/submitTurnEventsParser.js";
 import { SUBMIT_TURN_EVENTS_TOOL_NAME, submitTurnEventsTool } from "../../../llm/tools/submitTurnEventsTool.js";
-import { SUBMIT_MEMORY_CANDIDATES_TOOL_NAME, submitMemoryCandidatesTool } from "../../../llm/tools/submitMemoryCandidatesTool.js";
 import type { StructuredOutputSchema } from "../../../llm/modelClient.js";
 import {
     createSubmitTurnEventsPreviewParser,
@@ -188,8 +186,6 @@ async function buildSingleCharacterChatRequest(input: ModelCallRunInput): Promis
         messages,
         modelCallPurpose: singleCharacterChatCall.purpose,
         structuredOutputSchema: buildSubmitTurnEventsStructuredOutputSchema(),
-        tools: [submitMemoryCandidatesTool],
-        toolChoice: "auto",
     };
 }
 
@@ -220,13 +216,24 @@ function parseSingleCharacterChatResponse(
     promptContext: PromptContext,
 ): SingleCharacterChatResult {
     if (llmResponse.structuredOutput === undefined) {
+        // Memory candidates now live inside the structured output, so the
+        // only legitimate cause for a missing structured payload is the
+        // model producing zero content (e.g. unexpected tool call or empty
+        // response). Surface any unexpected tool calls in the message so
+        // it's debuggable from logs without diving into the provider response.
+        const toolCallNames = llmResponse.toolCalls
+            .map(call => call.functionName)
+            .filter((name): name is string => Boolean(name));
+        const detail = toolCallNames.length > 0
+            ? ` Unexpected tool calls received: [${toolCallNames.join(", ")}]. This call does not register any tools; the model must always return ${SUBMIT_TURN_EVENTS_TOOL_NAME} structured output.`
+            : " Model returned an empty content channel and no tool calls.";
         throw new Error(
-            `Model response did not include structured output for ${SUBMIT_TURN_EVENTS_TOOL_NAME}.`,
+            `Model response did not include structured output for ${SUBMIT_TURN_EVENTS_TOOL_NAME}.${detail}`,
         );
     }
 
     const submitTurnEventsOutput = parseSubmitTurnEventsArgs(llmResponse.structuredOutput);
-    const memoryWriteCandidates = parseMemoryWriteCandidates(llmResponse);
+    const memoryWriteCandidates = submitTurnEventsOutput.memoryWriteCandidates ?? [];
     return {
         ...toSingleCharacterChatResult({
             submitTurnEventsOutput,
@@ -234,32 +241,6 @@ function parseSingleCharacterChatResponse(
         }),
         memoryWriteCandidates,
     };
-}
-
-function parseMemoryWriteCandidates(llmResponse: PersonaModelResponse): MemoryWriteCandidate[] {
-    const candidates: MemoryWriteCandidate[] = [];
-
-    for (const toolCall of llmResponse.toolCalls) {
-        if (toolCall.functionName !== SUBMIT_MEMORY_CANDIDATES_TOOL_NAME) {
-            continue;
-        }
-
-        // ModelToolCall.arguments is the contract-level parsed value: provider
-        // adapters are responsible for turning JSON-text payloads into objects
-        // before they reach the model-call layer. We can therefore feed it
-        // straight to Zod without re-handling the string case.
-        const parsed = SubmitMemoryCandidatesArgsSchema.safeParse(toolCall.arguments);
-        if (!parsed.success) {
-            // Batch 1: fail-soft on invalid candidate args. Detailed inspection
-            // can be done via prompt logs; we intentionally do not throw or
-            // surface a typed error to the chat-turn service.
-            continue;
-        }
-
-        candidates.push(...parsed.data.candidates);
-    }
-
-    return candidates;
 }
 
 function toSingleCharacterChatResult(input: {
