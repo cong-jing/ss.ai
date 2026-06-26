@@ -111,8 +111,9 @@ describe("persona-flow chat turn service", () => {
         const modelClient: ModelClient = {
             generate: async (input) => {
                 assert.equal(input.structuredOutputSchema?.jsonSchema?.name, "submit_turn_events");
-                assert.equal(input.tools, undefined);
-                assert.equal(input.toolChoice, undefined);
+                assert.equal(input.tools?.length, 1);
+                assert.equal(input.tools?.[0]?.name, "submit_memory_candidates");
+                assert.equal(input.toolChoice, "auto");
 
                 return {
                     structuredOutput: {
@@ -208,7 +209,8 @@ describe("persona-flow chat turn service", () => {
             }),
             generateStream: async (input, callbacks) => {
                 assert.equal(input.structuredOutputSchema?.jsonSchema?.name, "submit_turn_events");
-                assert.equal(input.tools, undefined);
+                assert.equal(input.tools?.length, 1);
+                assert.equal(input.tools?.[0]?.name, "submit_memory_candidates");
                 for (const fragment of fragments) {
                     callbacks?.onTextDelta?.(fragment);
                 }
@@ -347,5 +349,306 @@ describe("persona-flow chat turn service", () => {
         // Concatenated stream chunks should reproduce the same text, including
         // the boundary separator inserted when crossing replyText events.
         assert.equal(seenChunks.join(""), "alpha\nbeta\ngamma");
+    });
+
+    it("chatTurn logs memory write candidates after persisting the assistant turn", async () => {
+        const fixture = createTestFixture();
+        const base = createBaseData();
+        fixture.seed.character(base.character);
+        fixture.seed.conversation(base.conversation);
+        fixture.seed.actor(base.selfActor);
+        fixture.seed.actor(base.userActor);
+        fixture.seed.userProfile(base.profile);
+        seedModelRuntime(fixture, base.userId);
+
+        const modelClient: ModelClient = {
+            generate: async () => ({
+                structuredOutput: {
+                    events: [
+                        {
+                            type: "replyText",
+                            characterId: base.characterId,
+                            text: "hi",
+                        },
+                    ],
+                },
+                toolCalls: [
+                    {
+                        functionName: "submit_memory_candidates",
+                        arguments: {
+                            candidates: [
+                                {
+                                    text: "User said their name is Alice.",
+                                    scope: "user",
+                                    type: "fact",
+                                },
+                            ],
+                        },
+                    },
+                ],
+            }),
+            generateStream: async () => ({ output: "", toolCalls: [], completed: true }),
+            listModels: async () => [],
+        };
+
+        const infoLogs: Array<{ message: string; payload?: unknown }> = [];
+        const logger = {
+            debug: () => { },
+            verbose: () => { },
+            info: (message: string, payload?: unknown) => { infoLogs.push({ message, payload }); },
+            warn: () => { },
+            error: () => { },
+        };
+
+        const service = new PersonaFlowChatTurnService({
+            stores: fixture.stores,
+            modelClient,
+            logger,
+            promptLogger: { writePromptLog: async () => { } },
+        });
+
+        const result = await service.chatTurn({
+            userId: base.userId,
+            characterId: base.characterId,
+            conversationId: base.conversationId,
+            userMessageText: "hello",
+            senderActorId: base.userActorId,
+        });
+
+        const memoryLogs = infoLogs.filter(entry => entry.message === "persona-flow/memory: candidates logged");
+        assert.equal(memoryLogs.length, 1);
+        const payload = memoryLogs[0]?.payload as {
+            candidateCount: number;
+            assistantMessageId?: string;
+            userMessageId?: string;
+            modelCallPurpose?: string;
+            decision?: string;
+        };
+        assert.equal(payload.candidateCount, 1);
+        assert.equal(payload.assistantMessageId, result.assistantMessageId);
+        assert.equal(payload.userMessageId, result.userMessageId);
+        assert.equal(payload.modelCallPurpose, "chat.main");
+        assert.equal(payload.decision, "logged_only");
+    });
+
+    it("chatTurn does not emit memory log when there are no candidates", async () => {
+        const fixture = createTestFixture();
+        const base = createBaseData();
+        fixture.seed.character(base.character);
+        fixture.seed.conversation(base.conversation);
+        fixture.seed.actor(base.selfActor);
+        fixture.seed.actor(base.userActor);
+        fixture.seed.userProfile(base.profile);
+        seedModelRuntime(fixture, base.userId);
+
+        const modelClient: ModelClient = {
+            generate: async () => ({
+                structuredOutput: {
+                    events: [
+                        {
+                            type: "replyText",
+                            characterId: base.characterId,
+                            text: "hi",
+                        },
+                    ],
+                },
+                toolCalls: [],
+            }),
+            generateStream: async () => ({ output: "", toolCalls: [], completed: true }),
+            listModels: async () => [],
+        };
+
+        const infoLogs: string[] = [];
+        const logger = {
+            debug: () => { },
+            verbose: () => { },
+            info: (message: string) => { infoLogs.push(message); },
+            warn: () => { },
+            error: () => { },
+        };
+
+        const service = new PersonaFlowChatTurnService({
+            stores: fixture.stores,
+            modelClient,
+            logger,
+            promptLogger: { writePromptLog: async () => { } },
+        });
+
+        await service.chatTurn({
+            userId: base.userId,
+            characterId: base.characterId,
+            conversationId: base.conversationId,
+            userMessageText: "hello",
+            senderActorId: base.userActorId,
+        });
+
+        assert.equal(
+            infoLogs.filter(message => message === "persona-flow/memory: candidates logged").length,
+            0,
+        );
+    });
+
+    it("chatTurn still succeeds when memory candidate logging throws", async () => {
+        const fixture = createTestFixture();
+        const base = createBaseData();
+        fixture.seed.character(base.character);
+        fixture.seed.conversation(base.conversation);
+        fixture.seed.actor(base.selfActor);
+        fixture.seed.actor(base.userActor);
+        fixture.seed.userProfile(base.profile);
+        seedModelRuntime(fixture, base.userId);
+
+        const modelClient: ModelClient = {
+            generate: async () => ({
+                structuredOutput: {
+                    events: [
+                        {
+                            type: "replyText",
+                            characterId: base.characterId,
+                            text: "hi",
+                        },
+                    ],
+                },
+                toolCalls: [
+                    {
+                        functionName: "submit_memory_candidates",
+                        arguments: {
+                            candidates: [
+                                {
+                                    text: "Stable fact.",
+                                    scope: "user",
+                                    type: "fact",
+                                },
+                            ],
+                        },
+                    },
+                ],
+            }),
+            generateStream: async () => ({ output: "", toolCalls: [], completed: true }),
+            listModels: async () => [],
+        };
+
+        let warnCount = 0;
+        const logger = {
+            debug: () => { },
+            verbose: () => { },
+            info: () => {
+                throw new Error("synthetic logger failure");
+            },
+            warn: () => { warnCount += 1; },
+            error: () => { },
+        };
+
+        const service = new PersonaFlowChatTurnService({
+            stores: fixture.stores,
+            modelClient,
+            logger,
+            promptLogger: { writePromptLog: async () => { } },
+        });
+
+        const result = await service.chatTurn({
+            userId: base.userId,
+            characterId: base.characterId,
+            conversationId: base.conversationId,
+            userMessageText: "hello",
+            senderActorId: base.userActorId,
+        });
+
+        assert.equal(result.output, "hi");
+        assert.ok(result.assistantMessageId, "assistant turn should still be persisted");
+        assert.ok(warnCount >= 1, "logger.warn should be invoked when info logging fails");
+    });
+
+    it("streamTurn logs memory write candidates from final stream tool calls", async () => {
+        const fixture = createTestFixture();
+        const base = createBaseData();
+        fixture.seed.character(base.character);
+        fixture.seed.conversation(base.conversation);
+        fixture.seed.actor(base.selfActor);
+        fixture.seed.actor(base.userActor);
+        fixture.seed.userProfile(base.profile);
+        seedModelRuntime(fixture, base.userId);
+
+        const structuredObject = {
+            events: [
+                {
+                    type: "replyText",
+                    characterId: base.characterId,
+                    text: "hello",
+                },
+            ],
+        };
+        const fullJson = JSON.stringify(structuredObject);
+
+        const modelClient: ModelClient = {
+            generate: async () => ({ output: "", toolCalls: [] }),
+            generateStream: async (_input, callbacks) => {
+                callbacks?.onTextDelta?.(fullJson);
+                return {
+                    output: fullJson,
+                    structuredOutput: structuredObject,
+                    // Adapters are responsible for normalizing tool-call
+                    // arguments into a parsed value before they reach the
+                    // model-call layer. Provide an already-parsed object to
+                    // match the contract.
+                    toolCalls: [
+                        {
+                            functionName: "submit_memory_candidates",
+                            arguments: {
+                                candidates: [
+                                    {
+                                        text: "User mentioned a deadline next Friday.",
+                                        scope: "conversation",
+                                        type: "event",
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                    completed: true,
+                    finishReason: "stop",
+                };
+            },
+            listModels: async () => [],
+        };
+
+        const infoLogs: Array<{ message: string; payload?: unknown }> = [];
+        const logger = {
+            debug: () => { },
+            verbose: () => { },
+            info: (message: string, payload?: unknown) => { infoLogs.push({ message, payload }); },
+            warn: () => { },
+            error: () => { },
+        };
+
+        const service = new PersonaFlowChatTurnService({
+            stores: fixture.stores,
+            modelClient,
+            logger,
+            promptLogger: { writePromptLog: async () => { } },
+        });
+
+        const result = await service.streamTurn({
+            userId: base.userId,
+            characterId: base.characterId,
+            conversationId: base.conversationId,
+            userMessageText: "stream me",
+            senderActorId: base.userActorId,
+        });
+
+        const memoryLogs = infoLogs.filter(entry => entry.message === "persona-flow/memory: candidates logged");
+        assert.equal(memoryLogs.length, 1);
+        const payload = memoryLogs[0]?.payload as {
+            candidateCount: number;
+            assistantMessageId?: string;
+            userMessageId?: string;
+            modelCallPurpose?: string;
+            decision?: string;
+        };
+        assert.equal(payload.candidateCount, 1);
+        assert.equal(payload.assistantMessageId, result.assistantMessageId);
+        assert.equal(payload.userMessageId, result.userMessageId);
+        assert.equal(payload.modelCallPurpose, "chat.main");
+        assert.equal(payload.decision, "logged_only");
     });
 });

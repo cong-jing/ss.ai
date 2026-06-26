@@ -3,6 +3,7 @@ export * from "./modelCallPurpose.js";
 export * from "./errorCode.js";
 export * from "./interactionMode.js";
 export * from "./turnEvents.js";
+export * from "./memoryCandidates.js";
 export * from "./apis/chat.api.js";
 export * from "./apis/character.api.js";
 export * from "./apis/conversation.api.js";

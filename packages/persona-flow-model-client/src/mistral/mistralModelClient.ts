@@ -18,6 +18,7 @@ import {
     extractUsage,
     isMistralMessageContentEmpty,
     normalizeStreamToolCallDeltas,
+    normalizeToolCallArguments,
     toSdkMessages,
     type ToolCallAccumulator,
 } from "./messageTransforms.js";
@@ -303,13 +304,20 @@ export class MistralModelClient implements ModelAdapter {
 }
 
 function toModelToolCall(accumulator: ToolCallAccumulator): ModelToolCall {
+    // Mistral / OpenAI tool-call arguments are JSON text emitted as multiple
+    // fragments. Normalize the merged buffer to a parsed value here so the
+    // ModelToolCall contract delivers a structured `arguments` to downstream
+    // consumers, while still preserving the raw text under `argumentsRaw` for
+    // prompt logs / debugging when parsing fails.
+    const { parsed, raw } = normalizeToolCallArguments(
+        accumulator.argumentsBuffer ? accumulator.argumentsBuffer : undefined,
+    );
     return {
         ...(accumulator.id ? { id: accumulator.id } : {}),
         ...(accumulator.type ? { type: accumulator.type } : {}),
         ...(accumulator.index !== undefined ? { index: accumulator.index } : {}),
         ...(accumulator.functionName ? { functionName: accumulator.functionName } : {}),
-        // Mistral / OpenAI tool-call arguments are JSON text emitted as multiple
-        // fragments. Preserve the merged string so downstream callers can JSON.parse it.
-        ...(accumulator.argumentsBuffer ? { arguments: accumulator.argumentsBuffer } : {}),
+        ...(parsed !== undefined ? { arguments: parsed } : {}),
+        ...(raw !== undefined ? { argumentsRaw: raw } : {}),
     };
 }

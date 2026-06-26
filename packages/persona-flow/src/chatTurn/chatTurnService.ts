@@ -1,7 +1,8 @@
-import type { InteractionMode, ModelAssignmentMap, TurnEvent } from "@ss-ai/contracts";
+import type { InteractionMode, ModelAssignmentMap, ModelCallPurpose, TurnEvent } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
 import { prepareChatTurnContext } from "./chatTurnPreparation.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "./personaFlowLogger.js";
+import { logMemoryWriteCandidates } from "./memoryCandidateLogger.js";
 import type { ModelClient } from "../llm/modelClient.js";
 import type { SingleCharacterChatResult } from "../modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.js";
 import type { ModelCallRunResult } from "../modelCall/modelCall.js";
@@ -180,6 +181,17 @@ export class PersonaFlowChatTurnService {
             assistantMessageId,
         });
 
+        this.safeLogMemoryWriteCandidates({
+            requestId: callResult.llmResponse.requestId,
+            userId: input.userId,
+            characterId: input.characterId,
+            conversationId: input.conversationId,
+            userMessageId: prepared.userMessage.id,
+            assistantMessageId,
+            modelCallPurpose: "chat.main",
+            candidates: chatResult.memoryWriteCandidates,
+        });
+
         return {
             requestId: callResult.llmResponse.requestId,
             model: callResult.llmResponse.model,
@@ -312,6 +324,17 @@ export class PersonaFlowChatTurnService {
             assistantMessageId,
         });
 
+        this.safeLogMemoryWriteCandidates({
+            requestId: callResult.llmResponse.requestId,
+            userId: input.userId,
+            characterId: input.characterId,
+            conversationId: input.conversationId,
+            userMessageId: prepared.userMessage.id,
+            assistantMessageId,
+            modelCallPurpose: "chat.main",
+            candidates: chatResult.memoryWriteCandidates,
+        });
+
         return {
             requestId: callResult.llmResponse.requestId,
             model: callResult.llmResponse.model,
@@ -328,6 +351,30 @@ export class PersonaFlowChatTurnService {
         };
     }
 
+    private safeLogMemoryWriteCandidates(input: {
+        requestId: string;
+        userId: string;
+        characterId: string;
+        conversationId: string;
+        userMessageId: string;
+        assistantMessageId: string;
+        modelCallPurpose: ModelCallPurpose;
+        candidates: SingleCharacterChatResult["memoryWriteCandidates"];
+    }): void {
+        // Memory candidate logging is fail-soft by design: it must never roll
+        // back the persisted assistant turn or surface as a chat error. Batch 1
+        // only logs candidates; storage and downstream judging come later.
+        try {
+            logMemoryWriteCandidates(this.logger, input);
+        } catch (err) {
+            this.logger.warn("persona-flow/memory: candidate logging failed", {
+                requestId: input.requestId,
+                conversationId: input.conversationId,
+                error: err instanceof Error ? err.message : String(err),
+            });
+        }
+    }
+
 }
 
 function getSingleCharacterChatResult(callResult: ModelCallRunResult): SingleCharacterChatResult {
@@ -337,6 +384,7 @@ function getSingleCharacterChatResult(callResult: ModelCallRunResult): SingleCha
         || typeof parsedOutput !== "object"
         || typeof (parsedOutput as SingleCharacterChatResult).displayText !== "string"
         || !Array.isArray((parsedOutput as SingleCharacterChatResult).events)
+        || !Array.isArray((parsedOutput as SingleCharacterChatResult).memoryWriteCandidates)
     ) {
         throw new Error("Model call must return a parsed single-character chat result.");
     }

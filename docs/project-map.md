@@ -135,21 +135,25 @@ Responsibilities:
 - Owns chat-turn orchestration via `PersonaFlowChatTurnService`.
 - Resolves model runtime and calls the injected `ModelClient` via `ModelRuntime`.
 - Defines LLM client interfaces in `src/llm/modelClient.ts`, including provider-neutral tool definitions and tool choice.
-- Defines the `submit_turn_events` event schema and parses turn events returned by the model. `ModelToolDefinition` is retained for future query-style tool calls but is no longer the terminal output channel for `single_character_chat`.
+- Defines the `submit_turn_events` event schema and parses turn events returned by the model.
+- Defines the log-only `submit_memory_candidates` side-effect tool for batch-1 long-term memory candidate collection.
 
-Layering note: `PersonaFlowChatTurnService` orchestrates turns and persistence, but it should not parse provider tool calls or structured output directly. A registered `ModelCall<TParsedOutput>` owns prompt assembly, the requested output format (`structuredOutputSchema` or `tools`), and business-level parsing for its purpose. `ModelRuntime` stays provider/model/API-key focused and returns the raw provider-neutral `llmResponse` (`output` / `structuredOutput` / `toolCalls`). The model call then converts that response into `parsedOutput`; optional `parsedToolCalls` is reserved for intermediate tool results that callers need to inspect. For `single_character_chat`, the final result is produced via `response_format: json_schema` and folded into `parsedOutput` as `{ displayText, events }`, so it is not duplicated in `parsedToolCalls`.
+Layering note: `PersonaFlowChatTurnService` orchestrates turns and persistence, but it should not parse provider tool calls or structured output directly. A registered `ModelCall<TParsedOutput>` owns prompt assembly, the requested output format (`structuredOutputSchema` and/or `tools`), and business-level parsing for its purpose. `ModelRuntime` stays provider/model/API-key focused and returns the raw provider-neutral `llmResponse` (`output` / `structuredOutput` / `toolCalls`). The model call then converts that response into `parsedOutput`; optional `parsedToolCalls` is reserved for intermediate tool results that callers need to inspect. For `single_character_chat`, the final visible reply is produced via `response_format: json_schema` and folded into `parsedOutput` as `{ displayText, events }`, while memory candidates are parsed from the optional `submit_memory_candidates` tool call and folded into `parsedOutput.memoryWriteCandidates` for internal handling.
 
 Main chat flow:
 
 1. `PersonaFlowChatTurnService.chatTurn()` receives user, character, conversation, and message input.
 2. `prepareChatTurnContext()` validates character and conversation, resolves the sender actor, optionally appends the user message, and builds `PromptContext`.
 3. `resolveModelCall()` selects the registered handler for the requested purpose and interaction mode. Today that is `chat.main:single_character_chat`.
-4. The handler assembles LLM messages and requests structured output via `structuredOutputSchema` (built from the `submit_turn_events` event schema). `ModelRuntime.chat()` resolves provider and model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves the API key from `providerCredential`, then calls `ModelClient`.
+4. The handler assembles LLM messages, requests structured output via `structuredOutputSchema` (built from the `submit_turn_events` event schema), and includes the optional `submit_memory_candidates` side-effect tool. `ModelRuntime.chat()` resolves provider and model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves the API key from `providerCredential`, then calls `ModelClient`.
 5. The model call parses `llmResponse.structuredOutput` as `SubmitTurnEventsArgs` and returns a chat-specific `parsedOutput` containing normalized display text plus the ordered `TurnEvent[]`.
-6. `PersonaFlowChatTurnService` consumes that parsed result without knowing the underlying output format. The complete ordered turn event list is persisted with the assistant turn.
-7. Assistant turns are appended to the chat store as the conversation self actor via `appendAssistantTurn()`, which writes both the timeline message and the structured turn events.
+6. The model call also parses any `submit_memory_candidates` tool calls into `memoryWriteCandidates`. Batch 1 only logs these candidates after the assistant turn is persisted; it does not write durable memories, deduplicate, or judge candidates.
+7. `PersonaFlowChatTurnService` consumes the parsed result without knowing the underlying output format. The complete ordered turn event list is persisted with the assistant turn.
+8. Assistant turns are appended to the chat store as the conversation self actor via `appendAssistantTurn()`, which writes both the timeline message and the structured turn events.
 
 The `single_character_chat` streaming path has migrated to structured output: `/v1/chat/stream` lets the provider stream the JSON text channel token by token under `response_format: json_schema`. `createSubmitTurnEventsPreviewParser` incrementally parses that JSON and emits `chunk` (decoded `replyText.text` characters) and `turnEventPreview` SSE events; the final `done` event still carries the canonical `turnEvents`.
+
+Memory candidate collection intentionally does not affect streaming previews. Streamed text and `turnEventPreview` events still come only from the structured-output JSON text channel; memory candidates are consumed only from final tool calls after the model stream returns.
 
 Interaction modes are shared from `@ss-ai/contracts`, and the broader architecture is intended to support multiple modes over time. Today only `single_character_chat` is actually implemented for runtime use. Other modes already exist in contracts and UI as planned placeholders, but are not wired into prompt or model-call dispatch yet.
 
@@ -164,10 +168,13 @@ Responsibilities:
 - `INTERACTION_MODES`, `DEFAULT_INTERACTION_MODE`, and `InteractionMode`.
 - `MODEL_CALL_PURPOSES`, `ModelCallPurpose`, and model assignment types.
 - `TurnEvent`, `SubmitTurnEventsArgs`, `MessageKind`, and the Zod schemas that validate model-submitted turn events.
+- `MemoryWriteCandidate`, `SubmitMemoryCandidatesArgs`, memory scope/type literals, and the Zod schemas that validate model-submitted memory candidate tool calls.
 
 Model-call configuration uses `MODEL_CALL_PURPOSES` / `ModelCallPurpose` plus `ModelAssignment` / `ModelAssignmentMap`.
 
 Turn event pure types and literal constants live in `packages/contracts/src/turnEvents.ts`. Runtime Zod schemas live in `packages/contracts/src/turnEvents.schema.ts` and are exposed through the `@ss-ai/contracts/turnEvents.schema` sub-entry. This keeps the web app able to import pure contracts without pulling Zod into its main bundle. Adding a new event type should start in contracts, then flow outward through runtime schema validation, storage, prompt history assembly, and UI display.
+
+Memory candidate pure types live in `packages/contracts/src/memoryCandidates.ts`. Runtime Zod schemas live in `packages/contracts/src/memoryCandidates.schema.ts` and are exposed through the `@ss-ai/contracts/memoryCandidates.schema` sub-entry. Batch 1 uses these only for log-only candidate collection; durable memory storage is planned separately.
 
 ### `packages/persona-flow-sqlite`
 
@@ -385,14 +392,18 @@ Start here when reviewing or changing behavior:
 
 - `packages/contracts/src/modelCallPurpose.ts`
 - `packages/contracts/src/interactionMode.ts`
+- `packages/contracts/src/memoryCandidates.ts`
+- `packages/contracts/src/memoryCandidates.schema.ts`
 - `packages/contracts/src/turnEvents.ts`
 - `packages/contracts/src/turnEvents.schema.ts`
 - `packages/contracts/src/apis/*.api.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnService.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnPreparation.ts`
+- `packages/persona-flow/src/chatTurn/memoryCandidateLogger.ts`
 - `packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts`
 - `packages/persona-flow/src/chatTurn/events/turnEventText.ts`
 - `packages/persona-flow/src/llm/tools/modelTool.ts`
+- `packages/persona-flow/src/llm/tools/submitMemoryCandidatesTool.ts`
 - `packages/persona-flow/src/llm/tools/submitTurnEventsTool.ts`
 - `packages/persona-flow/src/modelCall/modelRuntime.ts`
 - `packages/persona-flow/src/modelCall/modelCallRegistry.ts`
@@ -412,12 +423,17 @@ Start here when reviewing or changing behavior:
 - `apps/web/src/panels/chat/turnEventDisplay.ts`
 - `apps/web/src/panels/chat/chatTypes.ts`
 - `apps/web/src/panels/userPreference/useUserPreferenceViewModel.ts`
+- `docs/memory-instruction.md`
+- `docs/memory-write-implementation.md`
+- `docs/memory-write-followups.md`
 
 ## Current Maintenance Notes
 
 - The `AI_FUNCTIONS` / `AiFunction` to `MODEL_CALL_PURPOSES` / `ModelCallPurpose` rename is complete in the contracts, web, server, and store layers.
 - The SQLite model assignment column is `model_assignments_json`; old model-assignment storage compatibility has been removed.
-- The single-character chat model output path now uses `response_format: json_schema` structured output (event schema still sourced from `submitTurnEventsTool.argsSchema`). The tool-call path is no longer the terminal output channel, but the `ModelToolDefinition` abstraction is kept for future intermediate query-style tools.
+- The single-character chat model output path now uses `response_format: json_schema` structured output for visible turn events (event schema still sourced from `submitTurnEventsTool.argsSchema`). The `submit_memory_candidates` tool is an optional, non-terminal side-effect channel for batch-1 memory candidate logging.
+- Batch-1 memory write support is log-only: candidates are parsed from model tool calls and logged after the assistant turn is persisted. No durable memory table, deduplication, update/archive behavior, judge model call, or memory read injection exists yet.
+- TODO before relying on memory candidate logs for real provider evaluation: parse `submit_memory_candidates` tool-call arguments when providers return them as JSON strings, not only when tests pass object arguments.
 - Chat-turn/model-call layering is intentionally split: chat services consume model-call `parsedOutput`, while each model call owns provider response parsing (structured output or tool arguments) for its purpose. This keeps future interaction modes free to use different output formats without changing chat-turn persistence code.
 - `messages` is now a timeline/display table with `kind` and `display_text`; structured assistant facts are stored in `turn_events`.
 - Prompt history currently reuses only `replyText` events from assistant turns. TODO: include selected latest non-text state, such as expression or scene atmosphere, once prompt format and UI needs are settled.

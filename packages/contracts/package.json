@@ -22,6 +22,11 @@
             "types": "./src/turnEvents.schema.ts",
             "import": "./dist/turnEvents.schema.js"
         },
+        "./memoryCandidates.schema": {
+            "source": "./src/memoryCandidates.schema.ts",
+            "types": "./src/memoryCandidates.schema.ts",
+            "import": "./dist/memoryCandidates.schema.js"
+        },
         "./apis/userPreference": {
             "source": "./src/apis/userPreference.api.ts",
             "types": "./src/apis/userPreference.api.ts",

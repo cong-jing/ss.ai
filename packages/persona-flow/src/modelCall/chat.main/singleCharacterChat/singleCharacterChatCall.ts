@@ -5,11 +5,13 @@ import type { ModelCall, ModelCallRunInput, ModelCallRunResult, ModelCallStreamR
 import type { PromptContext } from "../../../prompt/promptContext.js";
 import type { RenderedMessage } from "../../../prompt/promptTypes.js";
 import type { PromptLanguage } from "../../../stores/character/character.js";
-import type { SubmitTurnEventsArgs } from "@ss-ai/contracts";
+import type { MemoryWriteCandidate, SubmitTurnEventsArgs } from "@ss-ai/contracts";
+import { SubmitMemoryCandidatesArgsSchema } from "@ss-ai/contracts/memoryCandidates.schema";
 import { renderPromptTemplate } from "../../../prompt/renderPromptTemplate.js";
 import { getTurnEventsReplyText, mergeConsecutiveReplyTextEvents } from "../../../chatTurn/events/turnEventText.js";
 import { parseSubmitTurnEventsArgs } from "../../../chatTurn/events/submitTurnEventsParser.js";
 import { SUBMIT_TURN_EVENTS_TOOL_NAME, submitTurnEventsTool } from "../../../llm/tools/submitTurnEventsTool.js";
+import { SUBMIT_MEMORY_CANDIDATES_TOOL_NAME, submitMemoryCandidatesTool } from "../../../llm/tools/submitMemoryCandidatesTool.js";
 import type { StructuredOutputSchema } from "../../../llm/modelClient.js";
 import {
     createSubmitTurnEventsPreviewParser,
@@ -28,6 +30,7 @@ const SYSTEM_TEMPLATE_PATHS: Record<PromptLanguage, string> = {
 export type SingleCharacterChatResult = {
     displayText: string;
     events: SubmitTurnEventsArgs["events"];
+    memoryWriteCandidates: MemoryWriteCandidate[];
 };
 
 function normalizeSingleCharacterReply(
@@ -185,6 +188,8 @@ async function buildSingleCharacterChatRequest(input: ModelCallRunInput): Promis
         messages,
         modelCallPurpose: singleCharacterChatCall.purpose,
         structuredOutputSchema: buildSubmitTurnEventsStructuredOutputSchema(),
+        tools: [submitMemoryCandidatesTool],
+        toolChoice: "auto",
     };
 }
 
@@ -221,16 +226,46 @@ function parseSingleCharacterChatResponse(
     }
 
     const submitTurnEventsOutput = parseSubmitTurnEventsArgs(llmResponse.structuredOutput);
-    return toSingleCharacterChatResult({
-        submitTurnEventsOutput,
-        promptContext,
-    });
+    const memoryWriteCandidates = parseMemoryWriteCandidates(llmResponse);
+    return {
+        ...toSingleCharacterChatResult({
+            submitTurnEventsOutput,
+            promptContext,
+        }),
+        memoryWriteCandidates,
+    };
+}
+
+function parseMemoryWriteCandidates(llmResponse: PersonaModelResponse): MemoryWriteCandidate[] {
+    const candidates: MemoryWriteCandidate[] = [];
+
+    for (const toolCall of llmResponse.toolCalls) {
+        if (toolCall.functionName !== SUBMIT_MEMORY_CANDIDATES_TOOL_NAME) {
+            continue;
+        }
+
+        // ModelToolCall.arguments is the contract-level parsed value: provider
+        // adapters are responsible for turning JSON-text payloads into objects
+        // before they reach the model-call layer. We can therefore feed it
+        // straight to Zod without re-handling the string case.
+        const parsed = SubmitMemoryCandidatesArgsSchema.safeParse(toolCall.arguments);
+        if (!parsed.success) {
+            // Batch 1: fail-soft on invalid candidate args. Detailed inspection
+            // can be done via prompt logs; we intentionally do not throw or
+            // surface a typed error to the chat-turn service.
+            continue;
+        }
+
+        candidates.push(...parsed.data.candidates);
+    }
+
+    return candidates;
 }
 
 function toSingleCharacterChatResult(input: {
     submitTurnEventsOutput: SubmitTurnEventsArgs;
     promptContext: PromptContext;
-}): SingleCharacterChatResult {
+}): Omit<SingleCharacterChatResult, "memoryWriteCandidates"> {
     const selfActor = Array.from(input.promptContext.actorMap.values()).find(actor => actor.role === "self");
     // Streaming providers tend to emit one `replyText` per paragraph; collapse
     // any consecutive run with the same speaker into a single event so the

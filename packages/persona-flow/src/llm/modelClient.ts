@@ -27,7 +27,24 @@ export interface ModelToolCall {
     type?: string;
     index?: number;
     functionName?: string;
+    /**
+     * Parsed tool-call arguments value. Provider adapters MUST normalize
+     * provider-specific representations (e.g. Mistral/OpenAI send arguments as
+     * a JSON string) into a parsed JavaScript value before returning. Consumers
+     * (model calls, tool dispatchers) can therefore validate this directly with
+     * a Zod schema without re-handling string vs. object cases.
+     *
+     * Undefined when the provider sent no arguments, or when raw text was
+     * present but failed to JSON-parse (see {@link argumentsRaw}).
+     */
     arguments?: unknown;
+    /**
+     * Raw arguments text exactly as emitted by the provider, preserved even
+     * when JSON parsing fails so prompt logs and debug tools can inspect the
+     * original payload. Provider adapters set this when arguments arrived as a
+     * string; they may leave it unset when arguments were already structured.
+     */
+    argumentsRaw?: string;
 }
 
 /**
