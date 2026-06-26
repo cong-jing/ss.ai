@@ -132,4 +132,64 @@ describe("submitTurnEventsStreamPreview", () => {
         // Just reference `tail` so it isn't flagged as unused.
         void tail;
     });
+
+    it("ignores a top-level memoryWriteCandidates field placed before events", () => {
+        // Memory candidates are a fail-soft sibling of `events` inside the
+        // same structured-output JSON. They must never feed into the
+        // assistant display stream or appear as turnEventPreview entries.
+        const parser = createSubmitTurnEventsPreviewParser();
+        const args = JSON.stringify({
+            memoryWriteCandidates: [
+                { text: "User lives in Tokyo.", scope: "user", type: "fact" },
+            ],
+            events: [
+                { type: "replyText", characterId: "c1", text: "hello" },
+            ],
+        });
+
+        // Feed in small fragments to force partial reads across the
+        // memoryWriteCandidates boundary.
+        const chunks: string[] = [];
+        for (let i = 0; i < args.length; i += 5) chunks.push(args.slice(i, i + 5));
+
+        const events = pushAll(parser, chunks);
+
+        const deltas = events.filter(e => e.type === "replyTextDelta");
+        const text = deltas.map(d => (d as { text: string }).text).join("");
+        assert.equal(text, "hello", "candidate text must not leak into the display stream");
+
+        const previews = events.filter(e => e.type === "turnEventPreview");
+        assert.equal(previews.length, 1);
+        assert.equal((previews[0] as { eventIndex: number }).eventIndex, 0);
+        assert.equal((previews[0] as { event: { type: string } }).event.type, "replyText");
+    });
+
+    it("ignores a top-level memoryWriteCandidates field placed after events", () => {
+        const parser = createSubmitTurnEventsPreviewParser();
+        const args = JSON.stringify({
+            events: [
+                { type: "replyText", characterId: "c1", text: "hi" },
+                { type: "expression", characterId: "c1", expression: "happy" },
+            ],
+            memoryWriteCandidates: [
+                { text: "User likes hiking.", scope: "user", type: "preference" },
+                { text: "Conversation started 2026-06-26.", scope: "conversation", type: "event" },
+            ],
+        });
+
+        const chunks: string[] = [];
+        for (let i = 0; i < args.length; i += 7) chunks.push(args.slice(i, i + 7));
+
+        const events = pushAll(parser, chunks);
+
+        const deltas = events.filter(e => e.type === "replyTextDelta");
+        const text = deltas.map(d => (d as { text: string }).text).join("");
+        assert.equal(text, "hi");
+
+        const previews = events.filter(e => e.type === "turnEventPreview");
+        // Two events (replyText, expression). No candidate-derived previews.
+        assert.equal(previews.length, 2);
+        const eventTypes = previews.map(p => (p as { event: { type: string } }).event.type);
+        assert.deepEqual(eventTypes.sort(), ["expression", "replyText"]);
+    });
 });

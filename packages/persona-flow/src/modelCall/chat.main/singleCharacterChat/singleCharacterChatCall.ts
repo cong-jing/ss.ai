@@ -6,6 +6,7 @@ import type { PromptContext } from "../../../prompt/promptContext.js";
 import type { RenderedMessage } from "../../../prompt/promptTypes.js";
 import type { PromptLanguage } from "../../../stores/character/character.js";
 import type { MemoryWriteCandidate, SubmitTurnEventsArgs } from "@ss-ai/contracts";
+import { MemoryWriteCandidateSchema } from "@ss-ai/contracts/memoryCandidates.schema";
 import { renderPromptTemplate } from "../../../prompt/renderPromptTemplate.js";
 import { getTurnEventsReplyText, mergeConsecutiveReplyTextEvents } from "../../../chatTurn/events/turnEventText.js";
 import { parseSubmitTurnEventsArgs } from "../../../chatTurn/events/submitTurnEventsParser.js";
@@ -232,8 +233,9 @@ function parseSingleCharacterChatResponse(
         );
     }
 
-    const submitTurnEventsOutput = parseSubmitTurnEventsArgs(llmResponse.structuredOutput);
-    const memoryWriteCandidates = submitTurnEventsOutput.memoryWriteCandidates ?? [];
+    const { eventsOnly, rawCandidates } = splitStructuredOutput(llmResponse.structuredOutput);
+    const submitTurnEventsOutput = parseSubmitTurnEventsArgs(eventsOnly);
+    const memoryWriteCandidates = parseMemoryWriteCandidatesLeniently(rawCandidates);
     return {
         ...toSingleCharacterChatResult({
             submitTurnEventsOutput,
@@ -241,6 +243,52 @@ function parseSingleCharacterChatResponse(
         }),
         memoryWriteCandidates,
     };
+}
+
+/**
+ * Memory candidates live inside the same structured-output JSON as `events`,
+ * but they are a fail-soft side channel for batch 1: an invalid candidate
+ * must never block the visible chat turn. We split candidates out before
+ * strict events validation, then validate each candidate independently and
+ * drop any that fail.
+ */
+function splitStructuredOutput(structuredOutput: unknown): {
+    eventsOnly: unknown;
+    rawCandidates: unknown;
+} {
+    if (typeof structuredOutput === "string") {
+        // Provider adapters normally pre-parse JSON, but tolerate raw strings
+        // here so we don't crash on a malformed adapter; let strict events
+        // parsing raise the actual error.
+        try {
+            return splitStructuredOutput(JSON.parse(structuredOutput));
+        } catch {
+            return { eventsOnly: structuredOutput, rawCandidates: undefined };
+        }
+    }
+    if (structuredOutput === null || typeof structuredOutput !== "object") {
+        return { eventsOnly: structuredOutput, rawCandidates: undefined };
+    }
+    const { memoryWriteCandidates, ...rest } = structuredOutput as Record<string, unknown>;
+    return { eventsOnly: rest, rawCandidates: memoryWriteCandidates };
+}
+
+function parseMemoryWriteCandidatesLeniently(rawCandidates: unknown): MemoryWriteCandidate[] {
+    if (!Array.isArray(rawCandidates)) {
+        return [];
+    }
+    const validated: MemoryWriteCandidate[] = [];
+    for (const candidate of rawCandidates) {
+        const parsed = MemoryWriteCandidateSchema.safeParse(candidate);
+        if (parsed.success) {
+            validated.push(parsed.data);
+        }
+        // Invalid candidates are silently dropped in batch 1; prompt logs
+        // still contain the raw model output for diagnostics.
+    }
+    // The strict schema caps at 5; mirror that here so a misbehaving model
+    // cannot flood the log via the lenient path.
+    return validated.slice(0, 5);
 }
 
 function toSingleCharacterChatResult(input: {

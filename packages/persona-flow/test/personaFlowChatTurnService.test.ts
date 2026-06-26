@@ -627,4 +627,101 @@ describe("persona-flow chat turn service", () => {
         assert.equal(payload.modelCallPurpose, "chat.main");
         assert.equal(payload.decision, "logged_only");
     });
+
+    it("streamTurn keeps candidate text out of the live display stream when JSON is fragmented", async () => {
+        const fixture = createTestFixture();
+        const base = createBaseData();
+        fixture.seed.character(base.character);
+        fixture.seed.conversation(base.conversation);
+        fixture.seed.actor(base.selfActor);
+        fixture.seed.actor(base.userActor);
+        fixture.seed.userProfile(base.profile);
+        seedModelRuntime(fixture, base.userId);
+
+        // Place memoryWriteCandidates BEFORE events to maximally stress the
+        // stream preview parser: candidate text must never become a
+        // replyTextDelta even when it arrives first.
+        const structuredObject = {
+            memoryWriteCandidates: [
+                { text: "User mentioned a deadline next Friday.", scope: "conversation", type: "event" },
+            ],
+            events: [
+                { type: "replyText", characterId: base.characterId, text: "Got it." },
+            ],
+        };
+        const fullJson = JSON.stringify(structuredObject);
+        // Tiny fragments force partial reads across both the candidate and
+        // event boundaries.
+        const fragmentSize = 3;
+        const fragments: string[] = [];
+        for (let i = 0; i < fullJson.length; i += fragmentSize) {
+            fragments.push(fullJson.slice(i, i + fragmentSize));
+        }
+
+        const seenChunks: string[] = [];
+
+        const modelClient: ModelClient = {
+            generate: async () => ({ output: "", toolCalls: [] }),
+            generateStream: async (_input, callbacks) => {
+                for (const fragment of fragments) {
+                    callbacks?.onTextDelta?.(fragment);
+                }
+                return {
+                    output: fullJson,
+                    structuredOutput: structuredObject,
+                    toolCalls: [],
+                    completed: true,
+                    finishReason: "stop",
+                };
+            },
+            listModels: async () => [],
+        };
+
+        const infoLogs: Array<{ message: string; payload?: unknown }> = [];
+        const logger = {
+            debug: () => { },
+            verbose: () => { },
+            info: (message: string, payload?: unknown) => { infoLogs.push({ message, payload }); },
+            warn: () => { },
+            error: () => { },
+        };
+
+        const service = new PersonaFlowChatTurnService({
+            stores: fixture.stores,
+            modelClient,
+            logger,
+            promptLogger: { writePromptLog: async () => { } },
+        });
+
+        const result = await service.streamTurn({
+            userId: base.userId,
+            characterId: base.characterId,
+            conversationId: base.conversationId,
+            userMessageText: "stream me",
+            senderActorId: base.userActorId,
+            onChunk: (chunk) => {
+                seenChunks.push(chunk);
+            },
+        });
+
+        // Streamed display chunks should only reconstruct the assistant
+        // reply text, never the candidate text.
+        const joined = seenChunks.join("");
+        assert.equal(joined, "Got it.");
+        assert.ok(
+            !joined.includes("deadline"),
+            `candidate text leaked into the display stream: ${joined}`,
+        );
+
+        // Memory candidates should still be logged after the assistant
+        // message id exists.
+        const memoryLogs = infoLogs.filter(entry => entry.message === "persona-flow/memory: candidates logged");
+        assert.equal(memoryLogs.length, 1);
+        const payload = memoryLogs[0]?.payload as {
+            candidateCount: number;
+            assistantMessageId?: string;
+        };
+        assert.equal(payload.candidateCount, 1);
+        assert.equal(payload.assistantMessageId, result.assistantMessageId);
+    });
 });

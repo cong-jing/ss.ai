@@ -369,6 +369,30 @@ pnpm run test
 
 Persona-flow now reports 49 tests, model-client 12, with all suites green.
 
+### Test Coverage Review After Structured-Output Migration
+
+Review date: 2026-06-26.
+
+Context: memory candidates were moved out of the `submit_memory_candidates` tool-call side channel and into the top-level `memoryWriteCandidates` field of the same `submit_turn_events` structured-output JSON. This avoids the observed model/provider tendency to choose either tool calls or structured response content, but it changes the main risk profile: memory candidates now share the authoritative chat-turn schema with visible `events`.
+
+Existing useful coverage:
+
+- `packages/persona-flow/test/singleCharacterChatCall.test.ts` verifies that `single_character_chat` no longer registers tools, parses `memoryWriteCandidates` from structured output, returns an empty candidate list when the field is omitted, and rejects invalid candidate entries.
+- `packages/persona-flow/test/personaFlowChatTurnService.test.ts` verifies candidate logging after assistant-turn persistence for non-streaming and streaming calls, no log emission when candidates are omitted, and fail-soft behavior when logging itself throws.
+- `packages/persona-flow/test/memoryCandidatesSchema.test.ts` verifies candidate scope/type validation, optional fields, empty text rejection, and the max candidate count on `SubmitMemoryCandidatesArgsSchema`.
+- `packages/persona-flow-model-client/test/messageTransforms.test.ts` verifies structured-output extraction when provider content is parsed, content JSON fallback, empty content, and tool-only provider responses.
+
+Recommended missing tests:
+
+- Add direct `SubmitTurnEventsArgsSchema` coverage for `memoryWriteCandidates`: accepts `{ events, memoryWriteCandidates }`, accepts omitted `memoryWriteCandidates`, rejects more than 5 candidates, and rejects invalid candidates. Candidate-only schema tests are useful but do not fully cover the combined output contract that the model now emits.
+- Add `submitTurnEventsStreamPreview` tests proving extra top-level `memoryWriteCandidates` does not affect preview output. Cover both field orders: `memoryWriteCandidates` before `events`, and `events` before `memoryWriteCandidates`. The expected behavior is that only `events[].replyText.text` emits `replyTextDelta`, only valid `events[]` objects emit `turnEventPreview`, and candidate text never appears as streamed display text.
+- Add a chunked `streamTurn` service test where the final structured-output JSON includes `memoryWriteCandidates` and is delivered in fragments, not as one full `onTextDelta`. Assert that streamed chunks reconstruct only the assistant reply text, candidates are logged after the assistant message id exists, and candidate text is not mixed into the live display stream.
+- Add a dry-run/request assembly assertion that the rendered system prompt mentions `memoryWriteCandidates`, the request does not register `submit_memory_candidates`, and `toolChoice` remains undefined. This guards against accidentally reintroducing the old tool-call design.
+
+Open product decision for tests:
+
+- Current tests intentionally treat invalid `memoryWriteCandidates` as a full chat parse failure because candidates live inside the strict `SubmitTurnEventsArgsSchema`. If memory candidate collection should remain log-only and fail-soft, change this behavior: parse visible `events` authoritatively, validate `memoryWriteCandidates` separately with `safeParse`, drop or warn on invalid candidates, and update the invalid-candidate test to assert the reply still succeeds.
+
 ## Open Notes
 
 - The first prompt tuning target is under-saving versus over-saving. Since there is no judge in batch 1, the model should be conservative.
