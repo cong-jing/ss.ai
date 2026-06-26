@@ -52,6 +52,7 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}, op
             clearLogFileOnStart: false,
             includeSourceLocation: false,
             includeStackTrace: false,
+            logDatabaseSql: false,
         },
         runtimeFiles: {
             tempDir: path.join(tmpDir, "tmp"),

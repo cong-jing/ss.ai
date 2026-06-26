@@ -9,7 +9,8 @@
         "logFilePath": ".runtime/logs/ss-ai.log",
         "clearLogFileOnStart": false,
         "includeSourceLocation": true,
-        "includeStackTrace": false
+        "includeStackTrace": false,
+        "logDatabaseSql": false
     },
     "runtimeFiles": {
         "tempDir": ".runtime/temp",

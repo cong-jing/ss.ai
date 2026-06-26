@@ -29,6 +29,7 @@ export interface RuntimeConfig {
         clearLogFileOnStart: boolean;
         includeSourceLocation: boolean;
         includeStackTrace: boolean;
+        logDatabaseSql: boolean;
     };
     runtimeFiles: {
         tempDir: string;
@@ -88,6 +89,7 @@ interface RawConfig {
         clearLogFileOnStart?: boolean;
         includeSourceLocation?: boolean;
         includeStackTrace?: boolean;
+        logDatabaseSql?: boolean;
     };
     models?: Record<string, RawModelConfig>;
     defaultModelAssignments?: ModelAssignmentMap;
@@ -369,7 +371,8 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
             logFilePath: loggerFilePath,
             clearLogFileOnStart: fileConfig.logger?.clearLogFileOnStart ?? false,
             includeSourceLocation: fileConfig.logger?.includeSourceLocation ?? false,
-            includeStackTrace: fileConfig.logger?.includeStackTrace ?? false
+            includeStackTrace: fileConfig.logger?.includeStackTrace ?? false,
+            logDatabaseSql: fileConfig.logger?.logDatabaseSql ?? false,
         },
         runtimeFiles: {
             tempDir,

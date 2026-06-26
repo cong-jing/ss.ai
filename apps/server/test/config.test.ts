@@ -39,6 +39,7 @@ function createBaseConfig() {
             clearLogFileOnStart: false,
             includeSourceLocation: true,
             includeStackTrace: false,
+            logDatabaseSql: false,
         },
         runtimeFiles: {
             tempDir: ".runtime/temp",
@@ -129,6 +130,7 @@ describe("loadRuntimeConfig", () => {
         assert.equal(config.runtimeFiles.tempDir, path.join(runtimeHome, ".runtime/temp-dev"));
         assert.equal(config.runtimeFiles.userDataDir, path.join(runtimeHome, ".runtime/user-data-dev"));
         assert.equal(config.promptLog.filePath, path.join(runtimeHome, ".runtime/logs/dev.prompt.log"));
+        assert.equal(config.logger.logDatabaseSql, false);
         assert.equal(config.models["mistral.ai"].apiKey, "shared-key");
         assert.equal(config.defaultModelAssignments["chat.main"]?.model, "mistral-large-latest");
     });
@@ -160,6 +162,7 @@ describe("loadRuntimeConfig", () => {
             },
             logger: {
                 level: "debug",
+                logDatabaseSql: true,
             },
             runtimeFiles: {
                 userDataDir: ".runtime/user-data-local",
@@ -177,6 +180,7 @@ describe("loadRuntimeConfig", () => {
         assert.equal(config.http.port, 9200);
         assert.equal(config.logger.level, "debug");
         assert.equal(config.promptLog.enabled, false);
+        assert.equal(config.logger.logDatabaseSql, true);
         assert.equal(config.runtimeFiles.tempDir, path.join(runtimeHome, ".runtime/temp-staging"));
         assert.equal(config.runtimeFiles.userDataDir, path.join(runtimeHome, ".runtime/user-data-local"));
     });

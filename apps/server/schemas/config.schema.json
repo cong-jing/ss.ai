@@ -45,6 +45,9 @@
                 },
                 "includeStackTrace": {
                     "type": "boolean"
+                },
+                "logDatabaseSql": {
+                    "type": "boolean"
                 }
             }
         },
