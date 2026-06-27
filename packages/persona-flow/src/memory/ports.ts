@@ -152,6 +152,13 @@ export interface AppendMemoryDecisionInput {
 
 export interface ListMemoryDecisionsInput {
     userId: string;
+    /**
+     * Optional character bucket filter. Every decision row is
+     * already bound to one character world via its required
+     * `characterId`, so debug / admin callers can narrow a listing
+     * to "decisions made for character X" without post-filtering.
+     */
+    characterId?: string;
     candidateId?: string;
     decision?: MemoryDecisionKind | MemoryDecisionKind[];
     limit?: number;

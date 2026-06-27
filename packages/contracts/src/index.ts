@@ -10,3 +10,4 @@ export * from "./apis/conversation.api.js";
 export * from "./apis/userPreference.api.js";
 export * from "./apis/userProfile.api.js";
 export * from "./apis/auth.api.js";
+export * from "./apis/memory.api.js";

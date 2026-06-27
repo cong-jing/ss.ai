@@ -69,6 +69,9 @@ export class SQLiteMemoryDecisionStore implements MemoryDecisionStore {
 
     async listDecisions(input: ListMemoryDecisionsInput): Promise<MemoryDecisionRecord[]> {
         const conditions = [eq(memoryDecisions.userId, input.userId)];
+        if (input.characterId !== undefined) {
+            conditions.push(eq(memoryDecisions.characterId, input.characterId));
+        }
         if (input.candidateId !== undefined) {
             conditions.push(eq(memoryDecisions.candidateId, input.candidateId));
         }

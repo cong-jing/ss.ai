@@ -302,6 +302,7 @@ class InMemoryMemoryDecisionStore implements MemoryDecisionStore {
         const decisionFilter = toArray<MemoryDecisionKind>(input.decision);
         return this.records
             .filter((r) => r.userId === input.userId)
+            .filter((r) => input.characterId === undefined || r.characterId === input.characterId)
             .filter((r) => input.candidateId === undefined || r.candidateId === input.candidateId)
             .filter((r) => decisionFilter.length === 0 || decisionFilter.includes(r.decision))
             .slice(0, input.limit ?? Number.POSITIVE_INFINITY)

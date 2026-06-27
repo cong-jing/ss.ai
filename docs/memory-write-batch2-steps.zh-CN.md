@@ -517,13 +517,32 @@ sqlite3 <userData>/app.db "SELECT decision, reason, memory_id, similarity_json F
 
 ## Step 7: Debug API（contracts + server routes）
 
+### 设计思路
+
+Step 7 的目标不是做正式用户界面，而是给后续调参、排障和手工验收一个稳定的 HTTP 观察面。直接查 SQLite 很快，但它绕过了鉴权、query 语义、contracts 类型和线上部署路径；debug API 要验证的是“应用真实会暴露什么”。
+
+这一步刻意只做 list 型端点，不做修改型端点：
+
+- candidate / memory / decision 都是写入链路的观测对象，debug API 只读，避免调试工具反过来改变 memory 状态。
+- 三个端点都强制使用当前登录用户，不接受客户端传 `userId`，避免 debug 查询成为跨用户数据出口。
+- active memory 必须传 `characterId`。当前建模里一个 character 是一个世界，memory 不存在跨 character 共享；没有 `characterId` 的 memories 查询不是“更宽”，而是不知道应该看哪个世界。
+- memory decisions 的 `characterId` 是可选过滤条件。它支持按 character 世界排查，同时仍允许查看当前用户的全量 decision 流，用来排查候选在不同角色中的整体写入行为。
+- 默认 `limit = 100`、最大 `500`，防止 debug 页面或手工 curl 一次拉太多文本/JSON。
+- embedding 只返回 signature，不返回 raw vector。raw vector 很大，而且对列表页排查价值低；目前更需要知道 provider/model/dim/version 是否一致。
+- enum query 严格校验。无效 `status` / `scope` / `type` / `decision` 返回 400，而不是静默丢弃；否则 typo 会变成“取消过滤”，很容易误读 debug 结果。
+- `/v1/debug/memories` 默认只返回 `active`。底层 store 没有隐式 status 默认值，所以这个策略放在 route 层显式表达；需要看 archived 时传 `status=archived`。
+
+这一步还顺手补齐了 `MemoryDecisionStore.listDecisions({ characterId })`，因为 debug API 如果只能先按 user 全量读取再在 route 层过滤，会把 isolation 规则放错层，也会让 SQLite 无法利用 query 条件。
+
 ### 范围
 
 - `packages/contracts/src/apis/memory.api.ts`:
   - `ApiListMemoryCandidates`（GET `/v1/debug/memory-candidates`）
   - `ApiListMemories`（GET `/v1/debug/memories`）
   - `ApiListMemoryDecisions`（GET `/v1/debug/memory-decisions`）
-- `apps/server/src/http/memoryDebugRoutes.ts`: 实现这 3 个路由，强制 `userId = req.user.id`，`limit` 默认 100 上限 500
+- `apps/server/src/http/apis/memoryDebug.route.ts`: 实现这 3 个路由，强制 `userId = req.user.id`，`limit` 默认 100 上限 500
+- `packages/persona-flow/src/memory/ports.ts`: `ListMemoryDecisionsInput.characterId?: string`
+- `packages/persona-flow-sqlite/src/db/SQLiteMemoryDecisionStore.ts`: 支持按 `characterId` 查询 decision
 
 `ApiListMemoryDebugEvents` 留到 Step 8。
 
@@ -541,7 +560,10 @@ pnpm run build
 - 已登录 → 只返回当前用户数据（fixture 注入两个用户，断言隔离）
 - `limit` 默认 100、超过 500 被夹紧到 500
 - `conversationId` / `assistantMessageId` / `status` / `decision` 等过滤生效
-- 现有 80 条 server 测试不回归
+- `status` / `scope` / `type` / `decision` 等 enum query 无效时返回 400
+- `/v1/debug/memories` 不传 status 时只返回 active；显式 `status=archived` 才看 archived
+- SQLite decision store 直接覆盖 `characterId` 过滤，避免只在 server stub 里验证
+- 现有 server 测试不回归
 
 ### 手工可观察验收
 
@@ -550,6 +572,7 @@ pnpm run build
 curl -s "http://localhost:8999/v1/debug/memory-candidates?limit=20" | jq .
 curl -s "http://localhost:8999/v1/debug/memories?characterId=c1" | jq .
 curl -s "http://localhost:8999/v1/debug/memory-decisions?decision=needs_judge" | jq .
+curl -i "http://localhost:8999/v1/debug/memories?characterId=c1&status=archivd"
 ```
 
 **验收点**：
@@ -557,6 +580,7 @@ curl -s "http://localhost:8999/v1/debug/memory-decisions?decision=needs_judge" |
 - 数据和 Step 6 用 sqlite3 看到的一致
 - 不登录请求被拦
 - 用另一个用户 token 调，看不到本用户的数据
+- 无效 enum query 返回 400 + `memory.debug.invalid_enum_value`
 
 ---
 
@@ -604,7 +628,7 @@ pnpm run test
 
 ## 节奏建议
 
-最小可演示集合（如果时间紧）：**Step 1 + 2 + 3 + 4 + 5 + 6**。可以跳过 Step 7 直接 `sqlite3` 看表。Step 3 不建议跳过，因为它能最早暴露 provider/model/API shape 问题。
+最小可演示集合（如果时间紧）：**Step 1 + 2 + 3 + 4 + 5 + 6**。可以跳过 Step 7 直接 `sqlite3` 看表，但一旦要验证鉴权、character 隔离、HTTP contracts 或线上部署路径，Step 7 比手工查库更可靠。Step 3 不建议跳过，因为它能最早暴露 provider/model/API shape 问题。
 
 完整建议路径：**Step 1 → 2 → 3 → 4 → 5 → 6 → 7**，Step 8 按需。
 

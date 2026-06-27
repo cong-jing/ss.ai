@@ -46,11 +46,19 @@ export const USER_PREFERENCE_ERROR_CODES = [
 
 export type UserPreferenceErrorCode = (typeof USER_PREFERENCE_ERROR_CODES)[number];
 
+export const MEMORY_DEBUG_ERROR_CODES = [
+    "memory.debug.characterId_required",
+    "memory.debug.invalid_enum_value",
+] as const;
+
+export type MemoryDebugErrorCode = (typeof MEMORY_DEBUG_ERROR_CODES)[number];
+
 export type AppErrorCode =
     | AuthErrorCode
     | CharacterErrorCode
     | ConversationErrorCode
     | ConversationActorErrorCode
-    | UserPreferenceErrorCode;
+    | UserPreferenceErrorCode
+    | MemoryDebugErrorCode;
 
 export type ErrorParams = Record<string, string | number>;

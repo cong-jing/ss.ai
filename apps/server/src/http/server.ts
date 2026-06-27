@@ -9,6 +9,7 @@ import { registerUserProfileRoutes } from "./apis/userProfile.route.js";
 import { registerCharacterRoutes } from "./apis/character.route.js";
 import { registerConversationRoutes } from "./apis/conversation.route.js";
 import { registerConversationActorRoutes } from "./apis/conversationActor.route.js";
+import { registerMemoryDebugRoutes } from "./apis/memoryDebug.route.js";
 import {
     openDatabase,
     createSqliteStores,
@@ -122,6 +123,7 @@ export function createHttpServer(config: RuntimeConfig, overrides?: ServerStoreO
     registerCharacterRoutes(apiContext);
     registerConversationRoutes(apiContext);
     registerConversationActorRoutes(apiContext);
+    registerMemoryDebugRoutes(apiContext);
 
     (app as typeof app & { closeDatabase?: () => void }).closeDatabase = () => {
         (stores as AppStores & { close?: () => void }).close?.();

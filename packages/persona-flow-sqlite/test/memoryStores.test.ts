@@ -622,6 +622,27 @@ describe("SQLiteMemoryDecisionStore", () => {
         });
         assert.equal(ignored.length, 2);
     });
+
+    it("filters by characterId so the same user's other character worlds stay isolated", async () => {
+        const { decisionStore } = freshStores();
+        const base = {
+            userId: "user-A",
+            policyVersion: 1,
+            similarity: [],
+            createdAt: "2026-02-04T00:00:00.000Z",
+        } as const;
+        await decisionStore.appendDecision({ ...base, characterId: "char-A", candidateId: "cA", decision: "create", memoryId: "mA" });
+        await decisionStore.appendDecision({ ...base, characterId: "char-B", candidateId: "cB", decision: "create", memoryId: "mB" });
+
+        const onlyA = await decisionStore.listDecisions({ userId: "user-A", characterId: "char-A" });
+        assert.equal(onlyA.length, 1);
+        assert.equal(onlyA[0]!.characterId, "char-A");
+        assert.equal(onlyA[0]!.candidateId, "cA");
+
+        // Sanity: without the filter both rows still come back.
+        const both = await decisionStore.listDecisions({ userId: "user-A" });
+        assert.equal(both.length, 2);
+    });
 });
 
 // ---------- corrupt JSON ----------

@@ -1,8 +1,8 @@
 # Memory 模块实现说明
 
-本文档记录当前长期记忆写入原型的代码边界和函数职责。它描述的是截至 Step 6 的实际实现，不是最终目标状态。
+本文档记录当前长期记忆写入原型的代码边界和函数职责。它描述的是截至 Step 7 的实际实现，不是最终目标状态。
 
-当前状态一句话：聊天模型已经能在 structured output 中产生 `memoryWriteCandidates`，`packages/persona-flow/src/memory/**` 已经具备候选记录、embedding 相似度判断和提交决策的核心服务，对应的 SQLite stores 已经落在 core `app.db`，并且已经端到端接入 chat turn —— 默认配置下每条带候选的对话都会写入 `memory_candidates` / `memories` / `memory_decisions` 三张表（fail-soft）；debug API 与回读 prompt 仍在后续 step。
+当前状态一句话：聊天模型已经能在 structured output 中产生 `memoryWriteCandidates`，`packages/persona-flow/src/memory/**` 已经具备候选记录、embedding 相似度判断和提交决策的核心服务，对应的 SQLite stores 已经落在 core `app.db`，并且已经端到端接入 chat turn —— 默认配置下每条带候选的对话都会写入 `memory_candidates` / `memories` / `memory_decisions` 三张表（fail-soft）；Step 7 已提供只读 debug API 查询 candidates、active memories 和 decisions，回读 prompt 仍在后续 step。
 
 ## 当前边界
 
@@ -87,7 +87,7 @@ Step 6 完成后，`PersonaFlowChatTurnService.chatTurn()` / `streamTurn()` 在�
   - `saveMemoryEmbedding()`：给 memory 回写 embedding，预留能力。
 - `MemoryDecisionStore`
   - `appendDecision()`：写入 candidate 的处理结果。
-  - `listDecisions()`：用于后续 debug API。
+  - `listDecisions()`：用于 debug API，可按 user、character、candidate、decision kind 查询。
 - `MemoryEmbeddingProvider`
   - `embed()`：把文本变成 `MemoryEmbedResult`。
 - `MemoryClock` / `MemoryIdGenerator` / `MemoryLogger`
@@ -444,7 +444,7 @@ pnpm tsx --conditions=source packages/persona-flow-model-client/mistral-embed-si
 
 ## 当前未完成事项
 
-- 还没有 debug API（Step 7 范围）。
 - active memories 还没有读回 prompt。
+- 还没有 `memory_debug_events` 表和更细粒度的判定过程 API（Step 8 范围）。
 - `createMemory + finalize` 的一致性边界仍记为已知 TODO；当前实现里两次写入不在同一 transaction，详见 `docs/todo.md`。
 - `memory.embed` 模型在设置页的静态 availableModels 列表中需要保持可选，否则 effective assignment 可能不在下拉选项里。
