@@ -67,6 +67,7 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}, op
         defaultModelAssignments: options.defaultModelAssignments ?? {},
         agent: { timeoutMs: 30000, maxRetries: 2 },
         promptLog: { enabled: false, filePath: "" },
+        memory: { enabled: true, immediateCommitEnabled: true },
         auth: {
             mode: "default-user",
             defaultUserId: "default",

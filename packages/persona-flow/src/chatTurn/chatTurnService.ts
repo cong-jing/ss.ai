@@ -9,6 +9,27 @@ import type { ModelCallRunResult } from "../modelCall/modelCall.js";
 import { resolveModelCall } from "../modelCall/modelCallRegistry.js";
 import { ModelRuntime } from "../modelCall/modelRuntime.js";
 import type { SubmitTurnEventsTurnEventPreview } from "./events/submitTurnEventsStreamPreview.js";
+import type { MemoryCandidateRecorder } from "../memory/candidateRecorder.js";
+import type { MemoryCommitService } from "../memory/commitService.js";
+import type { MemoryFeatureConfig } from "../memory/featureConfig.js";
+import { DEFAULT_MEMORY_FEATURE_CONFIG } from "../memory/featureConfig.js";
+
+/**
+ * Optional bundle of memory write deps. When omitted the chat turn
+ * service falls back to Batch 1 behaviour (only the candidate INFO
+ * log is emitted; nothing is persisted). The server boot wires the
+ * full bundle in production; many unit tests stay simpler by leaving
+ * it undefined.
+ */
+export interface PersonaFlowChatTurnMemoryDeps {
+    recorder: MemoryCandidateRecorder;
+    commitService: MemoryCommitService;
+    /**
+     * Runtime toggles. Defaults to `DEFAULT_MEMORY_FEATURE_CONFIG`
+     * (everything on) when omitted.
+     */
+    config?: MemoryFeatureConfig;
+}
 
 export interface PersonaFlowChatTurnServiceDependencies {
     stores: AppStores;
@@ -17,6 +38,12 @@ export interface PersonaFlowChatTurnServiceDependencies {
     modelClient: ModelClient;
     defaultModelAssignments?: ModelAssignmentMap;
     defaultProviderApiKeys?: Record<string, string>;
+    /**
+     * Memory write pipeline. Optional so legacy callers and many unit
+     * tests keep working without rewiring; production server boot
+     * always supplies it.
+     */
+    memory?: PersonaFlowChatTurnMemoryDeps;
 }
 
 export interface PersonaChatTurnRequest {
@@ -60,6 +87,7 @@ export interface PersonaStreamTurnRequest {
 export class PersonaFlowChatTurnService {
     private readonly logger: PersonaFlowLogger;
     private readonly modelRuntime: ModelRuntime;
+    private readonly memoryFeatureConfig: MemoryFeatureConfig;
 
     constructor(private readonly deps: PersonaFlowChatTurnServiceDependencies) {
         this.logger = deps.logger ?? createNoopPersonaFlowLogger();
@@ -71,6 +99,7 @@ export class PersonaFlowChatTurnService {
             defaultModelAssignments: deps.defaultModelAssignments,
             defaultProviderApiKeys: deps.defaultProviderApiKeys,
         });
+        this.memoryFeatureConfig = deps.memory?.config ?? DEFAULT_MEMORY_FEATURE_CONFIG;
     }
 
     async dryRunTurn(input: PersonaDryRunTurnRequest): Promise<{ messages: Array<{ role: "system" | "user" | "assistant"; content: string }> }> {
@@ -181,7 +210,7 @@ export class PersonaFlowChatTurnService {
             assistantMessageId,
         });
 
-        this.safeLogMemoryWriteCandidates({
+        await this.safeHandleMemoryWriteCandidates({
             requestId: callResult.llmResponse.requestId,
             userId: input.userId,
             characterId: input.characterId,
@@ -324,7 +353,7 @@ export class PersonaFlowChatTurnService {
             assistantMessageId,
         });
 
-        this.safeLogMemoryWriteCandidates({
+        await this.safeHandleMemoryWriteCandidates({
             requestId: callResult.llmResponse.requestId,
             userId: input.userId,
             characterId: input.characterId,
@@ -351,7 +380,7 @@ export class PersonaFlowChatTurnService {
         };
     }
 
-    private safeLogMemoryWriteCandidates(input: {
+    private async safeHandleMemoryWriteCandidates(input: {
         requestId: string;
         userId: string;
         characterId: string;
@@ -360,14 +389,64 @@ export class PersonaFlowChatTurnService {
         assistantMessageId: string;
         modelCallPurpose: ModelCallPurpose;
         candidates: SingleCharacterChatResult["memoryWriteCandidates"];
-    }): void {
-        // Memory candidate logging is fail-soft by design: it must never roll
-        // back the persisted assistant turn or surface as a chat error. Batch 1
-        // only logs candidates; storage and downstream judging come later.
+    }): Promise<void> {
+        // The whole memory pipeline is fail-soft by design: it must never
+        // roll back the persisted assistant turn or surface as a chat error.
+        // We keep the Batch 1 INFO summary line as the primary observability
+        // sink (so dashboards / log queries still see "candidates logged"
+        // even when storage is disabled or fails), then layer the Batch 2
+        // recorder + commit on top when the deps are wired.
         try {
             logMemoryWriteCandidates(this.logger, input);
         } catch (err) {
             this.logger.warn("persona-flow/memory: candidate logging failed", {
+                requestId: input.requestId,
+                conversationId: input.conversationId,
+                error: err instanceof Error ? err.message : String(err),
+            });
+        }
+
+        const memory = this.deps.memory;
+        if (!memory) {
+            return;
+        }
+        if (!this.memoryFeatureConfig.enabled) {
+            return;
+        }
+        if (input.candidates.length === 0) {
+            return;
+        }
+
+        try {
+            const recordResult = await memory.recorder.recordCandidates({
+                source: {
+                    userId: input.userId,
+                    characterId: input.characterId,
+                    conversationId: input.conversationId,
+                    userMessageId: input.userMessageId,
+                    assistantMessageId: input.assistantMessageId,
+                    requestId: input.requestId,
+                    modelCallPurpose: input.modelCallPurpose,
+                },
+                candidates: input.candidates,
+            });
+
+            if (!this.memoryFeatureConfig.immediateCommitEnabled) {
+                return;
+            }
+            if (recordResult.accepted.length === 0) {
+                return;
+            }
+
+            await memory.commitService.commitCandidates({
+                candidates: recordResult.accepted,
+            });
+        } catch (err) {
+            // Recorder + commit both already isolate per-candidate errors and
+            // are documented not to throw on normal failures; this catch only
+            // fires on programmer bugs or store / embedding-provider
+            // exceptions that escaped their internal handling.
+            this.logger.warn("persona-flow/memory: write pipeline failed", {
                 requestId: input.requestId,
                 conversationId: input.conversationId,
                 error: err instanceof Error ? err.message : String(err),

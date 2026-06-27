@@ -6,6 +6,7 @@ import type { ErrorObject, ValidateFunction } from "ajv";
 import type { LogLevel } from "@ss-ai/persona-flow-logger";
 import type { ModelAssignmentMap } from "@ss-ai/contracts";
 import { MODEL_CALL_PURPOSE_CATEGORIES, type ModelCallPurpose } from "@ss-ai/contracts";
+import { DEFAULT_MEMORY_FEATURE_CONFIG, type MemoryFeatureConfig } from "@ss-ai/persona-flow";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(moduleDir, "..", "..");
@@ -58,6 +59,7 @@ export interface RuntimeConfig {
         enabled: boolean;
         filePath: string;
     };
+    memory: MemoryFeatureConfig;
     auth: {
         mode: "default-user" | "local-password";
         defaultUserId: string;
@@ -120,6 +122,10 @@ interface RawConfig {
     promptLog?: {
         enabled?: boolean;
         filePath?: string;
+    };
+    memory?: {
+        enabled?: boolean;
+        immediateCommitEnabled?: boolean;
     };
     auth?: {
         mode?: "default-user" | "local-password";
@@ -445,6 +451,11 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
         promptLog: {
             enabled: fileConfig.promptLog?.enabled ?? false,
             filePath: promptLogFilePath,
+        },
+        memory: {
+            enabled: fileConfig.memory?.enabled ?? DEFAULT_MEMORY_FEATURE_CONFIG.enabled,
+            immediateCommitEnabled: fileConfig.memory?.immediateCommitEnabled
+                ?? DEFAULT_MEMORY_FEATURE_CONFIG.immediateCommitEnabled,
         },
         auth: {
             mode: authMode,

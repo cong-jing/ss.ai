@@ -14,3 +14,4 @@ export * from "./similarity.js";
 export * from "./decisionPolicy.js";
 export * from "./candidateRecorder.js";
 export * from "./commitService.js";
+export * from "./featureConfig.js";

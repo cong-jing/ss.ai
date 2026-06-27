@@ -432,7 +432,7 @@ pnpm tsx packages/persona-flow-sqlite/scripts/try-memory-store.mts
 
 ---
 
-## Step 6: Chat Turn 集成（端到端）
+## Step 6: Chat Turn 集成（端到端） ✅
 
 ### 范围
 
@@ -469,13 +469,12 @@ pnpm run dev:server
 pnpm run dev:web
 ```
 
-在前端发送一条诱导性消息："我喜欢玩游戏，帮我记住"。然后：
+在前端发送一条诱导性消息："我喜欢玩游戏，帮我记住"。然后查询 core `app.db`（不再是 character DB —— 见 Step 5 设计决策）：
 
 ```bash
-# 找到对应 character DB 路径（看 config）
-sqlite3 <character.db> "SELECT id, scope, type, text, status FROM memory_candidates ORDER BY created_at DESC LIMIT 5"
-sqlite3 <character.db> "SELECT id, scope, type, text, importance FROM memories ORDER BY created_at DESC LIMIT 5"
-sqlite3 <character.db> "SELECT decision, reason, memory_id, similarity_json FROM memory_decisions ORDER BY created_at DESC LIMIT 5"
+sqlite3 <userData>/app.db "SELECT id, scope, type, text, status FROM memory_candidates ORDER BY created_at DESC LIMIT 5"
+sqlite3 <userData>/app.db "SELECT id, scope, type, text, importance FROM memories ORDER BY created_at DESC LIMIT 5"
+sqlite3 <userData>/app.db "SELECT decision, reason, memory_id, similarity_json FROM memory_decisions ORDER BY created_at DESC LIMIT 5"
 ```
 
 **验收点**：
@@ -485,6 +484,34 @@ sqlite3 <character.db> "SELECT decision, reason, memory_id, similarity_json FROM
 - 服务器日志能看到完整 verbose stage 链
 - 再发一条相似消息，验证第二条进 `needs_judge`、`memories` 表没增加新行
 - 把 `config.local.json` 里 `memory.enabled` 设为 false，重启，再发消息：上述三个表不变化
+
+### 实施纪要 (2026-06)
+
+- 新增 `packages/persona-flow/src/memory/featureConfig.ts`：`MemoryFeatureConfig` + `DEFAULT_MEMORY_FEATURE_CONFIG`，从 `@ss-ai/persona-flow` 包根 re-export。
+- `PersonaFlowChatTurnServiceDependencies` 新增可选 `memory?: PersonaFlowChatTurnMemoryDeps`（包含 `recorder` / `commitService` / 可选 `config`）。未提供时回退到 Batch 1 仅日志的行为，保持向后兼容。
+- `chatTurn()` 与 `streamTurn()` 都把原先的 `safeLogMemoryWriteCandidates(...)` 替换为 `await this.safeHandleMemoryWriteCandidates(...)`：
+  1. **总是**先调用 `logMemoryWriteCandidates`（Batch 1 INFO 行），保证可观测性不下降。
+  2. 没装 memory deps 或 `enabled === false` → 跳出，不调用 recorder/commit。
+  3. 没有候选 → 跳出。
+  4. 调 `recorder.recordCandidates(...)`，再按 `immediateCommitEnabled` 决定是否调 `commitService.commitCandidates(...)`。
+  5. 整段 `try/catch`，任何异常只 WARN 日志，不会让 chat turn 失败。
+- 服务端 `RuntimeConfig.memory` 字段类型直接复用 persona-flow 导出的 `MemoryFeatureConfig`；新增 `apps/server/config/config.default.json` 的 `"memory"` 段（默认全开）、扩展 `apps/server/schemas/config.schema.json`。
+- 服务端 `apps/server/src/http/apis/chat/chatUtil.ts` 在原有 `DefaultModelClient` 之外，构造 `ModelClientEmbeddingProvider`、`MemoryCandidateRecorder`、`MemoryCommitService`，把它们 + `context.config.memory` 一起传给 `PersonaFlowChatTurnService`。memory 服务复用 chat 用的同一份 `defaultModelAssignments` / `defaultProviderApiKeys` —— embedding 走 `memory.embed` purpose，与 chat 的 provider 解析路径一致。
+- 测试：新增 `packages/persona-flow/test/personaFlowChatTurnMemoryIntegration.test.ts`（7 条），覆盖：
+  - 默认配置下 recorder + commit 都执行，`memory_candidates`/`memories`/`memory_decisions` 三表都被写入。
+  - `immediateCommitEnabled = false` 时只 record 不 commit。
+  - `enabled = false` 时 recorder/commit 都不调，但 Batch 1 INFO 行仍然输出。
+  - 没有候选时两步都不调。
+  - recorder 抛错 / commit 抛错 → chat 仍返回成功 + WARN `persona-flow/memory: write pipeline failed`。
+  - streamTurn 也跑完整 pipeline。
+- 全仓库测试：312 通过（persona-flow 135 / qq-bot 8 / model-client 31 / sqlite 52 / server 86）。
+
+### 设计决策
+
+- **Batch 1 INFO 行始终保留**：原本想用 commit service 的 stage 日志完全取代它，但那会让一直依赖 `persona-flow/memory: candidates logged` 的运维查询失效。改为"两层并存"：Batch 1 是高层摘要，commit service 的 `memory.commit.*` 是细粒度链路。Disable memory 时只关 Batch 2，summary 行还在。
+- **memory deps 是可选的 (`memory?:`)**：很多 persona-flow 单元测试不关心 memory 流程，让 deps 必填会强迫每个测试都 wire fake stores + recorder + commit service。可选并默认回退到 Batch 1 是最低侵入式的设计。
+- **服务端构造放在 `chatUtil.ts` 而不是 `composeStores`**：memory pipeline 依赖 `modelClient` + `defaultModelAssignments`，而这两个本来就在 `chatUtil.ts` 里组装。挪到 `composeStores` 反而要把 model 相关参数也搬过去。等 Step 7 debug API 出现独立路由时再看是否值得抽提。
+- **`MemoryFeatureConfig` 类型放在 persona-flow 而不是 server**：是因为 chat turn service 是 persona-flow 的入口点；server 只是它的一个 consumer。把类型放 persona-flow 让 qq-bot 等其它 consumer 直接复用。
 
 ---
 

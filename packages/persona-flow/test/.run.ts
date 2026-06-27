@@ -6,6 +6,7 @@ import "./memoryDecisionPolicy.test.js";
 import "./memorySimilarity.test.js";
 import "./memoryTextNormalization.test.js";
 import "./modelClientEmbeddingProvider.test.js";
+import "./personaFlowChatTurnMemoryIntegration.test.js";
 import "./personaFlowChatTurnService.test.js";
 import "./personaFlowModelService.test.js";
 import "./promptViewModel.test.js";

@@ -87,6 +87,18 @@
                 }
             }
         },
+        "memory": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "immediateCommitEnabled": {
+                    "type": "boolean"
+                }
+            }
+        },
         "auth": {
             "type": "object",
             "additionalProperties": false,

@@ -1,8 +1,8 @@
 # Memory 模块实现说明
 
-本文档记录当前长期记忆写入原型的代码边界和函数职责。它描述的是截至 Step 4 的实际实现，不是最终目标状态。
+本文档记录当前长期记忆写入原型的代码边界和函数职责。它描述的是截至 Step 6 的实际实现，不是最终目标状态。
 
-当前状态一句话：聊天模型已经能在 structured output 中产生 `memoryWriteCandidates`，`packages/persona-flow/src/memory/**` 已经具备候选记录、embedding 相似度判断和提交决策的核心服务；但这些 core services 还没有接入 SQLite，也还没有接入 chat turn 端到端写表流程。
+当前状态一句话：聊天模型已经能在 structured output 中产生 `memoryWriteCandidates`，`packages/persona-flow/src/memory/**` 已经具备候选记录、embedding 相似度判断和提交决策的核心服务，对应的 SQLite stores 已经落在 core `app.db`，并且已经端到端接入 chat turn —— 默认配置下每条带候选的对话都会写入 `memory_candidates` / `memories` / `memory_decisions` 三张表（fail-soft）；debug API 与回读 prompt 仍在后续 step。
 
 ## 当前边界
 
@@ -24,7 +24,9 @@
 
 Batch 1 后，`single_character_chat` 的 structured output schema 中包含顶层 `memoryWriteCandidates` 字段。候选记忆不是可见回复，也不参与 streaming preview。
 
-当前 chat turn 里，候选仍主要走 log-only 行为；Step 4 的 recorder/commit service 已经实现并测试，但还未接入 chat turn + SQLite。端到端接入会在后续 Step 5/6 完成。
+Step 6 完成后，`PersonaFlowChatTurnService.chatTurn()` / `streamTurn()` 在持久化 assistant turn 后调用 `safeHandleMemoryWriteCandidates(...)`：先保留 Batch 1 的 INFO 摘要行（`persona-flow/memory: candidates logged`），再按 `MemoryFeatureConfig` 决定是否调用 `MemoryCandidateRecorder` + `MemoryCommitService`。整段 try/catch，任何异常仅 WARN 日志，不会让 chat turn 失败。
+
+服务端 boot 在 `apps/server/src/http/apis/chat/chatUtil.ts` 把 stores、`ModelClientEmbeddingProvider`、recorder、commit service 一起绑定到 `PersonaFlowChatTurnService.memory` 字段；`RuntimeConfig.memory` 字段控制 enabled / immediateCommitEnabled。
 
 ## 核心数据类型
 
@@ -441,9 +443,7 @@ pnpm tsx --conditions=source packages/persona-flow-model-client/mistral-embed-si
 
 ## 当前未完成事项
 
-- SQLite schema 和 concrete stores 尚未实现。
-- `MemoryCommitService` 尚未接入 chat turn。
-- 还没有 debug API。
+- 还没有 debug API（Step 7 范围）。
 - active memories 还没有读回 prompt。
-- `createMemory + finalize` 的一致性边界需要在 Step 5 SQLite transaction 里处理。
+- `createMemory + finalize` 的一致性边界仍记为已知 TODO；当前实现里两次写入不在同一 transaction，详见 `docs/todo.md`。
 - `memory.embed` 模型在设置页的静态 availableModels 列表中需要保持可选，否则 effective assignment 可能不在下拉选项里。

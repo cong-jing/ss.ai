@@ -24,6 +24,10 @@
         "enabled": true,
         "filePath": ".runtime/logs/ss-ai.prompt.log"
     },
+    "memory": {
+        "enabled": true,
+        "immediateCommitEnabled": true
+    },
     "auth": {
         "mode": "default-user",
         "defaultUserId": "default",
