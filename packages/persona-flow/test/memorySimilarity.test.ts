@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
     cosineSimilarity,
     rankSimilarMemories,
+    totalSkipped,
     type EmbeddingSignature,
 } from "../src/memory/similarity.js";
 import type { ActiveMemoryRecord, MemoryEmbedding } from "../src/memory/types.js";
@@ -82,7 +83,7 @@ describe("cosineSimilarity", () => {
 
 describe("rankSimilarMemories", () => {
     it("sorts by similarity descending and respects topK", () => {
-        const ranked = rankSimilarMemories(
+        const { ranked } = rankSimilarMemories(
             [1, 0, 0],
             [
                 memory("m1", "A", [1, 0, 0]),
@@ -97,7 +98,7 @@ describe("rankSimilarMemories", () => {
     });
 
     it("skips memories without embeddings", () => {
-        const ranked = rankSimilarMemories(
+        const { ranked } = rankSimilarMemories(
             [1, 0, 0],
             [
                 memory("m1", "A"),
@@ -110,7 +111,7 @@ describe("rankSimilarMemories", () => {
     });
 
     it("skips memories whose embedding signature mismatches", () => {
-        const ranked = rankSimilarMemories(
+        const { ranked } = rankSimilarMemories(
             [1, 0, 0],
             [
                 memory("m1", "A", [1, 0, 0], { model: "other-model" }),
@@ -128,7 +129,7 @@ describe("rankSimilarMemories", () => {
     });
 
     it("skips entries whose cosine is non-finite (e.g. zero stored vector)", () => {
-        const ranked = rankSimilarMemories(
+        const { ranked } = rankSimilarMemories(
             [1, 0, 0],
             [
                 memory("m1", "A", [0, 0, 0]),
@@ -142,12 +143,12 @@ describe("rankSimilarMemories", () => {
 
     it("returns empty when candidate vector is empty or topK <= 0", () => {
         const m = memory("m1", "A", [1, 0, 0]);
-        assert.deepEqual(rankSimilarMemories([], [m], { topK: 5 }), []);
-        assert.deepEqual(rankSimilarMemories([1, 0, 0], [m], { topK: 0 }), []);
+        assert.deepEqual(rankSimilarMemories([], [m], { topK: 5 }).ranked, []);
+        assert.deepEqual(rankSimilarMemories([1, 0, 0], [m], { topK: 0 }).ranked, []);
     });
 
     it("allows skipping signature check when not provided", () => {
-        const ranked = rankSimilarMemories(
+        const { ranked } = rankSimilarMemories(
             [1, 0, 0],
             [memory("m1", "A", [1, 0, 0], { model: "anything" })],
             { topK: 5 },
@@ -156,7 +157,7 @@ describe("rankSimilarMemories", () => {
     });
 
     it("returns [] when candidate vector length disagrees with requireSignature.dim", () => {
-        const ranked = rankSimilarMemories(
+        const { ranked } = rankSimilarMemories(
             [1, 0, 0, 0], // length 4 vs SIG.dim 3
             [memory("m1", "A", [1, 0, 0])],
             { topK: 5, requireSignature: SIG },
@@ -165,7 +166,7 @@ describe("rankSimilarMemories", () => {
     });
 
     it("skips memories whose stored vector.length disagrees with embedding.dim", () => {
-        const ranked = rankSimilarMemories(
+        const { ranked } = rankSimilarMemories(
             [1, 0, 0],
             [
                 // declared dim 3 but vector length 4 -> corruption signal
@@ -184,7 +185,7 @@ describe("rankSimilarMemories", () => {
     });
 
     it("skips vector/dim mismatch even when no requireSignature is given", () => {
-        const ranked = rankSimilarMemories(
+        const { ranked } = rankSimilarMemories(
             [1, 0, 0],
             [
                 memory("m1", "A", [1, 0, 0, 0]),
@@ -196,5 +197,57 @@ describe("rankSimilarMemories", () => {
             ranked.map((r) => r.memory.id),
             ["m2"],
         );
+    });
+});
+
+describe("rankSimilarMemories skip breakdown", () => {
+    it("counts each skip reason in its own cell, not as one undifferentiated total", () => {
+        const { ranked, skipped } = rankSimilarMemories(
+            [1, 0, 0],
+            [
+                // 1x noEmbedding
+                memory("no-emb", "no embedding"),
+                // 2x signatureMismatch (model + provider)
+                memory("sig-1", "wrong model", [1, 0, 0], { model: "other-model" }),
+                memory("sig-2", "wrong provider", [1, 0, 0], { provider: "other" }),
+                // 1x corruptDim: declared dim 3 but vector length 4
+                memory("corrupt", "bad dim", [1, 0, 0, 0]),
+                // 1x nonFiniteSimilarity: zero vector → cosine = NaN
+                memory("zero", "zero vector", [0, 0, 0]),
+                // 1x ranked
+                memory("ok", "ranked", [1, 0, 0]),
+            ],
+            { topK: 5, requireSignature: SIG },
+        );
+        assert.equal(skipped.noEmbedding, 1);
+        assert.equal(skipped.signatureMismatch, 2);
+        assert.equal(skipped.corruptDim, 1);
+        assert.equal(skipped.nonFiniteSimilarity, 1);
+        assert.equal(totalSkipped(skipped), 5);
+        // ranked + total skipped should account for every input memory
+        assert.equal(ranked.length + totalSkipped(skipped), 6);
+    });
+
+    it("returns an all-zero breakdown when there are no memories to inspect", () => {
+        const { ranked, skipped } = rankSimilarMemories(
+            [1, 0, 0],
+            [],
+            { topK: 5, requireSignature: SIG },
+        );
+        assert.equal(ranked.length, 0);
+        assert.equal(totalSkipped(skipped), 0);
+    });
+
+    it("returns an all-zero breakdown when candidate vector is rejected before scanning", () => {
+        // candidateVector length mismatches requireSignature.dim → bail
+        // out before touching any memory, so we never counted any of
+        // them as 'skipped' for any particular reason.
+        const { ranked, skipped } = rankSimilarMemories(
+            [1, 0, 0, 0],
+            [memory("m1", "A", [1, 0, 0])],
+            { topK: 5, requireSignature: SIG },
+        );
+        assert.equal(ranked.length, 0);
+        assert.equal(totalSkipped(skipped), 0);
     });
 });

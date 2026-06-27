@@ -241,7 +241,7 @@ node packages/persona-flow-model-client/mistral-embed-probe.mjs
 
 ---
 
-## Step 4: MemoryCandidateRecorder + MemoryCommitService（fake stores）
+## Step 4: MemoryCandidateRecorder + MemoryCommitService（fake stores）✅ 已完成（自动测试部分）
 
 ### 范围
 
