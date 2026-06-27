@@ -239,7 +239,7 @@ Step 6 完成后，`PersonaFlowChatTurnService.chatTurn()` / `streamTurn()` 在�
      - candidate status: `ignored_low_value`
 3. 精确重复检查
    - 调用 `memoryStore.findExactActiveMemory()`。
-   - bucket 由 `userId + scope + type + scoped characterId + normalizedText` 决定。
+   - bucket 由 `userId + characterId + scope + type + normalizedText` 决定。
    - 命中则 finalize 为：
      - decision: `ignore_duplicate`
      - candidate status: `ignored_duplicate`
@@ -262,18 +262,19 @@ Step 6 完成后，`PersonaFlowChatTurnService.chatTurn()` / `streamTurn()` 在�
    - 转成 decision `error` 和 candidate status `commit_failed` 的 best-effort finalize。
    - 如果 finalize 本身也失败，最终 outcome 仍返回 `error`，不向外抛。
 
-### `scopeCharacterId()`
+### memory 与 character 的绑定
 
 文件：`packages/persona-flow/src/memory/commitService.ts`
 
-作用：决定 memory bucket 是否绑定 character。
+每条 memory 都属于**某一个 character 世界**。这是 Batch 2 收尾时确立的硬规则：
 
-当前规则：
+- 写入 memory 时直接使用 `candidate.source.characterId`，所有 scope（`user`、`character`、`relationship`、`conversation`、`world`）都一样，不再做拆分。
+- `scope` 只用来在同一个 character 世界内部分类（这是关于「用户」的事实 / 关于「角色」的事实 / 关于「世界观」的事实 / ……），不会让 memory 跨 character 共享。
+- `MemoryStore.createMemory` / `listActiveMemories` / `findExactActiveMemory` 的 `characterId` 是必填 `string`。`MemoryDecisionStore.appendDecision` 同理。
+- SQLite 的 `memories.character_id` 和 `memory_decisions.character_id` 列是 `NOT NULL`。`idx_memories_user_character_scope_type_normtext_status` 包含 `character_id`，保证 brute-force 扫描按 `(user, character, scope, type)` bucket 分桶。
+- 同一 `user` + 同一 `normalizedText` + 同一 `scope/type` 但 character 不同，会作为两条独立 memory 各自存在；一边的 memory 不会被另一边查询到。
 
-- `character`、`conversation`、`relationship` scope 使用 `candidate.source.characterId`。
-- `user`、`world` scope 返回 `null`，表示跨角色记忆。
-
-这个 `null` 是有意义的：store 可以区分“跨角色 bucket”和“不限制 characterId”。
+因此 commit service 不再有 `scopeCharacterId()` 这种辅助方法 —— bucket 由 candidate source 直接决定。
 
 ### `rankWithSkipDiagnostics()`
 

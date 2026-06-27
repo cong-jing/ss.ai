@@ -201,9 +201,12 @@ export type MemoryCandidateRow = typeof memoryCandidates.$inferSelect;
 export type NewMemoryCandidateRow = typeof memoryCandidates.$inferInsert;
 
 // ── memories ─────────────────────────────────────────────────────────────────
-// Active long-term memories. `character_id` is NULL for cross-character
-// scopes (user, world); `findExactActiveMemory` relies on
-// `IS NULL` semantics when callers pass `characterId: null`.
+// Active long-term memories. Every row belongs to one character
+// world: `character_id` is required, and `scope` (`user`,
+// `character`, `relationship`, `conversation`, `world`) only
+// classifies the memory inside that world — it never lets a memory
+// cross characters. `findExactActiveMemory` and similarity scans
+// always filter by `(user_id, character_id, scope, type, status)`.
 //
 // `embedding_json` shape and rationale mirrors `memory_candidates`.
 // Brute-force cosine ranking happens in JS today; the row layout
@@ -212,7 +215,7 @@ export type NewMemoryCandidateRow = typeof memoryCandidates.$inferInsert;
 export const memories = sqliteTable("memories", {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
-    characterId: text("character_id"),
+    characterId: text("character_id").notNull(),
     scope: text("scope").notNull(),
     type: text("type").notNull(),
     text: text("text").notNull(),
@@ -246,7 +249,7 @@ export const memoryDecisions = sqliteTable("memory_decisions", {
     id: text("id").primaryKey(),
     candidateId: text("candidate_id").notNull(),
     userId: text("user_id").notNull(),
-    characterId: text("character_id"),
+    characterId: text("character_id").notNull(),
     decision: text("decision").notNull(),
     memoryId: text("memory_id"),
     reason: text("reason"),

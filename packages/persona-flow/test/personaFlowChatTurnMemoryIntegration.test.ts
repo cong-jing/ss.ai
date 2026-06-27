@@ -228,9 +228,17 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
         const memories = memory.stores.memoryStore.snapshotAll();
         assert.equal(memories.length, 1);
         assert.equal(memories[0]!.text, "User said their name is Alice.");
+        // Character binding: even though the candidate uses
+        // `scope: "user"`, the memory belongs to the current
+        // character world. There is no cross-character memory in
+        // the new model.
+        assert.equal(memories[0]!.characterId, base.characterId);
         const decisions = memory.stores.decisionStore.snapshotAll();
         assert.equal(decisions.length, 1);
         assert.equal(decisions[0]!.decision, "create");
+        assert.equal(decisions[0]!.characterId, base.characterId);
+        // The recorded candidate's source also carries the current character.
+        assert.equal(candidateRows[0]!.source.characterId, base.characterId);
 
         // Embedding provider was invoked exactly once for the candidate.
         assert.equal(memory.embeddingProvider.calls.length, 1);

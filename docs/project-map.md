@@ -149,7 +149,7 @@ Main chat flow:
 3. `resolveModelCall()` selects the registered handler for the requested purpose and interaction mode. Today that is `chat.main:single_character_chat`.
 4. The handler assembles LLM messages and requests structured output via `structuredOutputSchema` (built from the `submit_turn_events` event schema plus the optional `memoryWriteCandidates` field). `ModelRuntime.chat()` resolves provider and model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves the API key from `providerCredential`, then calls `ModelClient`.
 5. The model call parses `llmResponse.structuredOutput` as `SubmitTurnEventsArgs` and returns a chat-specific `parsedOutput` containing normalized display text plus the ordered `TurnEvent[]`.
-6. The model call also extracts `memoryWriteCandidates` from the structured output. The current chat-turn path still logs these candidates after the assistant turn is persisted; it has not yet wired the durable `MemoryCandidateRecorder` / `MemoryCommitService` pipeline into chat turns.
+6. The model call also extracts `memoryWriteCandidates` from the structured output. After the assistant turn is persisted, `PersonaFlowChatTurnService` records those candidates through `MemoryCandidateRecorder` and, when immediate commit is enabled, runs `MemoryCommitService` to embed, de-duplicate, compare against active memories, create memory rows, and append decision rows.
 7. `PersonaFlowChatTurnService` consumes the parsed result without knowing the underlying output format. The complete ordered turn event list is persisted with the assistant turn.
 8. Assistant turns are appended to the chat store as the conversation self actor via `appendAssistantTurn()`, which writes both the timeline message and the structured turn events.
 
@@ -157,7 +157,7 @@ The `single_character_chat` streaming path has migrated to structured output: `/
 
 Memory candidate collection intentionally does not affect streaming previews. Streamed text and `turnEventPreview` events still come only from the structured-output JSON text channel; memory candidates are consumed only from the final parsed structured output after the model stream returns.
 
-Memory write implementation details are tracked in [memory-module.zh-CN.md](memory-module.zh-CN.md). As of Step 4, the in-process memory module can record candidates, generate embeddings through an injected port, rank active memories by cosine similarity, and write conservative decisions through injected stores. SQLite stores, chat-turn integration, debug APIs, and prompt memory read-back are still pending.
+Memory write implementation details are tracked in [memory-module.zh-CN.md](memory-module.zh-CN.md). The current write pipeline records structured-output candidates, generates embeddings through the configured model client, ranks active memories by cosine similarity, writes conservative decisions, persists the SQLite `memory_candidates` / `memories` / `memory_decisions` tables, and is wired into chat turns after assistant persistence. Debug APIs and prompt memory read-back are still pending.
 
 Interaction modes are shared from `@ss-ai/contracts`, and the broader architecture is intended to support multiple modes over time. Today only `single_character_chat` is actually implemented for runtime use. Other modes already exist in contracts and UI as planned placeholders, but are not wired into prompt or model-call dispatch yet.
 
@@ -448,9 +448,9 @@ Start here when reviewing or changing behavior:
 - The `AI_FUNCTIONS` / `AiFunction` to `MODEL_CALL_PURPOSES` / `ModelCallPurpose` rename is complete in the contracts, web, server, and store layers.
 - The SQLite model assignment column is `model_assignments_json`; old model-assignment storage compatibility has been removed.
 - The single-character chat model output path now uses `response_format: json_schema` structured output for visible turn events and optional `memoryWriteCandidates` (event schema still sourced from `submitTurnEventsTool.argsSchema`). No memory candidate tool is registered for this path.
-- Current chat-turn memory write support is still log-only: candidates are parsed from structured output and logged after the assistant turn is persisted.
-- The independent memory core now includes candidate recording, embedding-port driven commit service, text normalization, cosine similarity ranking, and conservative decision policy. It is tested with in-memory fake stores but is not yet wired to SQLite or chat turns.
-- TODO before Step 5/6 integration: implement SQLite `memory_candidates`, `memories`, and `memory_decisions` stores; make the `createMemory + candidate status + decision` write path transaction-safe; then wire `MemoryCandidateRecorder` and `MemoryCommitService` into chat turn after assistant persistence.
+- Chat-turn memory write support is now durable: candidates are parsed from structured output, recorded after the assistant turn is persisted, and optionally committed immediately via `MemoryCommitService` according to runtime memory config.
+- The memory pipeline includes candidate recording, embedding-port driven commit service, text normalization, cosine similarity ranking, conservative decision policy, SQLite-backed `memory_candidates` / `memories` / `memory_decisions` stores, and chat-turn integration.
+- TODO for the memory write path: make `createMemory + candidate status + decision` transaction-safe, then add debug APIs / debug events and prompt memory read-back.
 - TODO before relying on similarity thresholds: collect more real `mistral-embed` samples. The current probe returned 1024-dimensional vectors and showed that short Chinese user facts can have high baseline cosine similarity.
 - Chat-turn/model-call layering is intentionally split: chat services consume model-call `parsedOutput`, while each model call owns provider response parsing (structured output or tool arguments) for its purpose. This keeps future interaction modes free to use different output formats without changing chat-turn persistence code.
 - `messages` is now a timeline/display table with `kind` and `display_text`; structured assistant facts are stored in `turn_events`.

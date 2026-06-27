@@ -200,7 +200,7 @@ class InMemoryMemoryStore implements MemoryStore {
         const record: ActiveMemoryRecord = {
             id: `mem-${this.nextId++}`,
             userId: input.userId,
-            characterId: input.characterId ?? undefined,
+            characterId: input.characterId,
             scope: input.scope,
             type: input.type,
             text: input.text,
@@ -227,12 +227,14 @@ class InMemoryMemoryStore implements MemoryStore {
         const scopeFilter = toArray(input.scope);
         const typeFilter = toArray(input.type);
         const statusFilter = toArray(input.status ?? "active");
-        // Mirror the port contract: deterministic order before
-        // truncation so the in-memory fake matches the SQLite store.
-        // updatedAt DESC, createdAt DESC, id ASC.
+        // Mirror the port contract: every memory is bound to one
+        // character world, so always filter by `characterId` and
+        // sort deterministically (updatedAt DESC, createdAt DESC,
+        // id ASC) before any truncation so this fake matches the
+        // SQLite store.
         return this.records
             .filter((r) => r.userId === input.userId)
-            .filter((r) => characterMatches(r.characterId, input.characterId))
+            .filter((r) => r.characterId === input.characterId)
             .filter((r) => scopeFilter.length === 0 || scopeFilter.includes(r.scope))
             .filter((r) => typeFilter.length === 0 || typeFilter.includes(r.type))
             .filter((r) => statusFilter.length === 0 || statusFilter.includes(r.status))
@@ -249,7 +251,7 @@ class InMemoryMemoryStore implements MemoryStore {
     async findExactActiveMemory(input: FindExactActiveMemoryInput): Promise<ActiveMemoryRecord | undefined> {
         const found = this.records.find((r) =>
             r.userId === input.userId
-            && characterMatches(r.characterId, input.characterId)
+            && r.characterId === input.characterId
             && r.scope === input.scope
             && r.type === input.type
             && r.status === "active"
@@ -443,16 +445,4 @@ export function makeInMemoryMemoryStores(options: {
 function toArray<T>(value: T | T[] | undefined): T[] {
     if (value === undefined) return [];
     return Array.isArray(value) ? value : [value];
-}
-
-/**
- * Memory `characterId` is `undefined` for cross-character scopes
- * (user, world). Tests pass `null` to mean "include cross-character
- * rows", `undefined` to mean "no constraint", and a string to mean
- * "must equal".
- */
-function characterMatches(stored: string | undefined, input: string | null | undefined): boolean {
-    if (input === undefined) return true;
-    if (input === null) return stored === undefined;
-    return stored === input;
 }

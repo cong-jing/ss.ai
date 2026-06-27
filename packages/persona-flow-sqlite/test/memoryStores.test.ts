@@ -7,7 +7,7 @@
  *   - SQLiteMemoryDecisionStore
  *
  * The goal is to lock down the storage contract (schema mapping,
- * JSON columns, characterId NULL semantics, embedding round-trip,
+ * JSON columns, character-bound isolation, embedding round-trip,
  * graceful handling of corrupt JSON). The commit pipeline already
  * has its own tests against the in-memory fakes; here we only check
  * that the SQLite adapters honour the ports the same way.
@@ -278,7 +278,7 @@ describe("SQLiteMemoryCandidateStore — updateCandidateStatus / saveCandidateEm
 // ---------- memory store ----------
 
 describe("SQLiteMemoryStore — createMemory + listActiveMemories", () => {
-    it("filters by user/character/scope/type/status with three-way characterId semantics", async () => {
+    it("filters by user/character/scope/type/status, scoped to one character world", async () => {
         const { memoryStore } = freshStores();
         const baseInput = {
             userId: "user-A",
@@ -305,41 +305,88 @@ describe("SQLiteMemoryStore — createMemory + listActiveMemories", () => {
             text: "ch-B fact",
             normalizedText: "ch-B fact",
         });
+        // `scope: "user"` is still bound to a character world: it
+        // classifies a fact about the user *inside* that character
+        // world, it does not let memories cross characters.
         await memoryStore.createMemory({
             ...baseInput,
-            // characterId omitted -> NULL in DB
+            characterId: "char-A",
             scope: "user",
             type: "preference",
-            text: "user pref",
-            normalizedText: "user pref",
+            text: "user pref under char-A",
+            normalizedText: "user pref under char-A",
+        });
+        // `scope: "world"` is also character-bound: it represents
+        // worldbuilding facts inside one character world.
+        await memoryStore.createMemory({
+            ...baseInput,
+            characterId: "char-B",
+            scope: "world",
+            type: "fact",
+            text: "world fact under char-B",
+            normalizedText: "world fact under char-B",
         });
 
-        const allForUser = await memoryStore.listActiveMemories({ userId: "user-A" });
-        assert.equal(allForUser.length, 3);
-
         const onlyCharA = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-A" });
-        assert.deepEqual(onlyCharA.map((m) => m.text), ["ch-A fact"]);
+        assert.deepEqual(
+            onlyCharA.map((m) => m.text).sort(),
+            ["ch-A fact", "user pref under char-A"].sort(),
+        );
+        for (const m of onlyCharA) {
+            assert.equal(m.characterId, "char-A", "memory must always carry the character it belongs to");
+        }
 
-        const crossCharacter = await memoryStore.listActiveMemories({ userId: "user-A", characterId: null });
-        assert.deepEqual(crossCharacter.map((m) => m.text), ["user pref"]);
-        assert.equal(crossCharacter[0]!.characterId, undefined);
+        const onlyCharB = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-B" });
+        assert.deepEqual(
+            onlyCharB.map((m) => m.text).sort(),
+            ["ch-B fact", "world fact under char-B"].sort(),
+        );
 
+        // Filtering by scope/type still applies inside the character bucket.
         const userScope = await memoryStore.listActiveMemories({
             userId: "user-A",
-            characterId: null,
+            characterId: "char-A",
             scope: "user",
             type: "preference",
             status: "active",
         });
         assert.equal(userScope.length, 1);
+        assert.equal(userScope[0]!.text, "user pref under char-A");
 
         const scopedArrays = await memoryStore.listActiveMemories({
             userId: "user-A",
+            characterId: "char-A",
             scope: ["character", "user"],
             type: ["fact", "preference"],
             status: ["active"],
         });
-        assert.equal(scopedArrays.length, 3);
+        assert.equal(scopedArrays.length, 2);
+    });
+
+    it("same user + same scope/type + same normalizedText but different character live as separate memories", async () => {
+        const { memoryStore } = freshStores();
+        const base = {
+            userId: "user-A",
+            scope: "user" as const,
+            type: "preference" as const,
+            text: "User likes coffee",
+            normalizedText: "user likes coffee",
+            relatedEntities: [],
+            tags: [],
+            importance: 0.5,
+            createdAt: "2026-02-01T00:00:00.000Z",
+            updatedAt: "2026-02-01T00:00:00.000Z",
+        };
+        await memoryStore.createMemory({ ...base, characterId: "char-A" });
+        await memoryStore.createMemory({ ...base, characterId: "char-B" });
+
+        const onA = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-A" });
+        assert.equal(onA.length, 1);
+        assert.equal(onA[0]!.characterId, "char-A");
+
+        const onB = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-B" });
+        assert.equal(onB.length, 1);
+        assert.equal(onB[0]!.characterId, "char-B");
     });
 
     it("orders by updatedAt DESC, createdAt DESC, id ASC so `limit` truncates the oldest rows", async () => {
@@ -418,7 +465,7 @@ describe("SQLiteMemoryStore — createMemory + listActiveMemories", () => {
 });
 
 describe("SQLiteMemoryStore — findExactActiveMemory", () => {
-    it("uses normalized text and respects characterId NULL semantics", async () => {
+    it("matches normalized text inside one character bucket and never crosses characters", async () => {
         const { memoryStore } = freshStores();
         await memoryStore.createMemory({
             userId: "user-A",
@@ -435,6 +482,7 @@ describe("SQLiteMemoryStore — findExactActiveMemory", () => {
         });
         await memoryStore.createMemory({
             userId: "user-A",
+            characterId: "char-A",
             scope: "user",
             type: "preference",
             text: "Likes apples",
@@ -455,27 +503,40 @@ describe("SQLiteMemoryStore — findExactActiveMemory", () => {
         });
         assert.ok(hitChar);
         assert.equal(hitChar!.scope, "character");
+        assert.equal(hitChar!.characterId, "char-A");
 
         const hitUser = await memoryStore.findExactActiveMemory({
             userId: "user-A",
-            characterId: null,
+            characterId: "char-A",
             scope: "user",
             type: "preference",
             normalizedText: "likes apples",
         });
         assert.ok(hitUser);
         assert.equal(hitUser!.scope, "user");
-        assert.equal(hitUser!.characterId, undefined);
+        assert.equal(hitUser!.characterId, "char-A");
+
+        // Same user / same scope / same normalizedText, but a
+        // different character → must miss. char-A's memories never
+        // leak into char-B's bucket.
+        const missOtherCharacter = await memoryStore.findExactActiveMemory({
+            userId: "user-A",
+            characterId: "char-B",
+            scope: "user",
+            type: "preference",
+            normalizedText: "likes apples",
+        });
+        assert.equal(missOtherCharacter, undefined);
 
         // Same normalized text but a different scope/type should miss.
-        const miss = await memoryStore.findExactActiveMemory({
+        const missScope = await memoryStore.findExactActiveMemory({
             userId: "user-A",
-            characterId: null,
+            characterId: "char-A",
             scope: "world",
             type: "fact",
             normalizedText: "likes apples",
         });
-        assert.equal(miss, undefined);
+        assert.equal(missScope, undefined);
     });
 });
 
@@ -484,6 +545,7 @@ describe("SQLiteMemoryStore — saveMemoryEmbedding", () => {
         const { memoryStore } = freshStores();
         const created = await memoryStore.createMemory({
             userId: "user-A",
+            characterId: "char-A",
             scope: "user",
             type: "fact",
             text: "x",
@@ -500,7 +562,7 @@ describe("SQLiteMemoryStore — saveMemoryEmbedding", () => {
             embedding,
             updatedAt: "2026-02-03T00:00:00.000Z",
         });
-        const got = await memoryStore.listActiveMemories({ userId: "user-A" });
+        const got = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-A" });
         assert.equal(got.length, 1);
         assert.deepEqual(got[0]!.embedding?.vector, [0.5, 0.5]);
         assert.equal(got[0]!.updatedAt, "2026-02-03T00:00:00.000Z");
@@ -539,6 +601,7 @@ describe("SQLiteMemoryDecisionStore", () => {
         const { decisionStore } = freshStores();
         const base = {
             userId: "user-A",
+            characterId: "char-A",
             policyVersion: 1,
             similarity: [],
             createdAt: "2026-02-04T00:00:00.000Z",
@@ -590,6 +653,7 @@ describe("Memory stores — corrupt JSON columns", () => {
         const { db, memoryStore, logger } = freshStores();
         const created = await memoryStore.createMemory({
             userId: "user-A",
+            characterId: "char-A",
             scope: "user",
             type: "fact",
             text: "x",
@@ -606,7 +670,7 @@ describe("Memory stores — corrupt JSON columns", () => {
             .set({ embeddingJson: JSON.stringify({ vector: [0.1] }) })
             .where(eq(memories.id, created.id));
 
-        const got = await memoryStore.listActiveMemories({ userId: "user-A" });
+        const got = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-A" });
         assert.equal(got.length, 1);
         assert.equal(got[0]!.embedding, undefined);
         assert.ok(
@@ -635,6 +699,7 @@ describe("createSqliteStores — memory store wiring", () => {
         assert.equal(candRecords.length, 1);
         const mem = await stores.memory.createMemory({
             userId: "user-A",
+            characterId: "char-A",
             scope: "user",
             type: "fact",
             text: "wired",
@@ -648,6 +713,7 @@ describe("createSqliteStores — memory store wiring", () => {
         const decision = await stores.memoryDecision.appendDecision({
             candidateId: candRecords[0]!.id,
             userId: "user-A",
+            characterId: "char-A",
             decision: "create",
             memoryId: mem.id,
             similarity: [],

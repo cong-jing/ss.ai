@@ -73,7 +73,7 @@ export interface MemoryCandidateStore {
 
 export interface CreateMemoryInput {
     userId: string;
-    characterId?: string;
+    characterId: string;
     scope: MemoryScope;
     type: MemoryCandidateType;
     text: string;
@@ -92,9 +92,12 @@ export interface CreateMemoryInput {
 
 export interface ListActiveMemoriesInput {
     userId: string;
-    /** Required to scope the scan: relationship/world memories may
-     * have no characterId, so pass `null` explicitly to include them. */
-    characterId?: string | null;
+    /**
+     * Required: every memory lives inside one character world, so
+     * scans must always be bounded by `characterId`. `scope` /
+     * `type` further narrow the bucket inside that world.
+     */
+    characterId: string;
     scope?: MemoryScope | MemoryScope[];
     type?: MemoryCandidateType | MemoryCandidateType[];
     status?: MemoryStatus | MemoryStatus[];
@@ -114,7 +117,7 @@ export interface ListActiveMemoriesInput {
 
 export interface FindExactActiveMemoryInput {
     userId: string;
-    characterId?: string | null;
+    characterId: string;
     scope: MemoryScope;
     type: MemoryCandidateType;
     normalizedText: string;
@@ -138,7 +141,7 @@ export interface MemoryStore {
 export interface AppendMemoryDecisionInput {
     candidateId: string;
     userId: string;
-    characterId?: string;
+    characterId: string;
     decision: MemoryDecisionKind;
     memoryId?: string;
     reason?: string;

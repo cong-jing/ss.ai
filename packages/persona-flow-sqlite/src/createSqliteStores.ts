@@ -20,13 +20,13 @@ import type { DbLog } from "./db/openDatabase.js";
  * All stores share the same db instance so Drizzle can use a single connection.
  *
  * Memory tables live in the core DB even when a `characterDbDir` is
- * supplied. User/world memories have `character_id IS NULL` and
- * therefore have no character bucket to route to; keeping all three
- * memory tables in one place also lets the brute-force similarity
- * scan run a single query per (user, scope, type) regardless of how
- * many characters the user has. Sharding by character is a Step 7+
- * optimization tracked in `docs/todo.md` rather than a Batch 2/3
- * requirement.
+ * supplied. Every memory is bound to one character world, but
+ * keeping all three memory tables in one place lets the
+ * brute-force similarity scan run a single query per
+ * `(user, character, scope, type)` bucket and avoids per-character
+ * DB plumbing for the memory subsystem. Sharding by character is a
+ * Step 7+ optimization tracked in `docs/todo.md` rather than a
+ * Batch 2/3 requirement.
  */
 export function createSqliteStores(options: {
     db: DrizzleDb;

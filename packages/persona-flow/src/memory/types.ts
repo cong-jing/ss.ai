@@ -119,11 +119,15 @@ export interface MemoryCandidateRecord {
  * A persisted long-term memory. The source ids are optional because
  * future flows (manual curation, judge-driven merges) may create
  * memories that do not map back to a single candidate.
+ *
+ * `characterId` is required: every memory is scoped to a specific
+ * character world. `scope` only classifies the memory inside that
+ * character; it never makes a memory cross characters.
  */
 export interface ActiveMemoryRecord {
     id: string;
     userId: string;
-    characterId?: string;
+    characterId: string;
     scope: MemoryScope;
     type: MemoryCandidateType;
     text: string;
@@ -174,12 +178,16 @@ export interface MemorySimilaritySummaryEntry {
 
 /**
  * Persisted commit decision for one candidate.
+ *
+ * `characterId` mirrors the active memory's isolation key so a
+ * decision row can always be traced back to a single character
+ * world, even when no memory was ultimately created.
  */
 export interface MemoryDecisionRecord {
     id: string;
     candidateId: string;
     userId: string;
-    characterId?: string;
+    characterId: string;
     decision: MemoryDecisionKind;
     /** Set only when `decision === "create"`. */
     memoryId?: string;

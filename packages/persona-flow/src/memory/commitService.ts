@@ -181,7 +181,7 @@ export class MemoryCommitService {
             //    embedding call.
             const exactDuplicate = await this.deps.memoryStore.findExactActiveMemory({
                 userId: candidate.source.userId,
-                characterId: this.scopeCharacterId(candidate),
+                characterId: candidate.source.characterId,
                 scope: candidate.scope,
                 type: candidate.type,
                 normalizedText: candidate.normalizedText,
@@ -248,7 +248,7 @@ export class MemoryCommitService {
             };
             const activeMemories = await this.deps.memoryStore.listActiveMemories({
                 userId: candidate.source.userId,
-                characterId: this.scopeCharacterId(candidate),
+                characterId: candidate.source.characterId,
                 scope: candidate.scope,
                 type: candidate.type,
                 status: "active",
@@ -298,7 +298,7 @@ export class MemoryCommitService {
             try {
                 newMemory = await this.deps.memoryStore.createMemory({
                     userId: candidate.source.userId,
-                    characterId: this.scopeCharacterId(candidate) ?? undefined,
+                    characterId: candidate.source.characterId,
                     scope: candidate.scope,
                     type: candidate.type,
                     text: candidate.text,
@@ -374,19 +374,6 @@ export class MemoryCommitService {
                 error: err,
             };
         }
-    }
-
-    /**
-     * `characterId` on a memory is optional because user/world
-     * memories transcend any single character. We pass `null` (not
-     * `undefined`) to the store so it can distinguish "no character
-     * scope" from "any character".
-     */
-    private scopeCharacterId(candidate: MemoryCandidateRecord): string | null {
-        if (candidate.scope === "character" || candidate.scope === "conversation" || candidate.scope === "relationship") {
-            return candidate.source.characterId;
-        }
-        return null;
     }
 
     /**
@@ -478,7 +465,7 @@ export class MemoryCommitService {
         const decisionRecord: MemoryDecisionRecord = await this.deps.decisionStore.appendDecision({
             candidateId: args.candidate.id,
             userId: args.candidate.source.userId,
-            characterId: this.scopeCharacterId(args.candidate) ?? undefined,
+            characterId: args.candidate.source.characterId,
             decision: args.decision,
             memoryId: args.memoryId,
             reason: args.reason,

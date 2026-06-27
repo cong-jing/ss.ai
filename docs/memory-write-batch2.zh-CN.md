@@ -225,7 +225,7 @@ export const memoryCandidates = sqliteTable("memory_candidates", {
 export const memories = sqliteTable("memories", {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
-    characterId: text("character_id"),
+    characterId: text("character_id").notNull(),
     scope: text("scope").notNull(),
     type: text("type").notNull(),
     text: text("text").notNull(),
@@ -250,7 +250,7 @@ export const memories = sqliteTable("memories", {
 });
 ```
 
-`characterId` 可以为空，用于纯 user-scope memory。relationship/world 等 scope 第一版可以先通过 `relatedEntitiesJson` 表达关系，后续再拆更严格的 key。
+每条 memory 都必须绑定一个 character 世界，因此 `characterId` 是 `NOT NULL`。`scope`（`user`、`character`、`relationship`、`conversation`、`world`）只用于在同一个 character 世界内部分类，不会让 memory 跨 character 共享。relationship/world 等 scope 第一版可以先通过 `relatedEntitiesJson` 表达关系，后续再拆更严格的 key。
 
 `status` 第一版只需要：
 
@@ -270,7 +270,7 @@ export const memoryDecisions = sqliteTable("memory_decisions", {
     id: text("id").primaryKey(),
     candidateId: text("candidate_id").notNull(),
     userId: text("user_id").notNull(),
-    characterId: text("character_id"),
+    characterId: text("character_id").notNull(),
     decision: text("decision").notNull(),
     memoryId: text("memory_id"),
     reason: text("reason"),
@@ -336,7 +336,7 @@ export interface MemoryCandidateRecord extends MemoryCandidateDraft {
 export interface ActiveMemoryRecord {
     id: string;
     userId: string;
-    characterId?: string;
+    characterId: string;
     scope: MemoryScope;
     type: MemoryCandidateType;
     text: string;
@@ -815,7 +815,7 @@ export const memoryDebugEvents = sqliteTable("memory_debug_events", {
     id: text("id").primaryKey(),
     candidateId: text("candidate_id").notNull(),
     userId: text("user_id").notNull(),
-    characterId: text("character_id"),
+    characterId: text("character_id").notNull(),
     stage: text("stage").notNull(),
     level: text("level").notNull(),
     message: text("message").notNull(),

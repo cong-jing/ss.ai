@@ -355,7 +355,7 @@ pnpm tsx packages/persona-flow/scripts/try-commit-service.mts
 
 到 Step 4 为止，已经实现的是 **memory 写入的 core/service 层**：`MemoryCandidateRecorder` 能把候选写入注入的 `MemoryCandidateStore`，`MemoryCommitService` 能通过注入的 `MemoryStore` / `MemoryDecisionStore` 创建 active memory 和 decision，并且已有 fake store 测试覆盖。
 
-但这还不是应用端到端的持久化写入：当前 chat turn 仍然只做 log-only，SQLite 里也还没有 `memory_candidates` / `memories` / `memory_decisions` 的具体表和 store。因此 Step 5 是把这些已经存在的 core ports 落到 SQLite 的第一步，Step 6 才是把它们接入聊天流程。
+Step 5 已经把这些 core ports 落到 SQLite：实现了 `memory_candidates` / `memories` / `memory_decisions` 的表和 store。Step 6 也已经把 recorder + commit service 接入 chat turn：assistant turn 持久化后会记录结构化输出里的 `memoryWriteCandidates`，并在 `immediateCommitEnabled` 开启时立即执行 embedding、去重、相似度扫描、memory 创建和 decision 记录。
 
 ### 范围
 

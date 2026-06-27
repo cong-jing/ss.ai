@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { memories, type MemoryRow, type NewMemoryRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
 import { parseEmbeddingJson, parseJsonArray } from "./SQLiteMemoryCandidateStore.js";
@@ -17,13 +17,12 @@ import type {
 /**
  * SQLite-backed implementation of {@link MemoryStore}.
  *
- * Stores active long-term memories with their full embedding JSON
- * (vector + signature). `character_id` is nullable: user/world
- * scopes use `NULL` while character/conversation/relationship
- * scopes use the concrete character id, and `listActiveMemories`
- * differentiates between "no character filter" (skip the column),
- * "only NULL character" (`characterId === null`), and "specific
- * character" (`characterId === "char_x"`).
+ * Every memory belongs to exactly one character world. `character_id`
+ * is `NOT NULL` and acts as the isolation key for `listActiveMemories`,
+ * `findExactActiveMemory`, and `createMemory` alike. `scope` only
+ * classifies the memory inside that world (`user`, `character`,
+ * `relationship`, `conversation`, `world`); it never makes a memory
+ * cross characters.
  *
  * Important atomicity caveat: `createMemory` only inserts the
  * memory row. The commit pipeline still issues `appendDecision`
@@ -55,7 +54,7 @@ export class SQLiteMemoryStore implements MemoryStore {
         const row: NewMemoryRow = {
             id,
             userId: input.userId,
-            characterId: input.characterId ?? null,
+            characterId: input.characterId,
             scope: input.scope,
             type: input.type,
             text: input.text,
@@ -98,17 +97,10 @@ export class SQLiteMemoryStore implements MemoryStore {
     }
 
     async listActiveMemories(input: ListActiveMemoriesInput): Promise<ActiveMemoryRecord[]> {
-        const conditions = [eq(memories.userId, input.userId)];
-
-        // Three-way characterId semantics, mirroring the port docs:
-        //  - `undefined`: no character filter (don't touch the column)
-        //  - `null`:      only rows with character_id IS NULL
-        //  - string:      rows with character_id = string
-        if (input.characterId === null) {
-            conditions.push(isNull(memories.characterId));
-        } else if (typeof input.characterId === "string") {
-            conditions.push(eq(memories.characterId, input.characterId));
-        }
+        const conditions = [
+            eq(memories.userId, input.userId),
+            eq(memories.characterId, input.characterId),
+        ];
 
         if (input.scope !== undefined) {
             const scopes = Array.isArray(input.scope) ? input.scope : [input.scope];
@@ -141,16 +133,12 @@ export class SQLiteMemoryStore implements MemoryStore {
     async findExactActiveMemory(input: FindExactActiveMemoryInput): Promise<ActiveMemoryRecord | undefined> {
         const conditions = [
             eq(memories.userId, input.userId),
+            eq(memories.characterId, input.characterId),
             eq(memories.scope, input.scope),
             eq(memories.type, input.type),
             eq(memories.normalizedText, input.normalizedText),
             eq(memories.status, "active"),
         ];
-        if (input.characterId === null) {
-            conditions.push(isNull(memories.characterId));
-        } else if (typeof input.characterId === "string") {
-            conditions.push(eq(memories.characterId, input.characterId));
-        }
 
         const rows = await this.db
             .select()
@@ -174,7 +162,7 @@ export class SQLiteMemoryStore implements MemoryStore {
         return {
             id: row.id,
             userId: row.userId,
-            characterId: row.characterId ?? undefined,
+            characterId: row.characterId,
             scope: row.scope as ActiveMemoryRecord["scope"],
             type: row.type as ActiveMemoryRecord["type"],
             text: row.text,

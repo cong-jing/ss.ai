@@ -329,16 +329,27 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
 
     // ── memory write subsystem (Batch 2/3) ──────────────────────────────
     // Three tables back the ports defined in
-    // `@ss-ai/persona-flow/memory`. They live in the core DB rather
-    // than per-character DBs because user/world memories transcend a
-    // single character (characterId is NULL for those rows) and we
-    // want a single place to query them.
+    // `@ss-ai/persona-flow/memory`. Every memory belongs to exactly
+    // one character world, so `character_id` is required on all
+    // three tables; `scope` only classifies the memory inside that
+    // world and never lets it cross characters. The tables live in
+    // the core DB (not per-character DBs) so the brute-force cosine
+    // scan can run a single query per `(user_id, character_id,
+    // scope, type)` bucket regardless of how many characters the
+    // user has. Sharding by character is a Step 7+ optimization
+    // tracked in `docs/todo.md`.
     //
     // Volume is bounded by chat turns; brute-force cosine ranking
     // happens in JS today. Indexes target the actual query patterns
     // used by the commit service (`listActiveMemories` filters by
     // user + character + scope + type + status) and by the debug
     // surfaces (`listCandidates` by assistant turn / status).
+    //
+    // NOTE: `CREATE TABLE IF NOT EXISTS` is idempotent but it does
+    // not retroactively tighten columns on databases that were
+    // created before `character_id` became `NOT NULL`. Local dev DBs
+    // built with the older schema need to be wiped (delete
+    // `<runtime>/userData/app.db`) or migrated by hand.
     sqlite.exec(`
         CREATE TABLE IF NOT EXISTS memory_candidates (
             id                    TEXT PRIMARY KEY,
@@ -373,7 +384,7 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
         CREATE TABLE IF NOT EXISTS memories (
             id                          TEXT PRIMARY KEY,
             user_id                     TEXT NOT NULL,
-            character_id                TEXT,
+            character_id                TEXT NOT NULL,
             scope                       TEXT NOT NULL,
             type                        TEXT NOT NULL,
             text                        TEXT NOT NULL,
@@ -392,19 +403,19 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             updated_at                  TEXT NOT NULL
         );
 
-        -- Bucket scan: listActiveMemories filters by user + character (or NULL) + scope + type + status
+        -- Bucket scan: listActiveMemories always filters by user + character + scope + type + status
         CREATE INDEX IF NOT EXISTS idx_memories_user_character_scope_type_status
             ON memories(user_id, character_id, scope, type, status);
 
         -- Exact-duplicate lookup: findExactActiveMemory hits this for every commit
-        CREATE INDEX IF NOT EXISTS idx_memories_user_scope_type_normtext_status
-            ON memories(user_id, scope, type, normalized_text, status);
+        CREATE INDEX IF NOT EXISTS idx_memories_user_character_scope_type_normtext_status
+            ON memories(user_id, character_id, scope, type, normalized_text, status);
 
         CREATE TABLE IF NOT EXISTS memory_decisions (
             id                TEXT PRIMARY KEY,
             candidate_id      TEXT NOT NULL,
             user_id           TEXT NOT NULL,
-            character_id      TEXT,
+            character_id      TEXT NOT NULL,
             decision          TEXT NOT NULL,
             memory_id         TEXT,
             reason            TEXT,
@@ -419,6 +430,13 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
         CREATE INDEX IF NOT EXISTS idx_memory_decisions_user_decision_created
             ON memory_decisions(user_id, decision, created_at DESC);
     `);
+
+    // Drop the obsolete exact-duplicate index that did not include
+    // character_id. The new replacement
+    // (`idx_memories_user_character_scope_type_normtext_status`) is
+    // created above. We never queried memories without a character
+    // filter, so dropping is safe.
+    sqlite.exec(`DROP INDEX IF EXISTS idx_memories_user_scope_type_normtext_status`);
 
     const db = drizzle(sqlite, { schema });
 

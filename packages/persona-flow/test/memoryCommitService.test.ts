@@ -125,10 +125,11 @@ describe("MemoryCommitService", () => {
 
     it("ignores an exact normalized-text duplicate without calling the embedding provider", async () => {
         const stores = makeInMemoryMemoryStores();
-        // Pre-seed: same normalizedText, same scope/type/user.
+        // Pre-seed: same normalizedText, same scope/type/user, same
+        // character bucket ("c1") as the seeded candidate source.
         stores.memoryStore.seedMemory({
             userId: "u1",
-            characterId: undefined,
+            characterId: "c1",
             scope: "user",
             type: "fact",
             text: "User Loves Coffee",
@@ -247,7 +248,7 @@ describe("MemoryCommitService", () => {
         };
         stores.memoryStore.seedMemory({
             userId: "u1",
-            characterId: undefined,
+            characterId: "c1",
             scope: "user",
             type: "fact",
             text: "Mismatched-signature memory",
@@ -266,7 +267,7 @@ describe("MemoryCommitService", () => {
         });
         stores.memoryStore.seedMemory({
             userId: "u1",
-            characterId: undefined,
+            characterId: "c1",
             scope: "user",
             type: "fact",
             text: "Corrupt-dim memory",
