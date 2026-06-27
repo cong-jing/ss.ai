@@ -1,5 +1,8 @@
 import "./chatTurnPreparation.test.js";
 import "./memoryCandidatesSchema.test.js";
+import "./memoryDecisionPolicy.test.js";
+import "./memorySimilarity.test.js";
+import "./memoryTextNormalization.test.js";
 import "./personaFlowChatTurnService.test.js";
 import "./personaFlowModelService.test.js";
 import "./promptViewModel.test.js";

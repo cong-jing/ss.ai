@@ -6,33 +6,26 @@ This document tracks the rough plan after the log-only memory write batch in [me
 
 Keep this file high level until each batch is ready to implement. The concrete design for a later batch should be expanded when work on that batch starts, after reviewing the data and behavior collected by the previous batch.
 
-## Batch 2: Candidate Storage
+## Batch 2/3: Independent Memory Module And SQLite Embedding Commit Prototype
 
-Batch 2 can replace or supplement logs with SQLite candidate storage.
+Batch 2 and Batch 3 are merged because candidate storage and early commit logic share the same persistence, debug, and decision boundaries.
 
-High-level direction:
-
-- Add memory candidate and decision tables.
-- Store raw candidate text, scope, type, tags, related entities, source ids, request id, status, and timestamps.
-- Keep status as `logged_only` or `pending` until commit logic exists.
-- Add a small debug API for reading candidates by user, character, conversation, or message id.
-- Keep the chat response fail-soft if candidate storage fails.
-
-Details should be written when batch 2 starts, after evaluating batch 1 logs.
-
-## Batch 3: Simple Commit Service
-
-Batch 3 can create real active memories without an LLM judge.
+Detailed implementation plan: [memory-write-batch2.zh-CN.md](memory-write-batch2.zh-CN.md).
 
 High-level direction:
 
-- Add a `memories` table and store interface.
-- Implement rule-based low-value filtering.
-- Implement obvious duplicate avoidance by normalized text within the same user/scope/type area.
-- Create new active memories for non-duplicates.
-- Record every decision as `create`, `ignore_duplicate`, `ignore_low_value`, or `error`.
+- Put core memory code under `packages/persona-flow/src/memory/**` as a future package boundary.
+- Keep memory core independent from chat turn, model call, server, and SQLite implementation details.
+- Define injected ports for candidate storage, active memory storage, decision storage, embedding generation, time, ids, and logging.
+- Store candidates, active memories, decisions, and embedding metadata in SQLite.
+- Save embeddings in SQLite columns and perform brute-force cosine similarity in application code while the data set is small.
+- Automatically create only low-risk new memories; route similar, ambiguous, or conflict-prone candidates to `needs_judge`.
+- Keep similarity thresholds, scan limits, immediate commit behavior, and embedding provider/model configurable at the backend layer first.
+- Emit verbose structured debug logs for each candidate decision so the future frontend debug window can display the full reasoning trace.
+- Add debug APIs for candidates, active memories, and decisions.
+- Keep chat responses fail-soft if candidate storage, embedding, or commit fails.
 
-Do not attempt complex merge, correction, conflict handling, or archive behavior in this batch unless batch 2 data shows it is necessary.
+Do not attempt complex merge, correction, conflict handling, archive behavior, or prompt injection in this batch.
 
 ## Batch 4: LLM Judge
 

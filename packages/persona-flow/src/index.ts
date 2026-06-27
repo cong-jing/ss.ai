@@ -33,3 +33,4 @@ export * from "./chatTurn/chatTurnService.js";
 export * from "./chatTurn/chatTurnPreparation.js";
 export * from "./chatTurn/memoryCandidateLogger.js";
 export * from "./chatTurn/personaFlowLogger.js";
+export * from "./memory/index.js";
