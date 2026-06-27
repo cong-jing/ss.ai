@@ -4,6 +4,7 @@ export const MODEL_CALL_PURPOSES = [
     // "chat.semanticAnalysis",
     // "chat.toolContinuation",
     "memory.summarize",
+    "memory.embed",
     // "memory.extract",
     // "vision.ocr"
 ] as const;

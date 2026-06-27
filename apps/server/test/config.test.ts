@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { MODEL_CALL_PURPOSES } from "@ss-ai/contracts";
 import { loadRuntimeConfig } from "../src/util/config.js";
 
 const tempDirs = new Set<string>();
@@ -214,5 +215,79 @@ describe("loadRuntimeConfig", () => {
             () => loadRuntimeConfig({ cwd: runtimeHome, configDir: configRoot }),
             /Missing required config file: .*config\.default\.json/,
         );
+    });
+
+    it("MODEL_CALL_PURPOSES includes memory.embed and the default config assigns it", async () => {
+        assert.ok(
+            (MODEL_CALL_PURPOSES as readonly string[]).includes("memory.embed"),
+            "expected memory.embed to be a registered model-call purpose",
+        );
+
+        const runtimeHome = await createTempDir("ss-ai-config-memory-embed-default-");
+        const defaultConfigRaw = await readFile(configPath(packageConfigRoot, "config.default.json"), "utf-8");
+        const defaultConfig = JSON.parse(defaultConfigRaw) as {
+            defaultModelAssignments?: Record<string, { provider?: string; model?: string }>;
+        };
+        const embedAssignment = defaultConfig.defaultModelAssignments?.["memory.embed"];
+
+        assert.ok(embedAssignment, "config.default.json should contain a memory.embed assignment");
+        assert.ok(embedAssignment.provider, "memory.embed.provider should be set in config.default.json");
+        assert.ok(embedAssignment.model, "memory.embed.model should be set in config.default.json");
+
+        const originalAppEnv = process.env.APP_ENV;
+        const originalRuntimeHome = process.env.RUNTIME_HOME;
+        delete process.env.APP_ENV;
+        delete process.env.RUNTIME_HOME;
+        try {
+            const config = loadRuntimeConfig({ cwd: runtimeHome });
+            assert.deepEqual(
+                config.defaultModelAssignments["memory.embed"],
+                embedAssignment,
+            );
+        } finally {
+            if (originalAppEnv === undefined) {
+                delete process.env.APP_ENV;
+            } else {
+                process.env.APP_ENV = originalAppEnv;
+            }
+            if (originalRuntimeHome === undefined) {
+                delete process.env.RUNTIME_HOME;
+            } else {
+                process.env.RUNTIME_HOME = originalRuntimeHome;
+            }
+        }
+    });
+
+    it("rejects defaultModelAssignments whose provider does not exist in models", async () => {
+        const runtimeHome = await createTempDir("ss-ai-config-bad-assignment-provider-");
+        const configRoot = path.join(runtimeHome, "config");
+        await writeJson(configPath(configRoot, "config.default.json"), {
+            ...createBaseConfig(),
+            defaultModelAssignments: {
+                "chat.main": { provider: "mistral.ai", model: "mistral-large-latest" },
+                "memory.embed": { provider: "not-a-provider", model: "mistral-embed" },
+            },
+        });
+
+        assert.throws(
+            () => loadRuntimeConfig({ cwd: runtimeHome, configDir: configRoot }),
+            /defaultModelAssignments\.memory\.embed\.provider "not-a-provider"/,
+        );
+    });
+
+    it("accepts defaultModelAssignments whose providers all exist in models", async () => {
+        const runtimeHome = await createTempDir("ss-ai-config-valid-assignment-provider-");
+        const configRoot = path.join(runtimeHome, "config");
+        await writeJson(configPath(configRoot, "config.default.json"), {
+            ...createBaseConfig(),
+            defaultModelAssignments: {
+                "chat.main": { provider: "mistral.ai", model: "mistral-large-latest" },
+                "memory.embed": { provider: "mistral.ai", model: "mistral-embed" },
+            },
+        });
+
+        const config = loadRuntimeConfig({ cwd: runtimeHome, configDir: configRoot });
+        assert.equal(config.defaultModelAssignments["memory.embed"]?.provider, "mistral.ai");
+        assert.equal(config.defaultModelAssignments["memory.embed"]?.model, "mistral-embed");
     });
 });

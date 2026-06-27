@@ -170,6 +170,26 @@ function buildRuntimeModels(modelsRaw: RawConfig["models"]): Record<string, Runt
     return runtimeModels;
 }
 
+// Cross-field validation: every `defaultModelAssignments.<purpose>.provider`
+// must refer to a key inside `models`. The JSON schema can't express this
+// because the allowed values are the keys of a sibling object. Catching it
+// at load time turns a confusing runtime "model assignment not found" into
+// a clear startup-time error pointing at the exact bad path.
+function validateDefaultModelAssignments(
+    assignments: ModelAssignmentMap,
+    models: Record<string, RuntimeModelEntry>,
+): void {
+    for (const [purpose, assignment] of Object.entries(assignments)) {
+        if (!assignment) continue;
+        const provider = assignment.provider;
+        if (!provider || !models[provider]) {
+            throw new Error(
+                `Config error: defaultModelAssignments.${purpose}.provider "${provider}" is not defined in models.`,
+            );
+        }
+    }
+}
+
 // Runtime files and sqlite data follow the runtime home. In normal development
 // this is the repo root because `pnpm run dev:*` starts there. In deployed
 // layouts it becomes `.deploy-*/server` because the start command runs there.
@@ -346,6 +366,8 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
 
     const fileConfig = validateRawConfig(mergedConfig, configSources.join(" + "), validateConfigWithSchema);
     const models = buildRuntimeModels(fileConfig.models);
+    const defaultModelAssignments = fileConfig.defaultModelAssignments ?? {};
+    validateDefaultModelAssignments(defaultModelAssignments, models);
 
     const loggerFilePath = toAbsolutePath(runtimeHome, fileConfig.logger?.logFilePath, "app.log");
     const tempDir = toAbsolutePath(runtimeHome, fileConfig.runtimeFiles?.tempDir, ".runtime/temp");
@@ -379,7 +401,7 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
             userDataDir
         },
         models,
-        defaultModelAssignments: fileConfig.defaultModelAssignments ?? {},
+        defaultModelAssignments: defaultModelAssignments,
         agent: {
             timeoutMs: fileConfig.agent?.timeoutMs ?? 30000,
             maxRetries: fileConfig.agent?.maxRetries ?? 2

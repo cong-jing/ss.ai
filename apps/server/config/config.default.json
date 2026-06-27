@@ -56,6 +56,10 @@
         "memory.summarize": {
             "provider": "mistral.ai",
             "model": "mistral-small-latest"
+        },
+        "memory.embed": {
+            "provider": "mistral.ai",
+            "model": "mistral-embed"
         }
     }
 }
