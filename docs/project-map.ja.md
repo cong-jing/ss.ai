@@ -134,22 +134,29 @@ pnpm --dir ./.deploy-prod/server start
 - 現在の `chat.main/single_character_chat` における prompt 組み立てと structured-output event フローを実装する
 - `PersonaFlowChatTurnService` により chat turn orchestration を担う
 - `ModelRuntime` によりモデル実行時情報を解決し、注入された `ModelClient` を呼び出す
-- `src/llm/modelClient.ts` に provider-neutral な tool 定義と tool choice を含む LLM client interface を定義する
-- `submit_turn_events` の event schema を定義し、モデルが返した turn event を parse する。`ModelToolDefinition` は将来の query 系 tool-call 用に残しているが、`single_character_chat` の最終出力経路ではない
+- `src/llm/modelClient.ts` に provider-neutral な tool 定義、tool choice、任意の embedding call を含む LLM client interface を定義する
+- `submit_turn_events` の event schema を定義し、モデルが返した turn event を parse する
+- `src/memory/**` に長期記憶 core を定義する。candidate records、active memory records、decision records、ports、normalization、cosine similarity、conservative decision policy、`MemoryCandidateRecorder`、`MemoryCommitService` を含む
+- `src/memoryAdapters/**` に `ModelClientEmbeddingProvider` を定義し、memory core の embedding port を注入された `ModelClient` へ接続する。provider / runtime 依存を `src/memory/**` に漏らさないための境界でもある
 
-レイヤ分割は特に重要です。`PersonaFlowChatTurnService` は turn orchestration と永続化を担当しますが、provider の tool call や structured output を直接 parse しません。登録済みの `ModelCall<TParsedOutput>` が、prompt assembly、要求する出力形式（`structuredOutputSchema` または `tools`）、その purpose に固有のビジネスレベル parse を担当します。`ModelRuntime` は provider / model / API key に集中し、生の provider-neutral `llmResponse`（`output` / `structuredOutput` / `toolCalls`）を返します。その後 model call がこれを `parsedOutput` に変換します。オプションの `parsedToolCalls` は、呼び出し側が中間ツール結果を確認する必要がある場合だけ使います。現在の `single_character_chat` では、最終結果は `response_format: json_schema` で生成され、`{ displayText, events }` として `parsedOutput` に折り畳まれるため、`parsedToolCalls` には重複しません。
+レイヤ分割は特に重要です。`PersonaFlowChatTurnService` は turn orchestration と永続化を担当しますが、provider の tool call や structured output を直接 parse しません。登録済みの `ModelCall<TParsedOutput>` が、prompt assembly、要求する出力形式（`structuredOutputSchema` および/または `tools`）、その purpose に固有のビジネスレベル parse を担当します。`ModelRuntime` は provider / model / API key に集中し、生の provider-neutral `llmResponse`（`output` / `structuredOutput` / `toolCalls`）を返します。その後 model call がこれを `parsedOutput` に変換します。オプションの `parsedToolCalls` は、呼び出し側が中間ツール結果を確認する必要がある場合だけ使います。現在の `single_character_chat` では、最終的な可視 reply は `response_format: json_schema` で生成され、`parsedOutput` の `{ displayText, events }` に折り畳まれます。Memory write candidates は同じ structured output の任意 top-level field として扱われ、内部処理用に `parsedOutput.memoryWriteCandidates` へ折り畳まれます。
 
 メインチャットフロー:
 
 1. `PersonaFlowChatTurnService.chatTurn()` が user、character、conversation、message 入力を受け取る
 2. `prepareChatTurnContext()` が character と conversation を検証し、sender actor を解決し、必要なら user message を追加して `PromptContext` を作る
 3. `resolveModelCall()` が要求された purpose と interaction mode に対応する登録済み handler を選ぶ。現在は `chat.main:single_character_chat`
-4. handler が LLM messages を組み立て、`submit_turn_events` event schema から作った `structuredOutputSchema` で structured output を要求する。`ModelRuntime.chat()` が `userPreferences.modelAssignments[modelCallPurpose]` から provider と model を解決し、`providerCredential` から API key を解決して `ModelClient` を呼び出す
+4. handler が LLM messages を組み立て、`submit_turn_events` event schema と任意の `memoryWriteCandidates` field から作った `structuredOutputSchema` で structured output を要求する。`ModelRuntime.chat()` が `userPreferences.modelAssignments[modelCallPurpose]` から provider と model を解決し、`providerCredential` から API key を解決して `ModelClient` を呼び出す
 5. model call が `llmResponse.structuredOutput` を `SubmitTurnEventsArgs` として parse し、正規化済み display text と順序付き `TurnEvent[]` を含む chat 用 `parsedOutput` を返す
-6. `PersonaFlowChatTurnService` は下位の出力形式を知らずにその parsed result を消費する。完全な順序付き turn event 一式が assistant turn と一緒に永続化される
-7. assistant turn は会話の self actor として chat store に追加され、timeline message と structured turn events の両方が `appendAssistantTurn()` で書き込まれる
+6. model call は structured output から `memoryWriteCandidates` も抽出する。assistant turn の永続化後、`PersonaFlowChatTurnService` は `MemoryCandidateRecorder` で candidates を記録し、immediate commit が有効なら `MemoryCommitService` で embedding、dedupe、active memories との比較、memory row 作成、decision row 追加を行う
+7. `PersonaFlowChatTurnService` は下位の出力形式を知らずにその parsed result を消費する。完全な順序付き turn event 一式が assistant turn と一緒に永続化される
+8. assistant turn は会話の self actor として chat store に追加され、timeline message と structured turn events の両方が `appendAssistantTurn()` で書き込まれる
 
 `single_character_chat` の streaming 経路は structured output に移行済みです。`/v1/chat/stream` は `response_format: json_schema` のもとで provider に JSON テキストチャネルを token 単位で流させます。`createSubmitTurnEventsPreviewParser` がその JSON を増分 parse し、`chunk`（`replyText.text` をデコードした文字列）と `turnEventPreview` SSE イベントを発行します。最終 `done` イベントには canonical な `turnEvents` が含まれます。
+
+Memory candidate collection は streaming preview に影響しません。streamed text と `turnEventPreview` は structured-output JSON text channel だけから生成されます。memory candidates は model stream 完了後の最終 parsed structured output からのみ消費されます。
+
+Memory write の実装詳細は [memory-module.zh-CN.md](memory-module.zh-CN.md) にあります。現在の write pipeline は structured-output candidates を記録し、設定済み model client で embeddings を生成し、active memories を cosine similarity で rank し、conservative decisions を書き込み、SQLite の `memory_candidates` / `memories` / `memory_decisions` tables に永続化し、assistant persistence 後の chat turn に接続されています。Candidates、active memories、decisions 用の read-only debug API は利用可能で、prompt memory read-back はまだ未実装です。
 
 interaction mode は `@ss-ai/contracts` に共有定義されており、全体アーキテクチャとしても将来的に複数 mode を支える前提で設計されています。実行時に実際に登録されているのは現在 `single_character_chat` だけです。他の mode も contracts と UI には将来計画のプレースホルダーとして存在しますが、prompt と model-call dispatch にはまだ接続されていません。
 
@@ -164,10 +171,13 @@ interaction mode は `@ss-ai/contracts` に共有定義されており、全体�
 - `INTERACTION_MODES`、`DEFAULT_INTERACTION_MODE`、`InteractionMode`
 - `MODEL_CALL_PURPOSES`、`ModelCallPurpose`、モデル割り当て関連の型
 - `TurnEvent`、`SubmitTurnEventsArgs`、`MessageKind`、およびモデルが返した turn event を検証する Zod schema
+- `MemoryWriteCandidate`、memory scope/type literal、およびモデルが返した memory write candidates を検証する Zod schema
 
 model-call 設定では `MODEL_CALL_PURPOSES` / `ModelCallPurpose` と `ModelAssignment` / `ModelAssignmentMap` を使います。
 
 Turn event の純粋な型とリテラル定数は `packages/contracts/src/turnEvents.ts` にあります。ランタイム用 Zod schema は `packages/contracts/src/turnEvents.schema.ts` にあり、`@ss-ai/contracts/turnEvents.schema` サブエントリとして公開されています。これにより web 側は Zod をメインバンドルへ取り込まずに純粋な contracts だけを import できます。新しい event type を追加するときは contracts から始めて、ランタイム schema 検証、storage、prompt history assembly、UI 表示へと広げていきます。
+
+Memory candidate の純粋な型は `packages/contracts/src/memoryCandidates.ts` にあります。ランタイム用 Zod schema は `packages/contracts/src/memoryCandidates.schema.ts` にあり、`@ss-ai/contracts/memoryCandidates.schema` サブエントリとして公開されています。`SubmitTurnEventsArgs` は top-level `memoryWriteCandidates` を含められます。現在の chat-turn wiring はそれらを記録し、設定に応じて即時 commit し、candidates、active memories、decisions 用の read-only debug API を公開します。
 
 ### `packages/persona-flow-sqlite`
 
@@ -177,7 +187,7 @@ Turn event の純粋な型とリテラル定数は `packages/contracts/src/turnE
 
 - Drizzle で `better-sqlite3` データベースを開く
 - `src/db/schema.ts` で schema を定義する
-- characters、conversations、actors、messages、user profiles、preferences、provider credentials などの具体 store を実装する
+- characters、conversations、actors、messages、user profiles、preferences、provider credentials、memory candidates、active memories、memory decisions などの具体 store を実装する
 - `createSqliteStores()` で完全に配線済みの `AppStores` を生成する
 
 重要なテーブル:
@@ -191,6 +201,9 @@ Turn event の純粋な型とリテラル定数は `packages/contracts/src/turnE
 - `user_preferences`
 - `user_character_states`
 - `user_provider_credentials`
+- `memory_candidates`
+- `memories`
+- `memory_decisions`
 
 `user_preferences.model_assignments_json` は model-call purpose から `{ provider, model }` へのマップを保存します。
 
@@ -417,7 +430,11 @@ API key の解決も user 優先です。
 
 - `AI_FUNCTIONS` / `AiFunction` から `MODEL_CALL_PURPOSES` / `ModelCallPurpose` への rename は contracts、web、server、store 全体で完了している
 - SQLite の model assignment column は `model_assignments_json`。旧 model-assignment storage 互換は削除済み
-- single-character chat の model output path は現在 `response_format: json_schema` structured output を使う（event schema の source は依然 `submitTurnEventsTool.argsSchema`）。tool-call path は terminal output channel ではなくなったが、`ModelToolDefinition` 抽象は将来の中間 query 系 tool のために残してある
+- single-character chat の model output path は現在、可視 turn events と任意の `memoryWriteCandidates` のために `response_format: json_schema` structured output を使う（event schema の source は依然 `submitTurnEventsTool.argsSchema`）。この path では memory candidate tool は登録しない
+- Chat-turn memory write は durable になっている。Candidates は structured output から parse され、assistant turn 永続化後に記録され、runtime memory config に応じて `MemoryCommitService` により即時 commit される
+- Memory pipeline は candidate recording、embedding-port driven commit service、text normalization、cosine similarity ranking、conservative decision policy、SQLite-backed `memory_candidates` / `memories` / `memory_decisions` stores、chat-turn integration を含む
+- Memory write path TODO: `createMemory + candidate status + decision` を transaction-safe にし、その後 debug events と prompt memory read-back を追加する
+- similarity thresholds に依存する前の TODO: より多くの実 `mistral-embed` samples を収集する。現在の probe は 1024-dimensional vectors を返し、短い中国語 user facts は baseline cosine similarity が高めになり得ることを示した
 - chat-turn / model-call のレイヤ境界は意図的に分離している。chat service は model-call の `parsedOutput` を消費し、各 model call が provider response（structured output または tool argument）の parse を自分で担当する。これにより、将来別の interaction mode が別の出力形式を使っても chat-turn persistence code を変えなくてよい
 - `messages` は現在 timeline / display table であり、structured assistant fact は `turn_events` に保存される
 - prompt history は現在 assistant turn から `replyText` event だけを再利用する。TODO: expression や scene atmosphere のような最新非テキスト状態も、prompt format と UI needs が固まったら選択的に含める

@@ -134,22 +134,29 @@ pnpm --dir ./.deploy-prod/server start
 - 实现当前 `chat.main/single_character_chat` 的 prompt 组装和结构化事件输出流程
 - 通过 `PersonaFlowChatTurnService` 负责编排 chat turn
 - 通过 `ModelRuntime` 解析模型运行时并调用注入的 `ModelClient`
-- 在 `src/llm/modelClient.ts` 中定义 LLM client interfaces
-- 定义 provider-neutral 的 tool 描述（保留给未来查询类工具使用）、`submit_turn_events` 事件 schema，以及模型提交 turn events 的解析逻辑
+- 在 `src/llm/modelClient.ts` 中定义 LLM client interfaces，包括 provider-neutral tool definitions、tool choice 和可选 embedding 调用
+- 定义 `submit_turn_events` 事件 schema，并解析模型返回的 turn events
+- 在 `src/memory/**` 下定义长期记忆 core：candidate records、active memory records、decision records、ports、normalization、cosine similarity、保守 decision policy、`MemoryCandidateRecorder` 和 `MemoryCommitService`
+- 在 `src/memoryAdapters/**` 下定义 `ModelClientEmbeddingProvider`，把 memory core 的 embedding port 接到注入的 `ModelClient`，同时避免 provider/runtime 依赖泄漏进 `src/memory/**`
 
-层级关系需要特别注意：`PersonaFlowChatTurnService` 负责 turn 编排和持久化，但不直接解析 provider tool calls 或 structured output。已注册的 `ModelCall<TParsedOutput>` 负责本 purpose 的 prompt 组装、要求的输出格式（`structuredOutputSchema` 或 `tools`）、以及业务级解析。`ModelRuntime` 只负责 provider/model/API key 解析和调用 `ModelClient`，返回 provider-neutral 的原始 `llmResponse`（`output` / `structuredOutput` / `toolCalls`）。随后 model call 把响应转换为 `parsedOutput`；可选的 `parsedToolCalls` 只用于调用方确实需要检查的中间工具结果。对当前 `single_character_chat` 来说，最终输出使用 `response_format: json_schema` 结构化事件，被折叠成 `{ displayText, events }` 作为 `parsedOutput`，因此不会再重复写入 `parsedToolCalls`。
+层级关系需要特别注意：`PersonaFlowChatTurnService` 负责 turn 编排和持久化，但不直接解析 provider tool calls 或 structured output。已注册的 `ModelCall<TParsedOutput>` 负责本 purpose 的 prompt 组装、要求的输出格式（`structuredOutputSchema` 和/或 `tools`）、以及业务级解析。`ModelRuntime` 只负责 provider/model/API key 解析和调用 `ModelClient`，返回 provider-neutral 的原始 `llmResponse`（`output` / `structuredOutput` / `toolCalls`）。随后 model call 把响应转换为 `parsedOutput`；可选的 `parsedToolCalls` 只用于调用方确实需要检查的中间工具结果。对当前 `single_character_chat` 来说，最终可见回复使用 `response_format: json_schema` 生成，并折叠进 `parsedOutput` 的 `{ displayText, events }`。Memory write candidates 是同一个 structured output 中的顶层可选字段，会折叠进 `parsedOutput.memoryWriteCandidates` 供内部处理。
 
 主聊天流程：
 
 1. `PersonaFlowChatTurnService.chatTurn()` 接收 user、character、conversation 和 message 输入。
 2. `prepareChatTurnContext()` 校验角色和会话、解析发送方 actor、按需追加用户消息，并构建 `PromptContext`。
 3. `resolveModelCall()` 根据请求的 purpose 和 interaction mode 选择已注册 handler。目前实际使用的是 `chat.main:single_character_chat`。
-4. handler 组装 LLM messages，并通过 `structuredOutputSchema`（基于 `submit_turn_events` 的事件 schema）要求模型以结构化 JSON 形式提交本回合事件。`ModelRuntime.chat()` 根据 `userPreferences.modelAssignments[modelCallPurpose]` 解析 provider / model，根据 provider credential 或默认 API key 解析密钥，然后调用 `ModelClient`。
+4. handler 组装 LLM messages，并通过 `structuredOutputSchema`（基于 `submit_turn_events` 事件 schema 加上可选 `memoryWriteCandidates` 字段）要求模型以结构化 JSON 形式提交本回合事件。`ModelRuntime.chat()` 根据 `userPreferences.modelAssignments[modelCallPurpose]` 解析 provider / model，根据 provider credential 或默认 API key 解析密钥，然后调用 `ModelClient`。
 5. model call 把返回的 `llmResponse.structuredOutput` 解析为 `SubmitTurnEventsArgs`，并返回 chat 专用的 `parsedOutput`：归一化后的展示文本和有序 `TurnEvent[]`。
-6. `PersonaFlowChatTurnService` 只消费这个 parsed result，不需要知道底层是 structured output、tool call 还是未来别的形式。
-7. 回复会作为 conversation 的 `self` actor 消息写入 chat store，同时结构化事件写入 `turn_events`。
+6. model call 还会从 structured output 中提取 `memoryWriteCandidates`。assistant turn 持久化后，`PersonaFlowChatTurnService` 通过 `MemoryCandidateRecorder` 记录这些 candidates；当 immediate commit 开启时，再运行 `MemoryCommitService` 完成 embedding、去重、active memory 相似度比较、memory row 创建和 decision row 写入。
+7. `PersonaFlowChatTurnService` 只消费这个 parsed result，不需要知道底层输出格式。完整有序的 turn event 列表会随 assistant turn 一起持久化。
+8. Assistant turn 会作为 conversation 的 self actor 写入 chat store，`appendAssistantTurn()` 同时写 timeline message 和结构化 `turn_events`。
 
 `single_character_chat` 的 streaming 路径已经迁移到结构化输出：`/v1/chat/stream` 通过 `response_format: json_schema` 让 provider 按 token 流式返回 JSON 文本；`createSubmitTurnEventsPreviewParser` 增量解析这段 JSON，把 `replyText.text` 字符和已完结的事件对象作为 SSE `chunk` / `turnEventPreview` 推送给前端，最终 `done` 事件再回传完整 `TurnEvent[]`。
+
+Memory candidate collection 不影响 streaming preview。流式文本和 `turnEventPreview` 事件仍然只来自 structured-output JSON 文本通道；memory candidates 只在模型 stream 完成后的最终 parsed structured output 中被消费。
+
+Memory 写入实现细节记录在 [memory-module.zh-CN.md](memory-module.zh-CN.md)。当前写入链路会记录 structured-output candidates，通过配置的 model client 生成 embeddings，按 cosine similarity 排序 active memories，写入保守 decisions，持久化 SQLite `memory_candidates` / `memories` / `memory_decisions` 三张表，并在 assistant 持久化后接入 chat turn。当前已有 candidates、active memories、decisions 的只读 debug API；prompt memory read-back 仍待实现。
 
 interaction modes 定义在 `@ss-ai/contracts` 中，整体架构也预期后续支持多个 mode。当前真正落地到运行时的只有 `single_character_chat`；其他 mode 虽然已经在 contracts 和 UI 中存在，作为后续规划的占位，但还没有接入 prompt 和 model-call dispatch。
 
@@ -164,10 +171,13 @@ interaction modes 定义在 `@ss-ai/contracts` 中，整体架构也预期后续
 - 定义 `INTERACTION_MODES`、`DEFAULT_INTERACTION_MODE` 和 `InteractionMode`
 - 定义 `MODEL_CALL_PURPOSES`、`ModelCallPurpose` 以及模型分配相关类型
 - 定义 `TurnEvent`、`SubmitTurnEventsArgs`、`MessageKind`，以及用于模型提交事件和落库读取校验的 Zod schemas
+- 定义 `MemoryWriteCandidate`、memory scope/type 字面量，以及用于校验模型提交 memory write candidates 的 Zod schemas
 
 模型调用配置使用 `MODEL_CALL_PURPOSES` / `ModelCallPurpose`，以及 `ModelAssignment` / `ModelAssignmentMap`。
 
 Turn event 的纯类型与字面量常量位于 `packages/contracts/src/turnEvents.ts`；需要运行时校验的 Zod schema 位于 `packages/contracts/src/turnEvents.schema.ts`，通过 `@ss-ai/contracts/turnEvents.schema` 子入口使用。这样 web 可以引用纯 contracts 而不把 Zod 运行时代码打进主 bundle。
+
+Memory candidate 的纯类型位于 `packages/contracts/src/memoryCandidates.ts`；运行时 Zod schema 位于 `packages/contracts/src/memoryCandidates.schema.ts`，通过 `@ss-ai/contracts/memoryCandidates.schema` 子入口使用。`SubmitTurnEventsArgs` 可以包含顶层 `memoryWriteCandidates`；当前 chat-turn wiring 会记录它们，按配置立即提交，并提供 candidates、active memories、decisions 的只读 debug API。
 
 ### `packages/persona-flow-sqlite`
 
@@ -178,6 +188,7 @@ Turn event 的纯类型与字面量常量位于 `packages/contracts/src/turnEven
 - 用 Drizzle 打开 `better-sqlite3` 数据库
 - 在 `src/db/schema.ts` 中定义 schema
 - 实现角色、会话、actors、messages、用户资料、偏好和 provider credentials 等 stores
+- 实现 memory candidates、active memories 和 memory decisions 的 SQLite stores
 - 通过 `createSqliteStores()` 创建完整的 `AppStores`
 
 重要数据表：
@@ -191,6 +202,9 @@ Turn event 的纯类型与字面量常量位于 `packages/contracts/src/turnEven
 - `user_preferences`
 - `user_character_states`
 - `user_provider_credentials`
+- `memory_candidates`
+- `memories`
+- `memory_decisions`
 
 `user_preferences.model_assignments_json` 用于保存从 model-call purpose 到 `{ provider, model }` 的映射。
 
@@ -417,7 +431,11 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 
 - `AI_FUNCTIONS` / `AiFunction` 到 `MODEL_CALL_PURPOSES` / `ModelCallPurpose` 的重命名已经在 contracts、web、server 和 store 层完成
 - SQLite 中模型分配对应的列是 `model_assignments_json`，旧的 model-assignment 存储兼容逻辑已经移除
-- 当前 single-character chat 模型输出路径使用 `response_format: json_schema` 结构化输出（事件 schema 来源仍是 `submitTurnEventsTool.argsSchema`）；tool-call 路径不再用于终端输出，但 `ModelToolDefinition` 抽象保留给未来中间查询类工具
+- 当前 single-character chat 模型输出路径使用 `response_format: json_schema` 结构化输出，负责 visible turn events 和可选 `memoryWriteCandidates`（事件 schema 来源仍是 `submitTurnEventsTool.argsSchema`）。这条路径不注册 memory candidate tool
+- Chat-turn memory write 已经是持久化链路：candidates 从 structured output 中解析，assistant turn 持久化后记录，并按 runtime memory config 选择是否立即通过 `MemoryCommitService` commit
+- Memory pipeline 包含 candidate recording、embedding-port driven commit service、text normalization、cosine similarity ranking、conservative decision policy、SQLite-backed `memory_candidates` / `memories` / `memory_decisions` stores，以及 chat-turn integration
+- Memory write path TODO：让 `createMemory + candidate status + decision` 具备 transaction-safe 一致性，然后补 debug events 和 prompt memory read-back
+- 依赖 similarity thresholds 前 TODO：收集更多真实 `mistral-embed` 样本。当前 probe 返回 1024 维向量，并显示短中文用户事实可能有较高 baseline cosine similarity
 - chatTurn/modelCall 的层级边界是刻意拆开的：chat service 消费 model call 的 `parsedOutput`，每个 model call 自己负责解析 provider response（structured output 或 tool arguments）。这样未来 interaction mode 即使用不同输出格式，也不需要改 chat-turn 持久化代码
 - `messages` 现在是 timeline/display 表，结构化 assistant 事实存储在 `turn_events` 中
 - Prompt history 当前只复用 assistant turn 里的 `replyText` events。TODO：等 prompt 格式和 UI 需求明确后，再把 expression、scene atmosphere 等非文本状态选择性注入 prompt

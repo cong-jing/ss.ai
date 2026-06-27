@@ -178,7 +178,7 @@ Model-call configuration uses `MODEL_CALL_PURPOSES` / `ModelCallPurpose` plus `M
 
 Turn event pure types and literal constants live in `packages/contracts/src/turnEvents.ts`. Runtime Zod schemas live in `packages/contracts/src/turnEvents.schema.ts` and are exposed through the `@ss-ai/contracts/turnEvents.schema` sub-entry. This keeps the web app able to import pure contracts without pulling Zod into its main bundle. Adding a new event type should start in contracts, then flow outward through runtime schema validation, storage, prompt history assembly, and UI display.
 
-Memory candidate pure types live in `packages/contracts/src/memoryCandidates.ts`. Runtime Zod schemas live in `packages/contracts/src/memoryCandidates.schema.ts` and are exposed through the `@ss-ai/contracts/memoryCandidates.schema` sub-entry. `SubmitTurnEventsArgs` can include top-level `memoryWriteCandidates`; the current chat-turn wiring logs them, while the memory core services for durable commit are implemented but not yet connected to SQLite/chat turn.
+Memory candidate pure types live in `packages/contracts/src/memoryCandidates.ts`. Runtime Zod schemas live in `packages/contracts/src/memoryCandidates.schema.ts` and are exposed through the `@ss-ai/contracts/memoryCandidates.schema` sub-entry. `SubmitTurnEventsArgs` can include top-level `memoryWriteCandidates`; the current chat-turn wiring records them, optionally commits them immediately, and exposes read-only debug APIs for candidates, active memories, and decisions.
 
 ### `packages/persona-flow-sqlite`
 
