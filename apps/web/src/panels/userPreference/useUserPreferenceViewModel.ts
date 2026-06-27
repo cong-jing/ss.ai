@@ -113,7 +113,7 @@ export function useUserPreferenceViewModel() {
             const res = await apiDeleteApiKey(providerName);
             p.userApiKeySet = res.apiKeySet;
             p.effectiveApiKeySource = p.defaultApiKeySet ? "default" : "missing";
-            p.availableModels = [];
+            p.availableModels = { chat: [], embed: [] };
             p.apiKeyInput = null;
         } catch (e) {
             toast.error(localizeApiError(e));
@@ -152,7 +152,10 @@ export function useUserPreferenceViewModel() {
         p.isLoadingModels = true;
         try {
             const res = await apiListModels(providerName);
-            p.availableModels = res.models;
+            // Live /v1/models cannot reliably classify chat vs embed, so the
+            // raw list goes into `chat`. Embedding-capable models must be
+            // configured statically via server config `availableModels.embed`.
+            p.availableModels = { chat: res.models, embed: p.availableModels.embed };
         } catch (e) {
             toast.error(localizeApiError(e));
         } finally {

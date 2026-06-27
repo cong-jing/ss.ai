@@ -5,16 +5,29 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import type { LogLevel } from "@ss-ai/persona-flow-logger";
 import type { ModelAssignmentMap } from "@ss-ai/contracts";
+import { MODEL_CALL_PURPOSE_CATEGORIES, type ModelCallPurpose } from "@ss-ai/contracts";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(moduleDir, "..", "..");
+
+/**
+ * Models a provider can serve, split by capability category. Chat-completion
+ * and embedding models are distinct families on every provider; sharing a
+ * single dropdown forces the user to pick valid combinations through trial
+ * and error. Keeping them separate at the config layer also lets the
+ * cross-validator catch "chat model assigned to memory.embed" at startup.
+ */
+export interface RuntimeAvailableModels {
+    chat: string[];
+    embed: string[];
+}
 
 export interface RuntimeModelEntry {
     provider: string;
     apiUrl: string;
     apiKey: string;
     defaultModel: string;
-    availableModels: string[];
+    availableModels: RuntimeAvailableModels;
 }
 
 export interface RuntimeConfig {
@@ -74,7 +87,10 @@ interface RawModelConfig {
     apiUrl: string;
     apiKey?: string;
     model?: string;
-    availableModels?: string[];
+    availableModels?: {
+        chat?: string[];
+        embed?: string[];
+    };
 }
 
 interface RawConfig {
@@ -136,8 +152,11 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
     return normalized.length > 0 ? normalized : undefined;
 }
 
-function resolveAvailableModels(model: RawModelConfig): string[] {
-    return parseOptionalModelList(model.availableModels);
+function resolveAvailableModels(model: RawModelConfig): RuntimeAvailableModels {
+    return {
+        chat: parseOptionalModelList(model.availableModels?.chat),
+        embed: parseOptionalModelList(model.availableModels?.embed),
+    };
 }
 
 function buildRuntimeModels(modelsRaw: RawConfig["models"]): Record<string, RuntimeModelEntry> {
@@ -170,11 +189,17 @@ function buildRuntimeModels(modelsRaw: RawConfig["models"]): Record<string, Runt
     return runtimeModels;
 }
 
-// Cross-field validation: every `defaultModelAssignments.<purpose>.provider`
-// must refer to a key inside `models`. The JSON schema can't express this
-// because the allowed values are the keys of a sibling object. Catching it
-// at load time turns a confusing runtime "model assignment not found" into
-// a clear startup-time error pointing at the exact bad path.
+// Cross-field validation that the JSON schema can't express:
+//   1. `defaultModelAssignments.<purpose>.provider` must refer to a key
+//      inside `models`.
+//   2. The assigned `model` must appear in the provider's `availableModels`
+//      list for the *capability category* matching `<purpose>` (e.g. a
+//      `memory.embed` assignment must point at a model under
+//      `availableModels.embed`). The check is skipped when the relevant
+//      category list is empty, because callers may intentionally leave it
+//      empty to fall back to live `client.listModels()` enumeration.
+// Catching these at load time turns confusing runtime "model assignment
+// not found" into a clear startup-time error pointing at the exact bad path.
 function validateDefaultModelAssignments(
     assignments: ModelAssignmentMap,
     models: Record<string, RuntimeModelEntry>,
@@ -182,9 +207,20 @@ function validateDefaultModelAssignments(
     for (const [purpose, assignment] of Object.entries(assignments)) {
         if (!assignment) continue;
         const provider = assignment.provider;
-        if (!provider || !models[provider]) {
+        const entry = provider ? models[provider] : undefined;
+        if (!provider || !entry) {
             throw new Error(
                 `Config error: defaultModelAssignments.${purpose}.provider "${provider}" is not defined in models.`,
+            );
+        }
+
+        const category = MODEL_CALL_PURPOSE_CATEGORIES[purpose as ModelCallPurpose];
+        if (!category) continue;
+        const categoryList = entry.availableModels[category];
+        if (categoryList.length === 0) continue;
+        if (!categoryList.includes(assignment.model)) {
+            throw new Error(
+                `Config error: defaultModelAssignments.${purpose}.model "${assignment.model}" is not in models.${provider}.availableModels.${category}.`,
             );
         }
     }

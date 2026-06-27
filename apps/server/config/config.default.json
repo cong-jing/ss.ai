@@ -36,16 +36,21 @@
         "mistral.ai": {
             "apiUrl": "https://api.mistral.ai",
             "apiKey": "",
-            "availableModels": [
-                "mistral-large-latest",
-                "mistral-medium-latest",
-                "mistral-small-latest",
-                "ministral-3b-latest",
-                "ministral-8b-latest",
-                "ministral-14b-latest",
-                "magistral-small-latest",
-                "open-mistral-nemo-2407"
-            ]
+            "availableModels": {
+                "chat": [
+                    "mistral-large-latest",
+                    "mistral-medium-latest",
+                    "mistral-small-latest",
+                    "ministral-3b-latest",
+                    "ministral-8b-latest",
+                    "ministral-14b-latest",
+                    "magistral-small-latest",
+                    "open-mistral-nemo-2407"
+                ],
+                "embed": [
+                    "mistral-embed-2312"
+                ]
+            }
         }
     },
     "defaultModelAssignments": {
@@ -59,7 +64,7 @@
         },
         "memory.embed": {
             "provider": "mistral.ai",
-            "model": "mistral-embed"
+            "model": "mistral-embed-2312"
         }
     }
 }

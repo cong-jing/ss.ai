@@ -1,4 +1,4 @@
-import type { ApiKeySource, ModelAssignment, ModelAssignmentSource, ModelCallPurpose } from "@ss-ai/contracts";
+import type { ApiKeySource, ModelAssignment, ModelAssignmentSource, ModelCallPurpose, ProviderAvailableModels } from "@ss-ai/contracts";
 
 export interface ProviderState {
     provider: string;
@@ -7,7 +7,7 @@ export interface ProviderState {
     effectiveApiKeySource: ApiKeySource;
     defaultApiKeyWarning: string;
     apiKeyInput: string | null;
-    availableModels: string[];
+    availableModels: ProviderAvailableModels;
     isSavingKey: boolean;
     isTestingKey: boolean;
     isLoadingModels: boolean;

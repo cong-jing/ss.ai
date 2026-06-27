@@ -137,9 +137,25 @@
                         "type": "string"
                     },
                     "availableModels": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "chat",
+                            "embed"
+                        ],
+                        "properties": {
+                            "chat": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "embed": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     }
                 }

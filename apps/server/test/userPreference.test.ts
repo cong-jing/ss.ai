@@ -23,7 +23,10 @@ const MOCK_MODELS: Record<string, RuntimeModelEntry> = {
         apiUrl: "https://api.mistral.ai",
         apiKey: "",
         defaultModel: "mistral-large-latest",
-        availableModels: ["mistral-small-latest", "mistral-large-latest"],
+        availableModels: {
+            chat: ["mistral-small-latest", "mistral-large-latest"],
+            embed: ["mistral-embed"],
+        },
     },
 };
 
@@ -52,7 +55,10 @@ describe("UserPreference API", () => {
         assert.equal(mistral.defaultApiKeySet, false);
         assert.equal(mistral.effectiveApiKeySource, "missing");
         // availableModels pre-filled because MOCK_MODELS.availableModels is non-empty
-        assert.deepEqual(mistral.availableModels, ["mistral-large-latest", "mistral-small-latest"]);
+        assert.deepEqual(mistral.availableModels, {
+            chat: ["mistral-large-latest", "mistral-small-latest"],
+            embed: ["mistral-embed"],
+        });
 
         assert.ok(data.modelAssignments, "modelAssignments must be present");
         assert.equal(data.modelAssignments["chat.main"]?.effectiveAssignment, null);
@@ -175,7 +181,10 @@ describe("UserPreference API defaults", () => {
                 apiUrl: "https://api.mistral.ai",
                 apiKey: "shared-default-key",
                 defaultModel: "mistral-large-latest",
-                availableModels: ["mistral-small-latest", "mistral-large-latest"],
+                availableModels: {
+                    chat: ["mistral-small-latest", "mistral-large-latest"],
+                    embed: ["mistral-embed"],
+                },
             },
         }, {
             defaultModelAssignments: {

@@ -201,6 +201,12 @@ export interface MemoryEmbedInput {
      * expose a similar concept (e.g. "task type") and may map it.
      */
     purpose: string;
+    /**
+     * Optional caller identity. Adapters use it to honour per-user model
+     * assignments and credentials; omit when calling on behalf of a system
+     * job (the adapter will fall back to default config).
+     */
+    userId?: string;
 }
 
 /**

@@ -35,17 +35,31 @@ function getEffectiveApiKey(context: HttpApiContext, provider: string, encrypted
     return { encryptedApiKey: null, source: "missing" };
 }
 
-async function listModelsForProvider(context: HttpApiContext, provider: string, userId: string): Promise<string[]> {
+async function listModelsForProvider(
+    context: HttpApiContext,
+    provider: string,
+    userId: string,
+): Promise<UserPreferenceApi.ProviderAvailableModels> {
     const modelEntry = context.config.models[provider];
-    if (!modelEntry) return [];
+    if (!modelEntry) return { chat: [], embed: [] };
 
-    if (modelEntry.availableModels.length > 0) {
-        return [...modelEntry.availableModels].sort();
+    // When either category has been pre-listed in config we trust the static
+    // lists exclusively. Most providers (Mistral included) return chat and
+    // embed models in a single flat /v1/models response with no reliable
+    // category marker, so live probing cannot safely populate the embed
+    // bucket on its own.
+    const staticChat = modelEntry.availableModels.chat;
+    const staticEmbed = modelEntry.availableModels.embed;
+    if (staticChat.length > 0 || staticEmbed.length > 0) {
+        return {
+            chat: [...staticChat].sort(),
+            embed: [...staticEmbed].sort(),
+        };
     }
 
     const credential = await context.stores.providerCredential.getCredential({ userId, provider });
     const resolvedApiKey = getEffectiveApiKey(context, provider, credential?.encryptedApiKey);
-    if (!resolvedApiKey.encryptedApiKey) return [];
+    if (!resolvedApiKey.encryptedApiKey) return { chat: [], embed: [] };
 
     const client = new DefaultModelClient({
         providerConfigs: context.config.models,
@@ -53,8 +67,11 @@ async function listModelsForProvider(context: HttpApiContext, provider: string, 
         maxRetries: context.config.agent.maxRetries,
         logger: context.logger,
     });
+    // Live fallback: dump everything into `chat` because we have no per-model
+    // category info from the provider. Embedding assignments must come from
+    // a static config that explicitly enumerates `availableModels.embed`.
     const models = await client.listModels(provider, resolvedApiKey.encryptedApiKey);
-    return models.sort();
+    return { chat: models.sort(), embed: [] };
 }
 
 async function getUserPreference(context: HttpApiContext, userId: string): Promise<UserPreferenceApi.GetUserPreferenceResponse> {
@@ -213,8 +230,13 @@ async function listModels(
     if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
     if (!context.config.models[provider]) throw new AppHttpError(400, "user_preference.provider_unsupported", `Unsupported provider: ${provider}`);
 
-    const models = await listModelsForProvider(context, provider, userId);
-    return { provider, models };
+    // The list-models endpoint is a connectivity / enumeration probe and its
+    // contract is intentionally category-less. Static config splits chat /
+    // embed; we flatten here so legacy callers (and the load-models button)
+    // see one unified list. Sorting keeps the response deterministic.
+    const categorized = await listModelsForProvider(context, provider, userId);
+    const merged = Array.from(new Set([...categorized.chat, ...categorized.embed])).sort();
+    return { provider, models: merged };
 }
 
 function handleError(message: string, context: HttpApiContext, error: unknown): {

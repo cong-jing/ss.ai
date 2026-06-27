@@ -12,7 +12,7 @@
 
 ---
 
-## Step 1: Memory 核心 — 纯类型 + 端口 + 算法
+## Step 1: Memory 核心 — 纯类型 + 端口 + 算法 ✅ 已完成
 
 ### 范围
 
@@ -113,7 +113,7 @@ pnpm tsx packages/persona-flow/scripts/try-similarity.mts
 
 ---
 
-## Step 2: Contracts — `memory.embed` purpose + Config schema
+## Step 2: Contracts — `memory.embed` purpose + Config schema ✅ 已完成
 
 ### 范围
 
@@ -156,7 +156,7 @@ pnpm --filter @ss-ai/server test
 
 ---
 
-## Step 3: Embedding Probe + Minimal Adapter（真实调用）
+## Step 3: Embedding Probe + Minimal Adapter（真实调用） ✅ 已完成（自动测试部分）
 
 ### 范围
 
