@@ -98,7 +98,17 @@ export interface ListActiveMemoriesInput {
     scope?: MemoryScope | MemoryScope[];
     type?: MemoryCandidateType | MemoryCandidateType[];
     status?: MemoryStatus | MemoryStatus[];
-    /** Hard cap on the brute-force similarity scan. */
+    /**
+     * Hard cap on the brute-force similarity scan.
+     *
+     * Implementations MUST return rows in a deterministic order so
+     * that truncation is reproducible: newest first by `updatedAt`
+     * (descending), then `createdAt` (descending), then `id`
+     * (ascending) as a tiebreaker. Callers rely on this to keep
+     * commit-service decisions stable — without it, once a bucket
+     * exceeds the cap the similarity scan would silently depend on
+     * storage order.
+     */
     limit?: number;
 }
 

@@ -12,3 +12,4 @@ import "./providerCredentials.test.js";
 import "./characterDbRouter.test.js";
 import "./sessionsMigration.test.js";
 import "./userPreferencesMigration.test.js";
+import "./memoryStores.test.js";

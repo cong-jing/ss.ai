@@ -12,6 +12,11 @@ import { InMemoryUserProviderCredentialStore } from "./inMemoryUserProviderCrede
 import { InMemoryConversationStore } from "./inMemoryConversationStore.js";
 import { InMemoryChatStore } from "./inMemoryChatStore.js";
 import { InMemoryConversationActorStore } from "./inMemoryConversationActorStore.js";
+import {
+    StubMemoryCandidateStore,
+    StubMemoryDecisionStore,
+    StubMemoryStore,
+} from "./inMemoryMemoryStores.js";
 import type { AppStores } from "@ss-ai/persona-flow";
 import type { ModelAssignmentMap } from "@ss-ai/contracts";
 
@@ -87,6 +92,9 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}, op
         conversation: new InMemoryConversationStore(),
         chat: new InMemoryChatStore(),
         providerCredential: new InMemoryUserProviderCredentialStore(),
+        memoryCandidate: new StubMemoryCandidateStore(),
+        memory: new StubMemoryStore(),
+        memoryDecision: new StubMemoryDecisionStore(),
     };
 
     const app = createHttpServer(config, { stores }) as typeof createHttpServer extends (...args: any[]) => infer T ? T & { closeDatabase?: () => void } : never;

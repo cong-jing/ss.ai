@@ -327,6 +327,99 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
         migrateAppSessionTokenHashes();
     }
 
+    // ── memory write subsystem (Batch 2/3) ──────────────────────────────
+    // Three tables back the ports defined in
+    // `@ss-ai/persona-flow/memory`. They live in the core DB rather
+    // than per-character DBs because user/world memories transcend a
+    // single character (characterId is NULL for those rows) and we
+    // want a single place to query them.
+    //
+    // Volume is bounded by chat turns; brute-force cosine ranking
+    // happens in JS today. Indexes target the actual query patterns
+    // used by the commit service (`listActiveMemories` filters by
+    // user + character + scope + type + status) and by the debug
+    // surfaces (`listCandidates` by assistant turn / status).
+    sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS memory_candidates (
+            id                    TEXT PRIMARY KEY,
+            user_id               TEXT NOT NULL,
+            character_id          TEXT NOT NULL,
+            conversation_id       TEXT NOT NULL,
+            user_message_id       TEXT NOT NULL,
+            assistant_message_id  TEXT NOT NULL,
+            request_id            TEXT NOT NULL,
+            model_call_purpose    TEXT NOT NULL,
+            seq                   INTEGER NOT NULL,
+            scope                 TEXT NOT NULL,
+            type                  TEXT NOT NULL,
+            text                  TEXT NOT NULL,
+            normalized_text       TEXT NOT NULL,
+            related_entities_json TEXT NOT NULL DEFAULT '[]',
+            tags_json             TEXT NOT NULL DEFAULT '[]',
+            reason                TEXT,
+            status                TEXT NOT NULL,
+            embedding_json        TEXT,
+            schema_version        INTEGER NOT NULL,
+            created_at            TEXT NOT NULL,
+            updated_at            TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_memory_candidates_user_status_created
+            ON memory_candidates(user_id, status, created_at DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_memory_candidates_turn
+            ON memory_candidates(user_id, conversation_id, assistant_message_id, seq);
+
+        CREATE TABLE IF NOT EXISTS memories (
+            id                          TEXT PRIMARY KEY,
+            user_id                     TEXT NOT NULL,
+            character_id                TEXT,
+            scope                       TEXT NOT NULL,
+            type                        TEXT NOT NULL,
+            text                        TEXT NOT NULL,
+            normalized_text             TEXT NOT NULL,
+            related_entities_json       TEXT NOT NULL DEFAULT '[]',
+            tags_json                   TEXT NOT NULL DEFAULT '[]',
+            source_candidate_id         TEXT,
+            source_conversation_id      TEXT,
+            source_user_message_id      TEXT,
+            source_assistant_message_id TEXT,
+            status                      TEXT NOT NULL,
+            importance                  REAL NOT NULL,
+            embedding_json              TEXT,
+            schema_version              INTEGER NOT NULL,
+            created_at                  TEXT NOT NULL,
+            updated_at                  TEXT NOT NULL
+        );
+
+        -- Bucket scan: listActiveMemories filters by user + character (or NULL) + scope + type + status
+        CREATE INDEX IF NOT EXISTS idx_memories_user_character_scope_type_status
+            ON memories(user_id, character_id, scope, type, status);
+
+        -- Exact-duplicate lookup: findExactActiveMemory hits this for every commit
+        CREATE INDEX IF NOT EXISTS idx_memories_user_scope_type_normtext_status
+            ON memories(user_id, scope, type, normalized_text, status);
+
+        CREATE TABLE IF NOT EXISTS memory_decisions (
+            id                TEXT PRIMARY KEY,
+            candidate_id      TEXT NOT NULL,
+            user_id           TEXT NOT NULL,
+            character_id      TEXT,
+            decision          TEXT NOT NULL,
+            memory_id         TEXT,
+            reason            TEXT,
+            similarity_json   TEXT NOT NULL DEFAULT '[]',
+            policy_version    INTEGER NOT NULL,
+            created_at        TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_memory_decisions_candidate
+            ON memory_decisions(candidate_id);
+
+        CREATE INDEX IF NOT EXISTS idx_memory_decisions_user_decision_created
+            ON memory_decisions(user_id, decision, created_at DESC);
+    `);
+
     const db = drizzle(sqlite, { schema });
 
     return { sqlite, db };

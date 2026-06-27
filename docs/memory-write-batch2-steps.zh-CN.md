@@ -351,6 +351,12 @@ pnpm tsx packages/persona-flow/scripts/try-commit-service.mts
 
 ## Step 5: SQLite Schema + Stores
 
+### 当前实现边界
+
+到 Step 4 为止，已经实现的是 **memory 写入的 core/service 层**：`MemoryCandidateRecorder` 能把候选写入注入的 `MemoryCandidateStore`，`MemoryCommitService` 能通过注入的 `MemoryStore` / `MemoryDecisionStore` 创建 active memory 和 decision，并且已有 fake store 测试覆盖。
+
+但这还不是应用端到端的持久化写入：当前 chat turn 仍然只做 log-only，SQLite 里也还没有 `memory_candidates` / `memories` / `memory_decisions` 的具体表和 store。因此 Step 5 是把这些已经存在的 core ports 落到 SQLite 的第一步，Step 6 才是把它们接入聊天流程。
+
 ### 范围
 
 - `packages/persona-flow-sqlite/src/db/schema.ts`: 新增 `memory_candidates`、`memories`、`memory_decisions` 表定义 + 索引
@@ -359,6 +365,10 @@ pnpm tsx packages/persona-flow/scripts/try-commit-service.mts
 - `packages/persona-flow-sqlite/src/db/SQLiteMemoryDecisionStore.ts`
 - `packages/persona-flow-sqlite/src/createSqliteStores.ts`: 导出新 stores
 - 如果有 `CharacterDbRouter`：让 memory 表跟着 character DB 走
+
+本步不要重复实现 Step 4 的判断逻辑；SQLite store 只负责把 `packages/persona-flow/src/memory/ports.ts` 里的端口可靠落库。
+
+跨 `createMemory()`、candidate status update、decision append 的事务边界已经记录为后续 TODO。本步如果还不做 composite transaction / UnitOfWork，文档和测试里要明确这是已知限制；不要让调用方误以为 create + finalize 已经原子化。
 
 `memory_debug_events` 表本步**不做**，留到 Step 8 触发时再加。
 
@@ -440,13 +450,15 @@ pnpm run build
 ### 自动测试
 
 - 现有 60 条 persona-flow + 80 条 server 测试不回归
-- 新增：
-  - chat turn 有候选时调用 recorder + commit
-  - 空候选时不调用
-  - recorder 抛错 → chat 仍成功
-  - commit service 抛错 → chat 仍成功
-  - stream turn 同上
-  - `MemoryFeatureConfig.enabled = false` → 完全跳过 memory pipeline（连 recorder 都不调）
+
+新增测试覆盖：
+
+- chat turn 有候选时调用 recorder + commit
+- 空候选时不调用
+- recorder 抛错 → chat 仍成功
+- commit service 抛错或返回 error outcome → chat 仍成功
+- stream turn 同上
+- `MemoryFeatureConfig.enabled = false` → 完全跳过 memory pipeline（连 recorder 都不调）
 
 ### 手工可观察验收
 

@@ -227,12 +227,21 @@ class InMemoryMemoryStore implements MemoryStore {
         const scopeFilter = toArray(input.scope);
         const typeFilter = toArray(input.type);
         const statusFilter = toArray(input.status ?? "active");
+        // Mirror the port contract: deterministic order before
+        // truncation so the in-memory fake matches the SQLite store.
+        // updatedAt DESC, createdAt DESC, id ASC.
         return this.records
             .filter((r) => r.userId === input.userId)
             .filter((r) => characterMatches(r.characterId, input.characterId))
             .filter((r) => scopeFilter.length === 0 || scopeFilter.includes(r.scope))
             .filter((r) => typeFilter.length === 0 || typeFilter.includes(r.type))
             .filter((r) => statusFilter.length === 0 || statusFilter.includes(r.status))
+            .slice()
+            .sort((a, b) => {
+                if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1;
+                if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
+                return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+            })
             .slice(0, input.limit ?? Number.POSITIVE_INFINITY)
             .map((r) => ({ ...r, embedding: r.embedding ? { ...r.embedding, vector: [...r.embedding.vector] } : undefined }));
     }
