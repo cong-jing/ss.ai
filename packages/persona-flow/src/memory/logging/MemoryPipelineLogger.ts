@@ -8,12 +8,9 @@ import { MEMORY_PIPELINE_LOG_EVENTS, type MemoryPipelineLogEvent } from "./memor
  * Stage code calls one of the named methods (`pipelineStarted`,
  * `embeddingFailed`, etc.) instead of inlining log event strings. This
  * keeps the catalogue of events in `memoryPipelineLogEvents.ts` and
- * lets the wrapper decide:
- *  - whether the event is a `debug` (only emitted when
- *    `settings.logging.detailLevel === "debug"`) or `info` / `warn`
- *    (always emitted);
- *  - whether candidate text is allowed in the payload (controlled
- *    by `settings.logging.includeCandidateText`).
+ * Debug events carry compact stage state. Verbose events carry the
+ * heavier retrieval evidence used for threshold tuning. The global
+ * logger level decides what actually reaches disk.
  *
  * The wrapper is intentionally thin and stateless; if the upstream
  * `MemoryLogger` is missing a `debug` method, debug events are
@@ -21,14 +18,7 @@ import { MEMORY_PIPELINE_LOG_EVENTS, type MemoryPipelineLogEvent } from "./memor
  * `logger.debug?.(...)` calls).
  */
 export class MemoryPipelineLogger {
-    private readonly debugEnabled: boolean;
-
-    constructor(
-        private readonly logger: MemoryLogger | undefined,
-        private readonly settings: Pick<MemorySettings, "logging">,
-    ) {
-        this.debugEnabled = settings.logging.detailLevel === "debug";
-    }
+    constructor(private readonly logger: MemoryLogger | undefined) { }
 
     pipelineStarted(payload: PipelineStartedPayload): void {
         this.debug(MEMORY_PIPELINE_LOG_EVENTS.pipelineStarted, payload);
@@ -102,6 +92,10 @@ export class MemoryPipelineLogger {
         this.debug(MEMORY_PIPELINE_LOG_EVENTS.similaritySignatureMismatch, payload);
     }
 
+    retrievalEvidence(payload: RetrievalEvidencePayload): void {
+        this.verbose(MEMORY_PIPELINE_LOG_EVENTS.retrievalEvidence, payload);
+    }
+
     decisionMade(payload: DecisionMadePayload): void {
         this.debug(MEMORY_PIPELINE_LOG_EVENTS.decisionMade, payload);
     }
@@ -118,14 +112,12 @@ export class MemoryPipelineLogger {
         this.debug(MEMORY_PIPELINE_LOG_EVENTS.decisionRecorded, payload);
     }
 
-    /** True when callers may safely include candidate text in payloads. */
-    get includeCandidateText(): boolean {
-        return this.settings.logging.includeCandidateText;
+    private debug(event: MemoryPipelineLogEvent, payload: unknown): void {
+        this.logger?.debug?.(event, payload);
     }
 
-    private debug(event: MemoryPipelineLogEvent, payload: unknown): void {
-        if (!this.debugEnabled) return;
-        this.logger?.debug?.(event, payload);
+    private verbose(event: MemoryPipelineLogEvent, payload: unknown): void {
+        this.logger?.verbose?.(event, payload);
     }
 
     private warn(event: MemoryPipelineLogEvent, payload: unknown): void {
@@ -186,8 +178,6 @@ export interface CandidateProcessingStartedPayload {
     requestId: string;
     scope: string;
     type: string;
-    /** Only populated when `settings.logging.includeCandidateText` is on. */
-    text?: string;
 }
 
 export interface CandidateProcessingCompletedPayload {
@@ -210,6 +200,7 @@ export interface LowValueRejectedPayload {
 export interface ExactDuplicateFoundPayload {
     candidateId: string;
     memoryId: string;
+    normalizedText?: string;
 }
 
 export interface EmbeddingRequestedPayload {
@@ -238,6 +229,12 @@ export interface SimilarityRankedPayload {
     candidateId: string;
     rankedCount: number;
     topSimilarity?: number;
+    policy: {
+        topK: number;
+        needsJudgeThreshold: number;
+        exactDuplicateThreshold: number;
+        policyVersion: number;
+    };
     skipped: {
         noEmbedding: number;
         signatureMismatch: number;
@@ -263,6 +260,74 @@ export interface DecisionMadePayload {
     decision: string;
     reason?: string;
     topSimilarity?: number;
+    policy: {
+        needsJudgeThreshold: number;
+        exactDuplicateThreshold: number;
+        policyVersion: number;
+    };
+}
+
+export interface RetrievalEvidencePayload {
+    candidate: {
+        candidateId: string;
+        scope: string;
+        type: string;
+        normalizedText: string;
+        text: string;
+        relatedEntities: string[];
+        tags: string[];
+    };
+    bucket: {
+        userId: string;
+        characterId: string;
+        scope: string;
+        type: string;
+        status: "active";
+        listLimit: number;
+    };
+    candidateEmbedding: {
+        provider: string;
+        model: string;
+        dim: number;
+        version: number;
+        vectorNorm: number;
+    };
+    policy: {
+        topK: number;
+        needsJudgeThreshold: number;
+        exactDuplicateThreshold: number;
+        policyVersion: number;
+    };
+    scan: {
+        scannedCount: number;
+        rankedCount: number;
+        skipped: {
+            noEmbedding: number;
+            signatureMismatch: number;
+            corruptDim: number;
+            nonFiniteSimilarity: number;
+        };
+        totalSkipped: number;
+    };
+    topMatches: Array<{
+        memoryId: string;
+        similarity: number;
+        normalizedText: string;
+        text: string;
+        importance: number;
+        updatedAt: string;
+        embedding?: {
+            provider: string;
+            model: string;
+            dim: number;
+            version: number;
+        };
+    }>;
+    decision: {
+        kind: string;
+        reason?: string;
+        topSimilarity?: number;
+    };
 }
 
 export interface MemoryCreatedPayload {

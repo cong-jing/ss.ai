@@ -100,7 +100,7 @@ function makeProcessor(stores: InMemoryMemoryStores, options: ProcessorTestOptio
     };
     const clock = makeFixedClock(NOW);
     const ids = makeSequentialIds();
-    const pipelineLogger = new MemoryPipelineLogger(options.logger, settings);
+    const pipelineLogger = new MemoryPipelineLogger(options.logger);
     const embeddingStep = new MemoryEmbeddingStep(embeddingProvider, pipelineLogger);
     const decisionRecorder = new MemoryDecisionRecorder({
         candidateStore: stores.candidateStore,
@@ -124,7 +124,7 @@ describe("MemoryCandidateProcessor", () => {
     it("creates a new memory when no similar one exists", async () => {
         const stores = makeInMemoryMemoryStores();
         const { processor } = makeProcessor(stores);
-        const candidate = seedCandidate(stores, "用户喜欢喝绿茶");
+        const candidate = seedCandidate(stores, "user likes green tea");
 
         const { outcomes } = await processor.processCandidates({ candidates: [candidate] });
 
@@ -141,7 +141,7 @@ describe("MemoryCandidateProcessor", () => {
         // and a matching memory exists
         const memories = stores.memoryStore.snapshotAll();
         assert.equal(memories.length, 1);
-        assert.equal(memories[0]!.text, "用户喜欢喝绿茶");
+        assert.equal(memories[0]!.text, "user likes green tea");
         // embedding signature is persisted alongside the memory
         assert.equal(memories[0]!.embedding?.provider, "fake.embed");
     });
@@ -208,9 +208,9 @@ describe("MemoryCandidateProcessor", () => {
         const seedCand = seedCandidate(stores, "loves matcha lattes a lot");
         await processor.processCandidates({ candidates: [seedCand] });
         // Now feed a near-duplicate: same text means our deterministic
-        // embedder returns the same vector �?cosine similarity = 1,
-        // which falls in [exactDuplicateThreshold, �? and routes to
-        // needs_judge per the Batch 2/3 policy.
+        // embedder returns the same vector, so cosine similarity = 1,
+        // which falls above exactDuplicateThreshold and routes to
+        // needs_judge per the conservative policy.
         const near = seedCandidate(stores, "Loves matcha lattes a lot!", { id: "cand-near" });
 
         const { outcomes } = await processor.processCandidates({ candidates: [near] });
@@ -318,7 +318,7 @@ describe("MemoryCandidateProcessor", () => {
         // created fresh.
         assert.equal(outcomes[0]!.decision, "create");
         assert.equal(outcomes[0]!.scannedCount, 2);
-        // Counts are split per reason �?old aggregated `skippedCount`
+        // Counts are split per reason; old aggregated `skippedCount`
         // would have hidden the corrupt row entirely.
         assert.equal(outcomes[0]!.skipped?.signatureMismatch, 1);
         assert.equal(outcomes[0]!.skipped?.corruptDim, 1);
@@ -379,5 +379,63 @@ describe("MemoryCandidateProcessor", () => {
         assert.equal(stageMessages.has(MEMORY_PIPELINE_LOG_EVENTS.embeddingRequested), true);
         assert.equal(stageMessages.has(MEMORY_PIPELINE_LOG_EVENTS.similarityRanked), true);
         assert.equal(stageMessages.has(MEMORY_PIPELINE_LOG_EVENTS.decisionMade), true);
+    });
+
+    it("emits verbose retrieval evidence with candidate text, policy, and ranked matches", async () => {
+        const stores = makeInMemoryMemoryStores();
+        stores.memoryStore.seedMemory({
+            userId: "u1",
+            characterId: "c1",
+            scope: "user",
+            type: "fact",
+            text: "Existing memory about coffee preference",
+            normalizedText: normalizeMemoryText("Existing memory about coffee preference"),
+            relatedEntities: [],
+            tags: ["taste"],
+            status: "active",
+            importance: 0.7,
+            embedding: {
+                vector: [1, 0, 0, 0, 0, 0, 0, 0],
+                provider: "fake.embed",
+                model: "fake-model",
+                dim: 8,
+                version: 1,
+                createdAt: NOW,
+            },
+            createdAt: NOW,
+            updatedAt: NOW,
+        });
+        const logger = makeRecordingLogger();
+        const { processor } = makeProcessor(stores, {
+            logger,
+        });
+        const candidate = seedCandidate(stores, "New fact about tea preference", {
+            relatedEntities: ["tea"],
+            tags: ["taste"],
+        });
+
+        await processor.processCandidates({ candidates: [candidate] });
+
+        const evidence = logger.verboseEvents.find(
+            (event) => event.message === MEMORY_PIPELINE_LOG_EVENTS.retrievalEvidence,
+        );
+        assert.ok(evidence, "verbose logging must include retrieval evidence");
+        const payload = evidence.payload as {
+            candidate: { text?: string; normalizedText: string; tags: string[] };
+            policy: { needsJudgeThreshold: number; exactDuplicateThreshold: number; topK: number };
+            scan: { scannedCount: number; rankedCount: number };
+            topMatches: Array<{ memoryId: string; similarity: number; text?: string; normalizedText: string }>;
+        };
+        assert.equal(payload.candidate.text, "New fact about tea preference");
+        assert.equal(payload.candidate.normalizedText, normalizeMemoryText("New fact about tea preference"));
+        assert.deepEqual(payload.candidate.tags, ["taste"]);
+        assert.equal(payload.policy.needsJudgeThreshold, DEFAULT_MEMORY_SETTINGS.ranking.needsJudgeThreshold);
+        assert.equal(payload.policy.exactDuplicateThreshold, DEFAULT_MEMORY_SETTINGS.ranking.exactDuplicateThreshold);
+        assert.equal(payload.policy.topK, DEFAULT_MEMORY_SETTINGS.ranking.topK);
+        assert.equal(payload.scan.scannedCount, 1);
+        assert.equal(payload.scan.rankedCount, 1);
+        assert.equal(payload.topMatches.length, 1);
+        assert.equal(payload.topMatches[0]!.text, "Existing memory about coffee preference");
+        assert.equal(typeof payload.topMatches[0]!.similarity, "number");
     });
 });

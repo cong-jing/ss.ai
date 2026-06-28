@@ -40,6 +40,21 @@
   - `"inline"`：assistant turn 持久化后，在同一次 chat turn 内完成候选记录、embedding、相似度扫描、决策和写入。
   - `"record_only"`：只记录候选到 `memory_candidates`，不立即生成 embedding，也不创建 memory / decision。候选会保留为后续 worker、debug 工具或人工处理使用。
 
+memory 日志不在 `memory` 配置段里单独开关，而是复用全局 `logger.level`：
+
+- `logger.level = "debug"`：输出 memory pipeline 阶段事件、关键计数、policy 阈值和 decision reason，适合确认链路是否运行以及粗略观察判断结果。
+- `logger.level = "verbose"`：额外输出 `memory.pipeline.retrieval_evidence`，包含候选文本、normalizedText、bucket、embedding 签名、ranking 阈值、扫描数量、跳过原因、top matches 和最终 decision，适合调 ranking / similarity 参数。
+
+要在 `.runtime/logs/ss-ai.log` 看到 verbose evidence，可以设置：
+
+```json
+{
+  "logger": {
+    "level": "verbose"
+  }
+}
+```
+
 其余 memory 调参项目前不放进 server JSON，而是由 `packages/persona-flow/src/memory/settings.ts` 中的 `DEFAULT_MEMORY_SETTINGS` 提供：
 
 - `ranking.listLimit`：每个候选最多读取多少条同 bucket active memories 用于扫描。
@@ -47,9 +62,6 @@
 - `ranking.needsJudgeThreshold`：高于该相似度时进入 `needs_judge`，避免直接创建可能重复的 memory。
 - `ranking.exactDuplicateThreshold`：embedding 相似度达到更高阈值时仍进入 `needs_judge`，不会自动丢弃。
 - `embedding.version`：embedding 签名版本。文本预处理、包装方式或归一化策略变化时可提升版本，避免旧向量和新向量混比。
-- `logging.detailLevel`：memory pipeline 日志细节，当前默认 `debug`。
-- `logging.includeCandidateText`：是否在 memory debug 日志里输出候选原文，当前默认 `false`。
-
 embedding 使用的模型不是 `memory` 配置项，而是 model assignment 体系的一部分：
 
 - 固定 purpose：`memory.embed`
@@ -161,9 +173,9 @@ active memory 查询 bucket 使用：`userId + characterId + scope + type`。精
 
 memory 日志集中在 `packages/persona-flow/src/memory/logging/**`。阶段代码只调用 `MemoryPipelineLogger` 的命名方法，不直接拼事件名。
 
-当前日志覆盖 pipeline start / skip / complete / failure、候选记录、候选处理、低价值过滤、精确重复、embedding、active memory 扫描、相似度排序、签名不匹配、决策、memory 创建和 decision 记录。
+当前日志覆盖 pipeline start / skip / complete / failure、候选记录、候选处理、低价值过滤、精确重复、embedding、active memory 扫描、相似度排序、签名不匹配、检索证据、决策、memory 创建和 decision 记录。
 
-`logging.includeCandidateText` 默认关闭，避免候选原文进入调试日志。
+`memory.pipeline.retrieval_evidence` 是调参时最重要的事件：它把一次候选处理的检索依据放在同一个 payload 中，避免只看到一串 id 却不知道 similarity、阈值和匹配文本。这个事件只走 `verbose`，因此默认 `info` / `debug` 日志不会写入完整文本证据。
 
 ## 已完成
 
@@ -187,4 +199,4 @@ memory 日志集中在 `packages/persona-flow/src/memory/logging/**`。阶段代
 - `createMemory + candidate status + decision` 还没有跨 store 的事务一致性保证。
 - 还没有 `memory_debug_events` 表，也没有面向 UI 的细粒度判定过程查询。
 - ranking 阈值仍需要更多真实样本校准，尤其是短中文事实的 baseline similarity。
-- memory 的 ranking、logging、embedding version 等调参项目前仍是代码默认值，还没有迁移到用户偏好或管理 UI。
+- memory 的 ranking、embedding version 等调参项目前仍是代码默认值，还没有迁移到用户偏好或管理 UI。

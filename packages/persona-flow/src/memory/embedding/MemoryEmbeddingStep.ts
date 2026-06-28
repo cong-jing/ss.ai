@@ -11,7 +11,7 @@ import type {
  * Either the provider returned a usable result (`ok: true` and
  * `result` is set), or it failed (`ok: false` and `error` is set).
  * The processor never has to inspect provider-specific error types
- * 閳?they are flattened into a string message at this boundary and
+ * because they are flattened into a string message at this boundary and
  * the processor maps that to a `embedding_failed` outcome.
  */
 export type MemoryEmbeddingStepOutcome =

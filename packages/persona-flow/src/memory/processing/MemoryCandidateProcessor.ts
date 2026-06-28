@@ -122,7 +122,6 @@ export class MemoryCandidateProcessor {
             requestId: candidate.source.requestId,
             scope: candidate.scope,
             type: candidate.type,
-            ...(logger.includeCandidateText ? { text: candidate.text } : {}),
         });
 
         try {
@@ -149,9 +148,13 @@ export class MemoryCandidateProcessor {
             const exactDuplicate = await checkExactDuplicate(
                 candidate,
                 this.deps.memoryStore,
-                logger,
             );
             if (exactDuplicate) {
+                logger.exactDuplicateFound({
+                    candidateId: candidate.id,
+                    memoryId: exactDuplicate.id,
+                    normalizedText: candidate.normalizedText,
+                });
                 return await this.finalize({
                     candidate,
                     decision: "ignore_duplicate",
@@ -216,6 +219,7 @@ export class MemoryCandidateProcessor {
                 candidateId: candidate.id,
                 rankedCount: ranked.length,
                 topSimilarity: ranked[0]?.similarity,
+                policy: this.policySnapshot(),
                 skipped,
                 totalSkipped: totalSkipped(skipped),
             });
@@ -227,6 +231,51 @@ export class MemoryCandidateProcessor {
                 decision: decision.kind,
                 reason: decision.reason,
                 topSimilarity: decision.topSimilarity,
+                policy: {
+                    needsJudgeThreshold: this.policy.needsJudgeThreshold,
+                    exactDuplicateThreshold: this.policy.exactDuplicateThreshold,
+                    policyVersion: this.policy.policyVersion,
+                },
+            });
+
+            logger.retrievalEvidence({
+                candidate: {
+                    candidateId: candidate.id,
+                    scope: candidate.scope,
+                    type: candidate.type,
+                    normalizedText: candidate.normalizedText,
+                    text: candidate.text,
+                    relatedEntities: [...candidate.relatedEntities],
+                    tags: [...candidate.tags],
+                },
+                bucket: {
+                    userId: candidate.source.userId,
+                    characterId: candidate.source.characterId,
+                    scope: candidate.scope,
+                    type: candidate.type,
+                    status: "active",
+                    listLimit: this.listLimit,
+                },
+                candidateEmbedding: {
+                    provider: embedded.provider,
+                    model: embedded.model,
+                    dim: embedded.dim,
+                    version: embedded.version,
+                    vectorNorm: vectorNorm(embedded.vector),
+                },
+                policy: this.policySnapshot(),
+                scan: {
+                    scannedCount: activeMemories.length,
+                    rankedCount: ranked.length,
+                    skipped,
+                    totalSkipped: totalSkipped(skipped),
+                },
+                topMatches: this.toEvidenceMatches(ranked),
+                decision: {
+                    kind: decision.kind,
+                    reason: decision.reason,
+                    topSimilarity: decision.topSimilarity,
+                },
             });
 
             const similaritySummary = this.toSummary(ranked);
@@ -361,6 +410,55 @@ export class MemoryCandidateProcessor {
         });
     }
 
+    private policySnapshot(): {
+        topK: number;
+        needsJudgeThreshold: number;
+        exactDuplicateThreshold: number;
+        policyVersion: number;
+    } {
+        return {
+            topK: this.policy.topK,
+            needsJudgeThreshold: this.policy.needsJudgeThreshold,
+            exactDuplicateThreshold: this.policy.exactDuplicateThreshold,
+            policyVersion: this.policy.policyVersion,
+        };
+    }
+
+    private toEvidenceMatches(ranked: RankedMemory[]): Array<{
+        memoryId: string;
+        similarity: number;
+        normalizedText: string;
+        text: string;
+        importance: number;
+        updatedAt: string;
+        embedding?: {
+            provider: string;
+            model: string;
+            dim: number;
+            version: number;
+        };
+    }> {
+        return ranked.map((entry) => {
+            const embedding = entry.memory.embedding;
+            return {
+                memoryId: entry.memory.id,
+                similarity: entry.similarity,
+                normalizedText: entry.memory.normalizedText,
+                text: entry.memory.text,
+                importance: entry.memory.importance,
+                updatedAt: entry.memory.updatedAt,
+                ...(embedding ? {
+                    embedding: {
+                        provider: embedding.provider,
+                        model: embedding.model,
+                        dim: embedding.dim,
+                        version: embedding.version,
+                    },
+                } : {}),
+            };
+        });
+    }
+
     private toSummary(ranked: RankedMemory[]): MemorySimilaritySummaryEntry[] {
         return ranked.map((entry) => ({
             memoryId: entry.memory.id,
@@ -421,6 +519,14 @@ export class MemoryCandidateProcessor {
             ...(args.error ? { error: args.error } : {}),
         };
     }
+}
+
+function vectorNorm(vector: readonly number[]): number {
+    let sum = 0;
+    for (const value of vector) {
+        sum += value * value;
+    }
+    return Math.sqrt(sum);
 }
 
 // Compile-time discharge of MemoryLogger import (so the export is

@@ -41,7 +41,7 @@ function buildPipelineBundle(options: BundleOptions = {}) {
     const ids = makeSequentialIds();
     const settings = DEFAULT_MEMORY_SETTINGS;
     const logger = makeRecordingLogger();
-    const pipelineLogger = new MemoryPipelineLogger(logger, settings);
+    const pipelineLogger = new MemoryPipelineLogger(logger);
     const candidateRecorder = new MemoryCandidateRecorder({
         candidateStore: stores.candidateStore,
         clock,

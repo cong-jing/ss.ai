@@ -161,7 +161,7 @@ function buildMemoryBundle(overrides: { settings?: MemorySettings } = {}): Memor
     const embeddingProvider = makeFakeEmbeddingProvider();
     const settings: MemorySettings = overrides.settings ?? DEFAULT_MEMORY_SETTINGS;
 
-    const pipelineLogger = new MemoryPipelineLogger(undefined, settings);
+    const pipelineLogger = new MemoryPipelineLogger(undefined);
     const candidateRecorder = new MemoryCandidateRecorder({
         candidateStore: stores.candidateStore,
         clock,
@@ -368,7 +368,7 @@ describe("PersonaFlowChatTurnService memory pipeline integration", () => {
         assert.equal(memory.stores.candidateStore.snapshotAll().length, 0);
         assert.equal(memory.stores.memoryStore.snapshotAll().length, 0);
         assert.equal(memory.stores.decisionStore.snapshotAll().length, 0);
-        // But Batch 1 observability is preserved: the INFO summary line
+        // But candidate observability is preserved: the INFO summary line
         // still runs so existing dashboards keep working.
         assert.equal(
             infoLogs.filter(msg => msg === "persona-flow/memory: candidates logged").length,

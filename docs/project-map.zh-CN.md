@@ -377,7 +377,7 @@ QQ bot 集成。
 - `runtimeFiles`：临时目录和用户数据目录
 - `agent`：模型客户端的超时和重试设置
 - `promptLog`：prompt logging 是否启用以及输出路径
-- `memory`：长期记忆写入链路开关和候选处理模式；当前暴露 `enabled` 与 `candidateProcessingMode`，详细说明见 [Project Map - Memory 子系统](project-map-memory.zh-CN.md)
+- `memory`：长期记忆写入链路开关和候选处理模式；当前暴露 `enabled` 与 `candidateProcessingMode`，memory 诊断日志复用全局 `logger.level`，详细说明见 [Project Map - Memory 子系统](project-map-memory.zh-CN.md)
 - `models`：provider 配置、API URL、可选默认 API key、默认 model，以及可选静态 `availableModels`
 - `defaultModelAssignments`：按 `ModelCallPurpose` 配置的默认 provider 和 model 映射
 - `auth`：认证模式、默认用户 id、是否允许注册、session 生命周期和 cookie 设置

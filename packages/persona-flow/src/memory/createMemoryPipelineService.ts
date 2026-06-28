@@ -58,7 +58,7 @@ export function createMemoryPipelineService(input: CreateMemoryPipelineServiceIn
     const clock: MemoryClock = input.clock ?? { nowIso: () => new Date().toISOString() };
     const ids: MemoryIdGenerator = input.ids ?? { randomId: () => crypto.randomUUID() };
 
-    const pipelineLogger = new MemoryPipelineLogger(input.logger, settings);
+    const pipelineLogger = new MemoryPipelineLogger(input.logger);
 
     const embeddingProvider = input.overrides?.embeddingProvider ?? new ModelClientMemoryEmbeddingProvider({
         modelClient: input.modelClient,

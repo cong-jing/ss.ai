@@ -1,7 +1,7 @@
 /**
  * Runtime settings for the memory subsystem.
  *
- * Externally the only two knobs the server exposes are:
+ * Externally the server exposes:
  *  - `enabled` is the master switch.
  *  - `candidateProcessingMode`: `"inline"` runs the full record ->
  *    embed -> rank -> decide -> persist chain inside the chat turn;
@@ -9,7 +9,7 @@
  *    worker / debug API / human judge can process candidates later.
  *
  * The remaining knobs (ranking thresholds, embedding signature
- * version, log verbosity) live here as in-code defaults rather than
+ * version) live here as in-code defaults rather than
  * in the server config:
  *  - They are tuning numbers we want to iterate on without bumping
  *    the config schema.
@@ -31,10 +31,6 @@ export interface MemorySettings {
     embedding: {
         version: number;
     };
-    logging: {
-        detailLevel: "summary" | "debug";
-        includeCandidateText: boolean;
-    };
 }
 
 export const DEFAULT_MEMORY_SETTINGS: MemorySettings = {
@@ -48,9 +44,5 @@ export const DEFAULT_MEMORY_SETTINGS: MemorySettings = {
     },
     embedding: {
         version: 1,
-    },
-    logging: {
-        detailLevel: "debug",
-        includeCandidateText: false,
     },
 };

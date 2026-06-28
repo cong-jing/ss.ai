@@ -66,6 +66,7 @@ export interface MemoryIdGenerator {
  * wraps this contract and is what stage code actually calls.
  */
 export interface MemoryLogger {
+    verbose?(message: string, payload?: unknown): void;
     debug?(message: string, payload?: unknown): void;
     info(message: string, payload?: unknown): void;
     warn(message: string, payload?: unknown): void;

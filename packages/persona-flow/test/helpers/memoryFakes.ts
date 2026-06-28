@@ -40,7 +40,7 @@ import { MEMORY_SCHEMA_VERSION } from "../../src/memory/index.js";
  *
  * The fakes are intentionally small: no transactions, no concurrency
  * control, no JSON corruption guards. Production behaviour belongs in
- * the real SQLite stores (Step 5) — these fakes only need to be
+ * the real SQLite stores; these fakes only need to be
  * faithful enough to drive the in-process pipeline.
  */
 
@@ -336,7 +336,7 @@ interface FakeEmbeddingProviderOptions {
  *
  * The default `vectorFor` produces a positional bag-of-char vector:
  * each cell is `sum_over_i 1 if (charCode_i * (i+1)) % dim == cell`.
- * Identical texts → identical vectors (cosine = 1, so the
+ * Identical texts 鈫?identical vectors (cosine = 1, so the
  * `needs_judge` branch fires reliably), while two different ASCII
  * English strings end up in mostly disjoint cells (cosine well
  * below `needsJudgeThreshold`, so `create` fires reliably). Real
@@ -388,6 +388,7 @@ export function makeFakeEmbeddingProvider(options: FakeEmbeddingProviderOptions 
 // ---------- Logger ----------
 
 export interface RecordingLogger extends MemoryLogger {
+    verboseEvents: { message: string; payload?: unknown }[];
     debugEvents: { message: string; payload?: unknown }[];
     warnEvents: { message: string; payload?: unknown }[];
     errorEvents: { message: string; payload?: unknown }[];
@@ -395,15 +396,18 @@ export interface RecordingLogger extends MemoryLogger {
 }
 
 export function makeRecordingLogger(): RecordingLogger {
+    const verboseEvents: { message: string; payload?: unknown }[] = [];
     const debugEvents: { message: string; payload?: unknown }[] = [];
     const warnEvents: { message: string; payload?: unknown }[] = [];
     const errorEvents: { message: string; payload?: unknown }[] = [];
     const infoEvents: { message: string; payload?: unknown }[] = [];
     return {
+        verboseEvents,
         debugEvents,
         warnEvents,
         errorEvents,
         infoEvents,
+        verbose(message, payload) { verboseEvents.push({ message, payload }); },
         debug(message, payload) { debugEvents.push({ message, payload }); },
         info(message, payload) { infoEvents.push({ message, payload }); },
         warn(message, payload) { warnEvents.push({ message, payload }); },

@@ -1,5 +1,4 @@
 import type { MemoryCandidateRecord } from "../candidate/candidateTypes.js";
-import type { MemoryPipelineLogger } from "../logging/MemoryPipelineLogger.js";
 import type {
     ActiveMemoryRecord,
     MemoryStore,
@@ -18,7 +17,6 @@ import type {
 export async function checkExactDuplicate(
     candidate: MemoryCandidateRecord,
     memoryStore: MemoryStore,
-    logger: MemoryPipelineLogger,
 ): Promise<ActiveMemoryRecord | undefined> {
     const match = await memoryStore.findExactActiveMemory({
         userId: candidate.source.userId,
@@ -27,8 +25,5 @@ export async function checkExactDuplicate(
         type: candidate.type,
         normalizedText: candidate.normalizedText,
     });
-    if (match) {
-        logger.exactDuplicateFound({ candidateId: candidate.id, memoryId: match.id });
-    }
     return match;
 }

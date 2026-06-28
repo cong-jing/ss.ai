@@ -35,6 +35,7 @@ export const MEMORY_PIPELINE_LOG_EVENTS = {
     activeMemoriesFetched: "memory.pipeline.active_memories_fetched",
     similarityRanked: "memory.pipeline.similarity_ranked",
     similaritySignatureMismatch: "memory.pipeline.similarity_signature_mismatch",
+    retrievalEvidence: "memory.pipeline.retrieval_evidence",
 
     decisionMade: "memory.pipeline.decision_made",
     memoryCreated: "memory.pipeline.memory_created",
