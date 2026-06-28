@@ -4,7 +4,7 @@ import type {
     MemoryWriteCandidate,
 } from "@ss-ai/contracts";
 import type { MemoryEmbedding } from "../embedding/embeddingPorts.js";
-import type { MemoryCandidateSource } from "../memoryPipelineTypes.js";
+import type { MemoryCandidateSource } from "../types.js";
 
 /**
  * Candidate-stage domain types.

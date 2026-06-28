@@ -6,11 +6,11 @@ import type { MemoryCandidateStore } from "../candidate/candidatePorts.js";
 import { checkExactDuplicate } from "../duplicate/exactDuplicateStep.js";
 import type { MemoryEmbeddingStep } from "../embedding/MemoryEmbeddingStep.js";
 import { MemoryPipelineLogger } from "../logging/MemoryPipelineLogger.js";
-import type { MemoryPipelineSettings } from "../memoryPipelineSettings.js";
+import type { MemorySettings } from "../settings.js";
 import type {
     MemoryClock,
     MemoryLogger,
-} from "../memoryPipelineTypes.js";
+} from "../types.js";
 import { MemoryDecisionRecorder } from "../decision/MemoryDecisionRecorder.js";
 import type {
     MemoryDecisionKind,
@@ -56,7 +56,7 @@ export interface MemoryCandidateProcessorDeps {
     decisionRecorder: MemoryDecisionRecorder;
     clock: MemoryClock;
     pipelineLogger: MemoryPipelineLogger;
-    settings: MemoryPipelineSettings;
+    settings: MemorySettings;
     /**
      * Default importance assigned to newly-created memories. Falls
      * back to a fixed constant; never null/undefined inside the
@@ -73,9 +73,9 @@ export interface MemoryCandidateProcessorDeps {
 
 /**
  * Drives a candidate through:
- *   low-value filter â†’ exact-duplicate lookup â†’ embedding â†’
- *   active-memory scan â†’ ranking â†’ decision â†’ memory create
- *   (if needed) â†’ decision row + candidate status update.
+ *   low-value filter â†?exact-duplicate lookup â†?embedding â†?
+ *   active-memory scan â†?ranking â†?decision â†?memory create
+ *   (if needed) â†?decision row + candidate status update.
  *
  * Hard requirements (carry-over from the old `MemoryCommitService`):
  *  - Per-candidate isolation: a thrown error in one candidate must
@@ -126,7 +126,7 @@ export class MemoryCandidateProcessor {
         });
 
         try {
-            // 1. Low-value filter â€” avoid paying for an embedding on
+            // 1. Low-value filter â€?avoid paying for an embedding on
             //    text we would never accept anyway.
             const lowValue = isLowValueCandidate(candidate);
             if (lowValue.lowValue) {

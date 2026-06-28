@@ -16,19 +16,19 @@
 
 边界适配代码位于：
 
-- `packages/persona-flow/src/memoryAdapters/modelClientEmbeddingProvider.ts`
+- `packages/persona-flow/src/memory/embedding/ModelClientMemoryEmbeddingProvider.ts`
 - `packages/persona-flow-model-client/src/mistral/mistralEmbed.ts`
 - `packages/persona-flow-model-client/src/mistral/mistralModelClient.ts`
 
-这些文件负责把 memory core 需要的 `MemoryEmbeddingProvider` 接到真实 model client/provider。
+这些文件负责把 memory pipeline 需要的 `MemoryEmbeddingProvider` 接到真实 model client/provider。
 
 ## 输入来源
 
 Batch 1 后，`single_character_chat` 的 structured output schema 中包含顶层 `memoryWriteCandidates` 字段。候选记忆不是可见回复，也不参与 streaming preview。
 
-Step 6 完成后，`PersonaFlowChatTurnService.chatTurn()` / `streamTurn()` 在持久化 assistant turn 后调用 `safeHandleMemoryWriteCandidates(...)`：先保留 Batch 1 的 INFO 摘要行（`persona-flow/memory: candidates logged`），再按 `MemoryFeatureConfig` 决定是否调用 `MemoryCandidateRecorder` + `MemoryCommitService`。整段 try/catch，任何异常仅 WARN 日志，不会让 chat turn 失败。
+适配后的运行时形态：`PersonaFlowChatTurnService` 在构造函数里默认调用 `createMemoryPipelineService(...)` 拼装出完整的 `MemoryPipelineService`。assistant turn 持久化后，`safeHandleMemoryWriteCandidates(...)` 仍会先输出 Batch 1 的 INFO 摘要行（`persona-flow/memory: candidates logged`），随后调用 `memoryPipelineService.handleChatTurnCandidates(...)`。`MemorySettings.enabled` / `MemorySettings.candidateProcessingMode` 在 service 内部决定是否运行 recorder / processor；整段 try/catch，任何异常仅 WARN 日志，不会让 chat turn 失败。
 
-服务端 boot 在 `apps/server/src/http/apis/chat/chatUtil.ts` 把 stores、`ModelClientEmbeddingProvider`、recorder、commit service 一起绑定到 `PersonaFlowChatTurnService.memory` 字段；`RuntimeConfig.memory` 字段控制 enabled / immediateCommitEnabled。
+服务端 boot 在 `apps/server/src/http/apis/chat/chatUtil.ts` 只传 `stores`、`modelClient` 以及 `memorySettings: context.config.memory` 给 `PersonaFlowChatTurnService` —— recorder / processor / embedding provider 都由 service 自己实例化。`RuntimeConfig.memory` 字段只暴露 `enabled` 和 `candidateProcessingMode`；其他 memory settings（ranking / embedding / logging）由 `DEFAULT_MEMORY_SETTINGS` 默认提供。
 
 ## 核心数据类型
 
@@ -198,9 +198,9 @@ Step 6 完成后，`PersonaFlowChatTurnService.chatTurn()` / `streamTurn()` 在�
 
 ### `MemoryCandidateRecorder.recordCandidates()`
 
-文件：`packages/persona-flow/src/memory/candidateRecorder.ts`
+文件：`packages/persona-flow/src/memory/candidate/MemoryCandidateRecorder.ts`
 
-作用：把模型提出的 candidate drafts 保存成 candidate records，供 commit service 处理。
+作用：把模型提出的 candidate drafts 保存成 candidate records，供 candidate processor 处理。
 
 流程：
 
@@ -220,17 +220,17 @@ Step 6 完成后，`PersonaFlowChatTurnService.chatTurn()` / `streamTurn()` 在�
 
 ## 提交服务
 
-### `MemoryCommitService.commitCandidates()`
+### `MemoryCandidateProcessor.processCandidates()`
 
-文件：`packages/persona-flow/src/memory/commitService.ts`
+文件：`packages/persona-flow/src/memory/processing/MemoryCandidateProcessor.ts`
 
 作用：逐条处理 candidate record，产出 active memory 或 decision。
 
 它按顺序处理 batch 内 candidates；每条 candidate 有自己的 try/catch，一条失败不会中断后续候选。
 
-### `commitOne()` 的处理流程
+### `processOne()` 的处理流程
 
-文件：`packages/persona-flow/src/memory/commitService.ts`
+文件：`packages/persona-flow/src/memory/processing/MemoryCandidateProcessor.ts`
 
 1. `candidate_received`
    - 记录候选开始处理。
@@ -266,7 +266,7 @@ Step 6 完成后，`PersonaFlowChatTurnService.chatTurn()` / `streamTurn()` 在�
 
 ### memory 与 character 的绑定
 
-文件：`packages/persona-flow/src/memory/commitService.ts`
+文件：`packages/persona-flow/src/memory/processing/MemoryCandidateProcessor.ts`
 
 每条 memory 都属于**某一个 character 世界**。这是 Batch 2 收尾时确立的硬规则：
 
@@ -280,7 +280,7 @@ Step 6 完成后，`PersonaFlowChatTurnService.chatTurn()` / `streamTurn()` 在�
 
 ### `rankWithSkipDiagnostics()`
 
-文件：`packages/persona-flow/src/memory/commitService.ts`
+文件：`packages/persona-flow/src/memory/processing/MemoryCandidateProcessor.ts`
 
 作用：在排序前逐条扫描 memories 只为了为 signature mismatch 发出逐行 debug log，随后委托 `rankSimilarMemories()` 汇总计数 + 排序。本身不再重复跳过逻辑 —— 计数只有 similarity.ts 一个权威源。
 
@@ -297,7 +297,7 @@ Step 6 完成后，`PersonaFlowChatTurnService.chatTurn()` / `streamTurn()` 在�
 
 ### `finalize()`
 
-文件：`packages/persona-flow/src/memory/commitService.ts`
+文件：`packages/persona-flow/src/memory/processing/MemoryCandidateProcessor.ts`
 
 作用：统一写 candidate status 和 decision row，并返回 `MemoryCommitOutcome`。
 
@@ -310,11 +310,11 @@ Step 6 完成后，`PersonaFlowChatTurnService.chatTurn()` / `streamTurn()` 在�
 
 ## Embedding adapter
 
-### `ModelClientEmbeddingProvider.embed()`
+### `ModelClientMemoryEmbeddingProvider.embed()`
 
-文件：`packages/persona-flow/src/memoryAdapters/modelClientEmbeddingProvider.ts`
+文件：`packages/persona-flow/src/memory/embedding/ModelClientMemoryEmbeddingProvider.ts`
 
-作用：把 memory core 的 `MemoryEmbeddingProvider` 端口接到通用 `ModelClient.embed()`。
+作用：把 memory pipeline 的 `MemoryEmbeddingProvider` 端口接到通用 `ModelClient.embed()`。
 
 处理流程：
 
@@ -332,7 +332,7 @@ Step 6 完成后，`PersonaFlowChatTurnService.chatTurn()` / `streamTurn()` 在�
 6. 校验返回 vector 非空且每项是 finite number。
 7. 返回 `MemoryEmbedResult`，补齐 provider/model/dim/version/createdAt。
 
-该文件刻意放在 `memoryAdapters/**`，不放在 `memory/**`，因为它依赖 model client、app stores 和 chat logger 类型。
+该文件现在住在 `memory/embedding/**`。它是 memory pipeline 唯一依赖 model client、app stores 和 chat logger 类型的文件，起适配 adapter 作用——其余同一目录下的阶段文件不会直接依赖 provider 运行时。
 
 ## Mistral embedding client
 
@@ -422,7 +422,8 @@ pnpm tsx --conditions=source packages/persona-flow-model-client/mistral-embed-si
 - `packages/persona-flow/test/memoryDecisionPolicy.test.ts`
 - `packages/persona-flow/test/modelClientEmbeddingProvider.test.ts`
 - `packages/persona-flow/test/memoryCandidateRecorder.test.ts`
-- `packages/persona-flow/test/memoryCommitService.test.ts`
+- `packages/persona-flow/test/memoryCandidateProcessor.test.ts`
+- `packages/persona-flow/test/memoryPipelineService.test.ts`
 
 ### persona-flow-model-client
 

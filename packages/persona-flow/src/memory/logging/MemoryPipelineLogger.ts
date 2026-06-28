@@ -1,12 +1,12 @@
-import type { MemoryLogger } from "../memoryPipelineTypes.js";
-import type { MemoryPipelineSettings } from "../memoryPipelineSettings.js";
+import type { MemoryLogger } from "../types.js";
+import type { MemorySettings } from "../settings.js";
 import { MEMORY_PIPELINE_LOG_EVENTS, type MemoryPipelineLogEvent } from "./memoryPipelineLogEvents.js";
 
 /**
  * Stage-aware logger wrapper for the memory pipeline.
  *
  * Stage code calls one of the named methods (`pipelineStarted`,
- * `embeddingFailed`, …) instead of inlining log event strings. This
+ * `embeddingFailed`, �? instead of inlining log event strings. This
  * keeps the catalogue of events in `memoryPipelineLogEvents.ts` and
  * lets the wrapper decide:
  *  - whether the event is a `debug` (only emitted when
@@ -25,7 +25,7 @@ export class MemoryPipelineLogger {
 
     constructor(
         private readonly logger: MemoryLogger | undefined,
-        private readonly settings: Pick<MemoryPipelineSettings, "logging">,
+        private readonly settings: Pick<MemorySettings, "logging">,
     ) {
         this.debugEnabled = settings.logging.detailLevel === "debug";
     }
@@ -134,7 +134,7 @@ export class MemoryPipelineLogger {
 }
 
 // ---------- Payload shapes ----------
-// These are kept loose on purpose — stage code can grow new fields
+// These are kept loose on purpose �?stage code can grow new fields
 // without touching this file as long as common keys keep their meaning.
 
 export interface PipelineBaseFields {
@@ -147,7 +147,7 @@ export interface PipelineBaseFields {
 
 export interface PipelineStartedPayload extends PipelineBaseFields {
     candidateCount: number;
-    processingMode: MemoryPipelineSettings["processingMode"];
+    candidateProcessingMode: MemorySettings["candidateProcessingMode"];
 }
 
 export interface PipelineSkippedPayload extends PipelineBaseFields {
@@ -158,7 +158,7 @@ export interface PipelineSkippedPayload extends PipelineBaseFields {
 export interface PipelineCompletedPayload extends PipelineBaseFields {
     recordedCount: number;
     processedCount: number;
-    processingMode: MemoryPipelineSettings["processingMode"];
+    candidateProcessingMode: MemorySettings["candidateProcessingMode"];
 }
 
 export interface PipelineFailedPayload extends PipelineBaseFields {

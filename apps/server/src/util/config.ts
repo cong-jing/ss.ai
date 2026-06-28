@@ -6,7 +6,7 @@ import type { ErrorObject, ValidateFunction } from "ajv";
 import type { LogLevel } from "@ss-ai/persona-flow-logger";
 import type { ModelAssignmentMap } from "@ss-ai/contracts";
 import { MODEL_CALL_PURPOSE_CATEGORIES, type ModelCallPurpose } from "@ss-ai/contracts";
-import { DEFAULT_MEMORY_PIPELINE_SETTINGS, type MemoryPipelineSettings } from "@ss-ai/persona-flow";
+import { DEFAULT_MEMORY_SETTINGS, type MemorySettings } from "@ss-ai/persona-flow";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(moduleDir, "..", "..");
@@ -59,7 +59,7 @@ export interface RuntimeConfig {
         enabled: boolean;
         filePath: string;
     };
-    memoryPipeline: MemoryPipelineSettings;
+    memory: MemorySettings;
     auth: {
         mode: "default-user" | "local-password";
         defaultUserId: string;
@@ -123,23 +123,9 @@ interface RawConfig {
         enabled?: boolean;
         filePath?: string;
     };
-    memoryPipeline?: {
+    memory?: {
         enabled?: boolean;
-        processingMode?: "inline" | "record_only";
-        ranking?: {
-            listLimit?: number;
-            topK?: number;
-            needsJudgeThreshold?: number;
-            exactDuplicateThreshold?: number;
-        };
-        embedding?: {
-            modelCallPurpose?: string;
-            version?: number;
-        };
-        logging?: {
-            detailLevel?: "summary" | "debug";
-            includeCandidateText?: boolean;
-        };
+        candidateProcessingMode?: "inline" | "record_only";
     };
     auth?: {
         mode?: "default-user" | "local-password";
@@ -466,33 +452,12 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
             enabled: fileConfig.promptLog?.enabled ?? false,
             filePath: promptLogFilePath,
         },
-        memoryPipeline: {
-            enabled: fileConfig.memoryPipeline?.enabled
-                ?? DEFAULT_MEMORY_PIPELINE_SETTINGS.enabled,
-            processingMode: fileConfig.memoryPipeline?.processingMode
-                ?? DEFAULT_MEMORY_PIPELINE_SETTINGS.processingMode,
-            ranking: {
-                listLimit: fileConfig.memoryPipeline?.ranking?.listLimit
-                    ?? DEFAULT_MEMORY_PIPELINE_SETTINGS.ranking.listLimit,
-                topK: fileConfig.memoryPipeline?.ranking?.topK
-                    ?? DEFAULT_MEMORY_PIPELINE_SETTINGS.ranking.topK,
-                needsJudgeThreshold: fileConfig.memoryPipeline?.ranking?.needsJudgeThreshold
-                    ?? DEFAULT_MEMORY_PIPELINE_SETTINGS.ranking.needsJudgeThreshold,
-                exactDuplicateThreshold: fileConfig.memoryPipeline?.ranking?.exactDuplicateThreshold
-                    ?? DEFAULT_MEMORY_PIPELINE_SETTINGS.ranking.exactDuplicateThreshold,
-            },
-            embedding: {
-                modelCallPurpose: fileConfig.memoryPipeline?.embedding?.modelCallPurpose
-                    ?? DEFAULT_MEMORY_PIPELINE_SETTINGS.embedding.modelCallPurpose,
-                version: fileConfig.memoryPipeline?.embedding?.version
-                    ?? DEFAULT_MEMORY_PIPELINE_SETTINGS.embedding.version,
-            },
-            logging: {
-                detailLevel: fileConfig.memoryPipeline?.logging?.detailLevel
-                    ?? DEFAULT_MEMORY_PIPELINE_SETTINGS.logging.detailLevel,
-                includeCandidateText: fileConfig.memoryPipeline?.logging?.includeCandidateText
-                    ?? DEFAULT_MEMORY_PIPELINE_SETTINGS.logging.includeCandidateText,
-            },
+        memory: {
+            ...DEFAULT_MEMORY_SETTINGS,
+            enabled: fileConfig.memory?.enabled
+                ?? DEFAULT_MEMORY_SETTINGS.enabled,
+            candidateProcessingMode: fileConfig.memory?.candidateProcessingMode
+                ?? DEFAULT_MEMORY_SETTINGS.candidateProcessingMode,
         },
         auth: {
             mode: authMode,

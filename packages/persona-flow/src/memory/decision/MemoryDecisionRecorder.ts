@@ -3,7 +3,7 @@ import type {
     MemoryCandidateStatus,
 } from "../candidate/candidateTypes.js";
 import type { MemoryCandidateStore } from "../candidate/candidatePorts.js";
-import type { MemoryClock } from "../memoryPipelineTypes.js";
+import type { MemoryClock } from "../types.js";
 import type {
     MemoryDecisionKind,
     MemoryDecisionRecord,
@@ -18,9 +18,9 @@ import type {
  * Split out of the processor so every decision branch (low-value,
  * duplicate, embedding-failed, needs-judge, create, error) flows
  * through one helper with the same arguments and the same write
- * order. That makes accidental drift between branches â€” e.g. one
+ * order. That makes accidental drift between branches â€?e.g. one
  * branch forgetting to bump `updatedAt`, or another forgetting to
- * persist `similarity` â€” impossible.
+ * persist `similarity` â€?impossible.
  */
 export interface RecordDecisionInput {
     candidate: MemoryCandidateRecord;

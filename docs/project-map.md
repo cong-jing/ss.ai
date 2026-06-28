@@ -171,8 +171,8 @@ Responsibilities:
 - Resolves model runtime and calls the injected `ModelClient` via `ModelRuntime`.
 - Defines LLM client interfaces in `src/llm/modelClient.ts`, including provider-neutral tool definitions, tool choice, and optional embedding calls.
 - Defines the `submit_turn_events` event schema and parses turn events returned by the model.
-- Defines the long-term-memory core under `src/memory/**`: candidate records, active memory records, decision records, ports, normalization, cosine similarity, conservative decision policy, `MemoryCandidateRecorder`, and `MemoryCommitService`.
-- Defines `ModelClientEmbeddingProvider` under `src/memoryAdapters/**` to connect the memory core's embedding port to the injected `ModelClient` without letting provider/runtime dependencies leak into `src/memory/**`.
+- Defines the long-term memory pipeline under `src/memory/**`: candidate records, active memory records, decision records, ports, normalization, cosine similarity, conservative decision policy, `MemoryCandidateRecorder`, `MemoryCandidateProcessor`, and `MemoryPipelineService`.
+- Defines `ModelClientMemoryEmbeddingProvider` under `src/memory/embedding/**` to connect the memory pipeline's embedding port to the injected `ModelClient`. Provider/runtime dependencies are contained inside this adapter file so the rest of `src/memory/**` stays provider-neutral.
 
 Layering note: `PersonaFlowChatTurnService` orchestrates turns and persistence, but it should not parse provider tool calls or structured output directly. A registered `ModelCall<TParsedOutput>` owns prompt assembly, the requested output format (`structuredOutputSchema` and/or `tools`), and business-level parsing for its purpose. `ModelRuntime` stays provider/model/API-key focused and returns the raw provider-neutral `llmResponse` (`output` / `structuredOutput` / `toolCalls`). The model call then converts that response into `parsedOutput`; optional `parsedToolCalls` is reserved for intermediate tool results that callers need to inspect. For `single_character_chat`, the final visible reply is produced via `response_format: json_schema` and folded into `parsedOutput` as `{ displayText, events }`. Memory write candidates are a top-level optional field inside that same structured output and are folded into `parsedOutput.memoryWriteCandidates` for internal handling.
 
@@ -183,7 +183,7 @@ Main chat flow:
 3. `resolveModelCall()` selects the registered handler for the requested purpose and interaction mode. Today that is `chat.main:single_character_chat`.
 4. The handler assembles LLM messages and requests structured output via `structuredOutputSchema` (built from the `submit_turn_events` event schema plus the optional `memoryWriteCandidates` field). `ModelRuntime.chat()` resolves provider and model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves the API key from `providerCredential`, then calls `ModelClient`.
 5. The model call parses `llmResponse.structuredOutput` as `SubmitTurnEventsArgs` and returns a chat-specific `parsedOutput` containing normalized display text plus the ordered `TurnEvent[]`.
-6. The model call also extracts `memoryWriteCandidates` from the structured output. After the assistant turn is persisted, `PersonaFlowChatTurnService` records those candidates through `MemoryCandidateRecorder` and, when immediate commit is enabled, runs `MemoryCommitService` to embed, de-duplicate, compare against active memories, create memory rows, and append decision rows.
+6. The model call also extracts `memoryWriteCandidates` from the structured output. After the assistant turn is persisted, `PersonaFlowChatTurnService` hands those candidates to `MemoryPipelineService.handleChatTurnCandidates()`. The pipeline service checks `memory.enabled`, then invokes `MemoryCandidateRecorder` to persist the candidate rows; when `memory.candidateProcessingMode === "inline"` it also runs `MemoryCandidateProcessor` to embed, de-duplicate, compare against active memories, create memory rows, and append decision rows.
 7. `PersonaFlowChatTurnService` consumes the parsed result without knowing the underlying output format. The complete ordered turn event list is persisted with the assistant turn.
 8. Assistant turns are appended to the chat store as the conversation self actor via `appendAssistantTurn()`, which writes both the timeline message and the structured turn events.
 
@@ -444,13 +444,15 @@ Start here when reviewing or changing behavior:
 - `packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts`
 - `packages/persona-flow/src/chatTurn/events/turnEventText.ts`
 - `packages/persona-flow/src/memory/types.ts`
-- `packages/persona-flow/src/memory/ports.ts`
-- `packages/persona-flow/src/memory/candidateRecorder.ts`
-- `packages/persona-flow/src/memory/commitService.ts`
-- `packages/persona-flow/src/memory/similarity.ts`
-- `packages/persona-flow/src/memory/decisionPolicy.ts`
-- `packages/persona-flow/src/memory/textNormalization.ts`
-- `packages/persona-flow/src/memoryAdapters/modelClientEmbeddingProvider.ts`
+- `packages/persona-flow/src/memory/settings.ts`
+- `packages/persona-flow/src/memory/MemoryPipelineService.ts`
+- `packages/persona-flow/src/memory/createMemoryPipelineService.ts`
+- `packages/persona-flow/src/memory/candidate/MemoryCandidateRecorder.ts`
+- `packages/persona-flow/src/memory/processing/MemoryCandidateProcessor.ts`
+- `packages/persona-flow/src/memory/embedding/ModelClientMemoryEmbeddingProvider.ts`
+- `packages/persona-flow/src/memory/ranking/memorySimilarity.ts`
+- `packages/persona-flow/src/memory/decision/memoryDecisionPolicy.ts`
+- `packages/persona-flow/src/memory/duplicate/memoryTextNormalization.ts`
 - `packages/persona-flow/src/llm/tools/modelTool.ts`
 - `packages/persona-flow/src/llm/tools/submitTurnEventsTool.ts`
 - `packages/persona-flow/src/modelCall/modelRuntime.ts`
@@ -481,8 +483,8 @@ Start here when reviewing or changing behavior:
 - The `AI_FUNCTIONS` / `AiFunction` to `MODEL_CALL_PURPOSES` / `ModelCallPurpose` rename is complete in the contracts, web, server, and store layers.
 - The SQLite model assignment column is `model_assignments_json`; old model-assignment storage compatibility has been removed.
 - The single-character chat model output path now uses `response_format: json_schema` structured output for visible turn events and optional `memoryWriteCandidates` (event schema still sourced from `submitTurnEventsTool.argsSchema`). No memory candidate tool is registered for this path.
-- Chat-turn memory write support is now durable: candidates are parsed from structured output, recorded after the assistant turn is persisted, and optionally committed immediately via `MemoryCommitService` according to runtime memory config.
-- The memory pipeline includes candidate recording, embedding-port driven commit service, text normalization, cosine similarity ranking, conservative decision policy, SQLite-backed `memory_candidates` / `memories` / `memory_decisions` stores, and chat-turn integration.
+- Chat-turn memory write is now a durable pipeline: candidates are parsed from structured output and, after the assistant turn is persisted, handed to `MemoryPipelineService`. Server runtime config exposes `memory.enabled` and `memory.candidateProcessingMode` to toggle whether the pipeline runs and whether it processes inline.
+- The memory pipeline includes candidate recording, embedding-port driven candidate processor, text normalization, cosine similarity ranking, conservative decision policy, SQLite-backed `memory_candidates` / `memories` / `memory_decisions` stores, and chat-turn integration.
 - TODO for the memory write path: make `createMemory + candidate status + decision` transaction-safe, then add debug events and prompt memory read-back.
 - TODO before relying on similarity thresholds: collect more real `mistral-embed` samples. The current probe returned 1024-dimensional vectors and showed that short Chinese user facts can have high baseline cosine similarity.
 - Chat-turn/model-call layering is intentionally split: chat services consume model-call `parsedOutput`, while each model call owns provider response parsing (structured output or tool arguments) for its purpose. This keeps future interaction modes free to use different output formats without changing chat-turn persistence code.

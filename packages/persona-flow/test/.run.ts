@@ -3,6 +3,7 @@ import "./memoryCandidateRecorder.test.js";
 import "./memoryCandidatesSchema.test.js";
 import "./memoryCandidateProcessor.test.js";
 import "./memoryDecisionPolicy.test.js";
+import "./memoryPipelineService.test.js";
 import "./memorySimilarity.test.js";
 import "./memoryTextNormalization.test.js";
 import "./modelClientEmbeddingProvider.test.js";

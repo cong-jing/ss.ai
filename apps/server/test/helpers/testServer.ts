@@ -18,6 +18,7 @@ import {
     StubMemoryStore,
 } from "./inMemoryMemoryStores.js";
 import type { AppStores } from "@ss-ai/persona-flow";
+import { DEFAULT_MEMORY_SETTINGS } from "@ss-ai/persona-flow";
 import type { ModelAssignmentMap } from "@ss-ai/contracts";
 
 export interface TestApp {
@@ -67,7 +68,7 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}, op
         defaultModelAssignments: options.defaultModelAssignments ?? {},
         agent: { timeoutMs: 30000, maxRetries: 2 },
         promptLog: { enabled: false, filePath: "" },
-        memory: { enabled: true, immediateCommitEnabled: true },
+        memory: { ...DEFAULT_MEMORY_SETTINGS },
         auth: {
             mode: "default-user",
             defaultUserId: "default",

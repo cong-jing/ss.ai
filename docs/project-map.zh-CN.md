@@ -171,8 +171,8 @@ flowchart LR
 - 通过 `ModelRuntime` 解析模型运行时并调用注入的 `ModelClient`
 - 在 `src/llm/modelClient.ts` 中定义 LLM client interfaces，包括 provider-neutral tool definitions、tool choice 和可选 embedding 调用
 - 定义 `submit_turn_events` 事件 schema，并解析模型返回的 turn events
-- 在 `src/memory/**` 下定义长期记忆 core：candidate records、active memory records、decision records、ports、normalization、cosine similarity、保守 decision policy、`MemoryCandidateRecorder` 和 `MemoryCommitService`
-- 在 `src/memoryAdapters/**` 下定义 `ModelClientEmbeddingProvider`，把 memory core 的 embedding port 接到注入的 `ModelClient`，同时避免 provider/runtime 依赖泄漏进 `src/memory/**`
+- 在 `src/memory/**` 下定义长期记忆 pipeline：candidate records、active memory records、decision records、ports、normalization、cosine similarity、保守 decision policy、`MemoryCandidateRecorder`、`MemoryCandidateProcessor` 以及 `MemoryPipelineService`
+- 在 `src/memory/embedding/**` 下定义 `ModelClientMemoryEmbeddingProvider`，把 memory pipeline 的 embedding port 接到注入的 `ModelClient`，让 provider/runtime 依赖只出现在该 adapter 文件中而不会污染 stage 代码
 
 层级关系需要特别注意：`PersonaFlowChatTurnService` 负责 turn 编排和持久化，但不直接解析 provider tool calls 或 structured output。已注册的 `ModelCall<TParsedOutput>` 负责本 purpose 的 prompt 组装、要求的输出格式（`structuredOutputSchema` 和/或 `tools`）、以及业务级解析。`ModelRuntime` 只负责 provider/model/API key 解析和调用 `ModelClient`，返回 provider-neutral 的原始 `llmResponse`（`output` / `structuredOutput` / `toolCalls`）。随后 model call 把响应转换为 `parsedOutput`；可选的 `parsedToolCalls` 只用于调用方确实需要检查的中间工具结果。对当前 `single_character_chat` 来说，最终可见回复使用 `response_format: json_schema` 生成，并折叠进 `parsedOutput` 的 `{ displayText, events }`。Memory write candidates 是同一个 structured output 中的顶层可选字段，会折叠进 `parsedOutput.memoryWriteCandidates` 供内部处理。
 
@@ -183,7 +183,7 @@ flowchart LR
 3. `resolveModelCall()` 根据请求的 purpose 和 interaction mode 选择已注册 handler。目前实际使用的是 `chat.main:single_character_chat`。
 4. handler 组装 LLM messages，并通过 `structuredOutputSchema`（基于 `submit_turn_events` 事件 schema 加上可选 `memoryWriteCandidates` 字段）要求模型以结构化 JSON 形式提交本回合事件。`ModelRuntime.chat()` 根据 `userPreferences.modelAssignments[modelCallPurpose]` 解析 provider / model，根据 provider credential 或默认 API key 解析密钥，然后调用 `ModelClient`。
 5. model call 把返回的 `llmResponse.structuredOutput` 解析为 `SubmitTurnEventsArgs`，并返回 chat 专用的 `parsedOutput`：归一化后的展示文本和有序 `TurnEvent[]`。
-6. model call 还会从 structured output 中提取 `memoryWriteCandidates`。assistant turn 持久化后，`PersonaFlowChatTurnService` 通过 `MemoryCandidateRecorder` 记录这些 candidates；当 immediate commit 开启时，再运行 `MemoryCommitService` 完成 embedding、去重、active memory 相似度比较、memory row 创建和 decision row 写入。
+6. model call 还会从 structured output 中提取 `memoryWriteCandidates`。assistant turn 持久化后，`PersonaFlowChatTurnService` 通过 `MemoryPipelineService.handleChatTurnCandidates()` 处理这些 candidates：service 内部按 `memory.enabled` 决定是否运行，然后顺序调用 `MemoryCandidateRecorder` 记录候选；当 `memory.candidateProcessingMode === "inline"` 时再触发 `MemoryCandidateProcessor` 完成 embedding、去重、active memory 相似度比较、memory row 创建和 decision row 写入。
 7. `PersonaFlowChatTurnService` 只消费这个 parsed result，不需要知道底层输出格式。完整有序的 turn event 列表会随 assistant turn 一起持久化。
 8. Assistant turn 会作为 conversation 的 self actor 写入 chat store，`appendAssistantTurn()` 同时写 timeline message 和结构化 `turn_events`。
 
@@ -447,13 +447,15 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 - `packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts`
 - `packages/persona-flow/src/chatTurn/events/turnEventText.ts`
 - `packages/persona-flow/src/memory/types.ts`
-- `packages/persona-flow/src/memory/ports.ts`
-- `packages/persona-flow/src/memory/candidateRecorder.ts`
-- `packages/persona-flow/src/memory/commitService.ts`
-- `packages/persona-flow/src/memory/similarity.ts`
-- `packages/persona-flow/src/memory/decisionPolicy.ts`
-- `packages/persona-flow/src/memory/textNormalization.ts`
-- `packages/persona-flow/src/memoryAdapters/modelClientEmbeddingProvider.ts`
+- `packages/persona-flow/src/memory/settings.ts`
+- `packages/persona-flow/src/memory/MemoryPipelineService.ts`
+- `packages/persona-flow/src/memory/createMemoryPipelineService.ts`
+- `packages/persona-flow/src/memory/candidate/MemoryCandidateRecorder.ts`
+- `packages/persona-flow/src/memory/processing/MemoryCandidateProcessor.ts`
+- `packages/persona-flow/src/memory/embedding/ModelClientMemoryEmbeddingProvider.ts`
+- `packages/persona-flow/src/memory/ranking/memorySimilarity.ts`
+- `packages/persona-flow/src/memory/decision/memoryDecisionPolicy.ts`
+- `packages/persona-flow/src/memory/duplicate/memoryTextNormalization.ts`
 - `packages/persona-flow/src/llm/tools/modelTool.ts`
 - `packages/persona-flow/src/llm/tools/submitTurnEventsTool.ts`
 - `packages/persona-flow/src/modelCall/modelRuntime.ts`
@@ -484,8 +486,8 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 - `AI_FUNCTIONS` / `AiFunction` 到 `MODEL_CALL_PURPOSES` / `ModelCallPurpose` 的重命名已经在 contracts、web、server 和 store 层完成
 - SQLite 中模型分配对应的列是 `model_assignments_json`，旧的 model-assignment 存储兼容逻辑已经移除
 - 当前 single-character chat 模型输出路径使用 `response_format: json_schema` 结构化输出，负责 visible turn events 和可选 `memoryWriteCandidates`（事件 schema 来源仍是 `submitTurnEventsTool.argsSchema`）。这条路径不注册 memory candidate tool
-- Chat-turn memory write 已经是持久化链路：candidates 从 structured output 中解析，assistant turn 持久化后记录，并按 runtime memory config 选择是否立即通过 `MemoryCommitService` commit
-- Memory pipeline 包含 candidate recording、embedding-port driven commit service、text normalization、cosine similarity ranking、conservative decision policy、SQLite-backed `memory_candidates` / `memories` / `memory_decisions` stores，以及 chat-turn integration
+- Chat-turn memory write 已经是持久化链路：candidates 从 structured output 中解析，assistant turn 持久化后通过 `MemoryPipelineService` 处理；服务端 runtime config 中的 `memory.enabled` 和 `memory.candidateProcessingMode` 控制 pipeline 是否运行以及是否 inline 处理
+- Memory pipeline 内部包含 candidate recording、embedding-port driven processor、text normalization、cosine similarity ranking、conservative decision policy、SQLite-backed `memory_candidates` / `memories` / `memory_decisions` stores，以及 chat-turn integration
 - Memory write path TODO：让 `createMemory + candidate status + decision` 具备 transaction-safe 一致性，然后补 debug events 和 prompt memory read-back
 - 依赖 similarity thresholds 前 TODO：收集更多真实 `mistral-embed` 样本。当前 probe 返回 1024 维向量，并显示短中文用户事实可能有较高 baseline cosine similarity
 - chatTurn/modelCall 的层级边界是刻意拆开的：chat service 消费 model call 的 `parsedOutput`，每个 model call 自己负责解析 provider response（structured output 或 tool arguments）。这样未来 interaction mode 即使用不同输出格式，也不需要改 chat-turn 持久化代码

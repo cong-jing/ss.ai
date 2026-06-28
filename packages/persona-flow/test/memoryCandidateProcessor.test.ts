@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-    DEFAULT_MEMORY_PIPELINE_SETTINGS,
+    DEFAULT_MEMORY_SETTINGS,
     MEMORY_PIPELINE_LOG_EVENTS,
     MEMORY_SCHEMA_VERSION,
     MemoryCandidateProcessor,
@@ -14,7 +14,7 @@ import type {
     MemoryCandidateRecord,
     MemoryCandidateSource,
     MemoryEmbedding,
-    MemoryPipelineSettings,
+    MemorySettings,
 } from "../src/memory/index.js";
 import {
     makeFakeEmbeddingProvider,
@@ -83,7 +83,7 @@ interface ProcessorTestOptions {
     embedProvider?: string;
     embedModel?: string;
     embedVersion?: number;
-    settingsOverrides?: Partial<MemoryPipelineSettings>;
+    settingsOverrides?: Partial<MemorySettings>;
 }
 
 function makeProcessor(stores: InMemoryMemoryStores, options: ProcessorTestOptions = {}) {
@@ -94,8 +94,8 @@ function makeProcessor(stores: InMemoryMemoryStores, options: ProcessorTestOptio
         model: options.embedModel,
         version: options.embedVersion,
     });
-    const settings: MemoryPipelineSettings = {
-        ...DEFAULT_MEMORY_PIPELINE_SETTINGS,
+    const settings: MemorySettings = {
+        ...DEFAULT_MEMORY_SETTINGS,
         ...(options.settingsOverrides ?? {}),
     };
     const clock = makeFixedClock(NOW);
@@ -208,8 +208,8 @@ describe("MemoryCandidateProcessor", () => {
         const seedCand = seedCandidate(stores, "loves matcha lattes a lot");
         await processor.processCandidates({ candidates: [seedCand] });
         // Now feed a near-duplicate: same text means our deterministic
-        // embedder returns the same vector → cosine similarity = 1,
-        // which falls in [exactDuplicateThreshold, ∞) and routes to
+        // embedder returns the same vector �?cosine similarity = 1,
+        // which falls in [exactDuplicateThreshold, �? and routes to
         // needs_judge per the Batch 2/3 policy.
         const near = seedCandidate(stores, "Loves matcha lattes a lot!", { id: "cand-near" });
 
@@ -318,7 +318,7 @@ describe("MemoryCandidateProcessor", () => {
         // created fresh.
         assert.equal(outcomes[0]!.decision, "create");
         assert.equal(outcomes[0]!.scannedCount, 2);
-        // Counts are split per reason — old aggregated `skippedCount`
+        // Counts are split per reason �?old aggregated `skippedCount`
         // would have hidden the corrupt row entirely.
         assert.equal(outcomes[0]!.skipped?.signatureMismatch, 1);
         assert.equal(outcomes[0]!.skipped?.corruptDim, 1);

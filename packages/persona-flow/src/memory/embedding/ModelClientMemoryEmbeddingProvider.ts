@@ -1,7 +1,7 @@
 import type { ModelAssignmentMap, ModelCallPurpose } from "@ss-ai/contracts";
-import type { ModelClient, ModelUsage } from "../../../llm/modelClient.js";
-import type { AppStores } from "../../../stores/appStores.js";
-import { createNoopPersonaFlowLogger, type PersonaFlowLogger } from "../../../chatTurn/personaFlowLogger.js";
+import type { ModelClient, ModelUsage } from "../../llm/modelClient.js";
+import type { AppStores } from "../../stores/appStores.js";
+import { createNoopPersonaFlowLogger, type PersonaFlowLogger } from "../../chatTurn/personaFlowLogger.js";
 import type {
     MemoryEmbedInput,
     MemoryEmbedResult,
@@ -38,7 +38,7 @@ export interface ModelClientMemoryEmbeddingProviderDeps {
     appStores: AppStores;
     defaultModelAssignments?: ModelAssignmentMap;
     /**
-     * Provider name (lowercased) → encrypted API key. Used as a
+     * Provider name (lowercased) -> encrypted API key. Used as a
      * fallback when the user has not supplied their own credential
      * for the resolved provider. Mirrors the structure consumed by
      * `ModelRuntime`.
@@ -57,7 +57,7 @@ export interface ModelClientMemoryEmbeddingProviderDeps {
 /**
  * Adapter that satisfies {@link MemoryEmbeddingProvider} by
  * delegating to a `ModelClient.embed()` implementation. Lives under
- * `memoryPipeline/embedding/` because it is the embedding-stage
+ * `memory/embedding/` because it is the embedding-stage
  * port adapter; the memory core stays free of provider / runtime
  * dependencies because every other stage talks only to
  * {@link MemoryEmbeddingProvider}.
@@ -70,7 +70,7 @@ export interface ModelClientMemoryEmbeddingProviderDeps {
  *  3. Otherwise throw `assignment_missing`.
  *
  * API key resolution mirrors `ModelRuntime`: per-user credential
- * first, then `defaultProviderApiKeys[provider]`. Missing key →
+ * first, then `defaultProviderApiKeys[provider]`. Missing key ->
  * `api_key_missing`.
  */
 export class ModelClientMemoryEmbeddingProvider implements MemoryEmbeddingProvider {

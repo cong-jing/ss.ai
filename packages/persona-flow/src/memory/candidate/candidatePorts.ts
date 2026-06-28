@@ -1,5 +1,5 @@
 import type { MemoryEmbedding } from "../embedding/embeddingPorts.js";
-import type { MemoryCandidateSource } from "../memoryPipelineTypes.js";
+import type { MemoryCandidateSource } from "../types.js";
 import type {
     MemoryCandidateDraft,
     MemoryCandidateRecord,

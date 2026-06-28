@@ -81,6 +81,6 @@ export async function createChatTurnService(context: HttpApiContext): Promise<Pe
         defaultModelAssignments: context.config.defaultModelAssignments,
         defaultProviderApiKeys,
         modelClient,
-        memoryPipelineSettings: context.config.memoryPipeline,
+        memorySettings: context.config.memory,
     });
 }

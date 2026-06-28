@@ -170,8 +170,8 @@ flowchart LR
 - `ModelRuntime` によりモデル実行時情報を解決し、注入された `ModelClient` を呼び出す
 - `src/llm/modelClient.ts` に provider-neutral な tool 定義、tool choice、任意の embedding call を含む LLM client interface を定義する
 - `submit_turn_events` の event schema を定義し、モデルが返した turn event を parse する
-- `src/memory/**` に長期記憶 core を定義する。candidate records、active memory records、decision records、ports、normalization、cosine similarity、conservative decision policy、`MemoryCandidateRecorder`、`MemoryCommitService` を含む
-- `src/memoryAdapters/**` に `ModelClientEmbeddingProvider` を定義し、memory core の embedding port を注入された `ModelClient` へ接続する。provider / runtime 依存を `src/memory/**` に漏らさないための境界でもある
+- `src/memory/**` に長期記憶 pipeline を定義する。candidate records、active memory records、decision records、ports、normalization、cosine similarity、conservative decision policy、`MemoryCandidateRecorder`、`MemoryCandidateProcessor`、`MemoryPipelineService` を含む
+- `src/memory/embedding/**` に `ModelClientMemoryEmbeddingProvider` を定義し、memory pipeline の embedding port を注入された `ModelClient` へ接続する。provider / runtime 依存はこの adapter ファイルの中だけに閉じ込めて、他の `src/memory/**` に漏れさせない
 
 レイヤ分割は特に重要です。`PersonaFlowChatTurnService` は turn orchestration と永続化を担当しますが、provider の tool call や structured output を直接 parse しません。登録済みの `ModelCall<TParsedOutput>` が、prompt assembly、要求する出力形式（`structuredOutputSchema` および/または `tools`）、その purpose に固有のビジネスレベル parse を担当します。`ModelRuntime` は provider / model / API key に集中し、生の provider-neutral `llmResponse`（`output` / `structuredOutput` / `toolCalls`）を返します。その後 model call がこれを `parsedOutput` に変換します。オプションの `parsedToolCalls` は、呼び出し側が中間ツール結果を確認する必要がある場合だけ使います。現在の `single_character_chat` では、最終的な可視 reply は `response_format: json_schema` で生成され、`parsedOutput` の `{ displayText, events }` に折り畳まれます。Memory write candidates は同じ structured output の任意 top-level field として扱われ、内部処理用に `parsedOutput.memoryWriteCandidates` へ折り畳まれます。
 
@@ -182,7 +182,7 @@ flowchart LR
 3. `resolveModelCall()` が要求された purpose と interaction mode に対応する登録済み handler を選ぶ。現在は `chat.main:single_character_chat`
 4. handler が LLM messages を組み立て、`submit_turn_events` event schema と任意の `memoryWriteCandidates` field から作った `structuredOutputSchema` で structured output を要求する。`ModelRuntime.chat()` が `userPreferences.modelAssignments[modelCallPurpose]` から provider と model を解決し、`providerCredential` から API key を解決して `ModelClient` を呼び出す
 5. model call が `llmResponse.structuredOutput` を `SubmitTurnEventsArgs` として parse し、正規化済み display text と順序付き `TurnEvent[]` を含む chat 用 `parsedOutput` を返す
-6. model call は structured output から `memoryWriteCandidates` も抽出する。assistant turn の永続化後、`PersonaFlowChatTurnService` は `MemoryCandidateRecorder` で candidates を記録し、immediate commit が有効なら `MemoryCommitService` で embedding、dedupe、active memories との比較、memory row 作成、decision row 追加を行う
+6. model call は structured output から `memoryWriteCandidates` も抽出する。assistant turn の永続化後、`PersonaFlowChatTurnService` は `MemoryPipelineService.handleChatTurnCandidates()` に candidates を渡す。pipeline service は `memory.enabled` を判定してから `MemoryCandidateRecorder` で記録し、`memory.candidateProcessingMode === "inline"` のときはそのまま `MemoryCandidateProcessor` で embedding、dedupe、active memories との比較、memory row 作成、decision row 追加を実行する
 7. `PersonaFlowChatTurnService` は下位の出力形式を知らずにその parsed result を消費する。完全な順序付き turn event 一式が assistant turn と一緒に永続化される
 8. assistant turn は会話の self actor として chat store に追加され、timeline message と structured turn events の両方が `appendAssistantTurn()` で書き込まれる
 
@@ -465,7 +465,7 @@ API key の解決も user 優先です。
 - `AI_FUNCTIONS` / `AiFunction` から `MODEL_CALL_PURPOSES` / `ModelCallPurpose` への rename は contracts、web、server、store 全体で完了している
 - SQLite の model assignment column は `model_assignments_json`。旧 model-assignment storage 互換は削除済み
 - single-character chat の model output path は現在、可視 turn events と任意の `memoryWriteCandidates` のために `response_format: json_schema` structured output を使う（event schema の source は依然 `submitTurnEventsTool.argsSchema`）。この path では memory candidate tool は登録しない
-- Chat-turn memory write は durable になっている。Candidates は structured output から parse され、assistant turn 永続化後に記録され、runtime memory config に応じて `MemoryCommitService` により即時 commit される
+- Chat-turn memory write は durable な pipeline になっている。Candidates は structured output から parse され、assistant turn 永続化後に `MemoryPipelineService` へ渡される。サーバー runtime config の `memory.enabled` / `memory.candidateProcessingMode` で pipeline の有効化と inline 処理の可否を切り替える
 - Memory pipeline は candidate recording、embedding-port driven commit service、text normalization、cosine similarity ranking、conservative decision policy、SQLite-backed `memory_candidates` / `memories` / `memory_decisions` stores、chat-turn integration を含む
 - Memory write path TODO: `createMemory + candidate status + decision` を transaction-safe にし、その後 debug events と prompt memory read-back を追加する
 - similarity thresholds に依存する前の TODO: より多くの実 `mistral-embed` samples を収集する。現在の probe は 1024-dimensional vectors を返し、短い中国語 user facts は baseline cosine similarity が高めになり得ることを示した

@@ -1,5 +1,7 @@
 # Memory Pipeline 重构计划
 
+> **本计划已有后续修正**：在第一轮重构落地后又收束了命名、目录和配置边界，详见 [memory-pipeline-refactor-adjustment.zh-CN.md](memory-pipeline-refactor-adjustment.zh-CN.md)。下文保留作为历史计划，最终目录结构（`packages/persona-flow/src/memory/**` 一层 barrel，`memoryPipeline/` 已经被压平）、配置字段（仅 `memory.enabled` + `memory.candidateProcessingMode`）以及 ChatTurnService 默认 settings 行为以 adjustment 文档为准。
+
 本文档记录 memory 写入链路的结构重构方案。目标不是增加新功能，而是让调用关系和文件组织更容易理解：外部只看到一个 memory pipeline，memory 内部按执行步骤组织。
 
 当前项目尚未开始部署运行，因此本次重构不需要兼容旧的 `PersonaFlowChatTurnService.memory = { recorder, commitService, config }` 注入形态，可以直接调整公开构造参数和文件结构。

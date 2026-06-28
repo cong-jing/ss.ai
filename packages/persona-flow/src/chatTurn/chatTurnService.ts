@@ -9,10 +9,10 @@ import type { ModelCallRunResult } from "../modelCall/modelCall.js";
 import { resolveModelCall } from "../modelCall/modelCallRegistry.js";
 import { ModelRuntime } from "../modelCall/modelRuntime.js";
 import type { SubmitTurnEventsTurnEventPreview } from "./events/submitTurnEventsStreamPreview.js";
-import { createMemoryPipelineService } from "../memory/index.js";
+import { createMemoryPipelineService, DEFAULT_MEMORY_SETTINGS } from "../memory/index.js";
 import type {
     MemoryPipelineService,
-    MemoryPipelineSettings,
+    MemorySettings,
 } from "../memory/index.js";
 
 export interface PersonaFlowChatTurnServiceDependencies {
@@ -23,15 +23,12 @@ export interface PersonaFlowChatTurnServiceDependencies {
     defaultModelAssignments?: ModelAssignmentMap;
     defaultProviderApiKeys?: Record<string, string>;
     /**
-     * Runtime settings for the memory pipeline. Required so this
-     * service can construct its own {@link MemoryPipelineService}
-     * (via {@link createMemoryPipelineService}) when one is not
-     * supplied. Tests typically pass `DEFAULT_MEMORY_PIPELINE_SETTINGS`
-     * (or override individual fields for record-only / disabled
-     * scenarios); production wiring forwards the value derived from
-     * the runtime config.
+     * Optional override for the memory subsystem settings. Defaults
+     * to {@link DEFAULT_MEMORY_SETTINGS}; the server passes its
+     * runtime memory config here, and tests can supply a slimmed
+     * version for record-only / disabled scenarios.
      */
-    memoryPipelineSettings: MemoryPipelineSettings;
+    memorySettings?: MemorySettings;
     /**
      * Pre-built memory pipeline. Tests that want to inject in-memory
      * stores or fake processors supply one directly; production
@@ -97,7 +94,7 @@ export class PersonaFlowChatTurnService {
         this.memoryPipelineService = deps.memoryPipelineService ?? createMemoryPipelineService({
             stores: deps.stores,
             modelClient: deps.modelClient,
-            settings: deps.memoryPipelineSettings,
+            settings: deps.memorySettings ?? DEFAULT_MEMORY_SETTINGS,
             ...(deps.defaultModelAssignments ? { defaultModelAssignments: deps.defaultModelAssignments } : {}),
             ...(deps.defaultProviderApiKeys ? { defaultProviderApiKeys: deps.defaultProviderApiKeys } : {}),
             logger: this.logger,

@@ -6,12 +6,18 @@ import type {
     Conversation,
     ConversationActor,
     MemoryCandidateRecord,
+    MemorySettings,
     ModelClient,
     UserProfile,
 } from "../src/index.js";
 import {
+    DEFAULT_MEMORY_SETTINGS,
+    MemoryCandidateProcessor,
     MemoryCandidateRecorder,
-    MemoryCommitService,
+    MemoryDecisionRecorder,
+    MemoryEmbeddingStep,
+    MemoryPipelineLogger,
+    MemoryPipelineService,
     PersonaFlowChatTurnService,
 } from "../src/index.js";
 import { createTestFixture } from "./helpers/inMemoryStores.js";
@@ -132,33 +138,58 @@ function seedModelRuntime(fixture: ReturnType<typeof createTestFixture>, userId:
     });
 }
 
-/** Bundles memory deps for a chat turn integration test. */
+/**
+ * Bundles a {@link MemoryPipelineService} backed by in-memory fakes.
+ *
+ * We assemble the pipeline manually here instead of going through
+ * `createMemoryPipelineService` because the factory expects a real
+ * `ModelClient` for its embedding provider. Tests want to inject a
+ * deterministic embedding stub directly, so they build the service
+ * one stage at a time.
+ */
 interface MemoryBundle {
     stores: ReturnType<typeof makeInMemoryMemoryStores>;
-    recorder: MemoryCandidateRecorder;
-    commitService: MemoryCommitService;
+    pipelineService: MemoryPipelineService;
     embeddingProvider: ReturnType<typeof makeFakeEmbeddingProvider>;
+    settings: MemorySettings;
 }
 
-function buildMemoryBundle(): MemoryBundle {
+function buildMemoryBundle(overrides: { settings?: MemorySettings } = {}): MemoryBundle {
     const stores = makeInMemoryMemoryStores();
     const clock = makeFixedClock();
     const ids = makeSequentialIds();
     const embeddingProvider = makeFakeEmbeddingProvider();
-    const recorder = new MemoryCandidateRecorder({
+    const settings: MemorySettings = overrides.settings ?? DEFAULT_MEMORY_SETTINGS;
+
+    const pipelineLogger = new MemoryPipelineLogger(undefined, settings);
+    const candidateRecorder = new MemoryCandidateRecorder({
         candidateStore: stores.candidateStore,
         clock,
         ids,
     });
-    const commitService = new MemoryCommitService({
+    const embeddingStep = new MemoryEmbeddingStep(embeddingProvider, pipelineLogger);
+    const decisionRecorder = new MemoryDecisionRecorder({
+        candidateStore: stores.candidateStore,
+        decisionStore: stores.decisionStore,
+        clock,
+    });
+    const candidateProcessor = new MemoryCandidateProcessor({
         candidateStore: stores.candidateStore,
         memoryStore: stores.memoryStore,
         decisionStore: stores.decisionStore,
-        embeddingProvider,
+        embeddingStep,
+        decisionRecorder,
         clock,
-        ids,
+        pipelineLogger,
+        settings,
     });
-    return { stores, recorder, commitService, embeddingProvider };
+    const pipelineService = new MemoryPipelineService({
+        candidateRecorder,
+        candidateProcessor,
+        pipelineLogger,
+        settings,
+    });
+    return { stores, pipelineService, embeddingProvider, settings };
 }
 
 function makeStructuredModelClient(candidates: MemoryWriteCandidate[], characterId: string): ModelClient {
@@ -181,8 +212,8 @@ function makeStructuredModelClient(candidates: MemoryWriteCandidate[], character
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
-    it("records candidates and commits them when both stages are enabled", async () => {
+describe("PersonaFlowChatTurnService memory pipeline integration", () => {
+    it("records candidates and processes them when both stages are enabled", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -204,10 +235,7 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
             stores: fixture.stores,
             modelClient,
             promptLogger: { writePromptLog: async () => { } },
-            memory: {
-                recorder: memory.recorder,
-                commitService: memory.commitService,
-            },
+            memoryPipelineService: memory.pipelineService,
         });
 
         const result = await service.chatTurn({
@@ -224,7 +252,7 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
         assert.equal(candidateRows[0]!.source.assistantMessageId, result.assistantMessageId);
         assert.equal(candidateRows[0]!.source.userMessageId, result.userMessageId);
 
-        // Commit ran: one active memory created + one decision row appended.
+        // Processor ran: one active memory created + one decision row appended.
         const memories = memory.stores.memoryStore.snapshotAll();
         assert.equal(memories.length, 1);
         assert.equal(memories[0]!.text, "User said their name is Alice.");
@@ -244,7 +272,7 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
         assert.equal(memory.embeddingProvider.calls.length, 1);
     });
 
-    it("records candidates but skips commit when immediateCommitEnabled is false", async () => {
+    it("records candidates but skips processing when candidateProcessingMode is record_only", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -254,7 +282,12 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
         fixture.seed.userProfile(base.profile);
         seedModelRuntime(fixture, base.userId);
 
-        const memory = buildMemoryBundle();
+        const memory = buildMemoryBundle({
+            settings: {
+                ...DEFAULT_MEMORY_SETTINGS,
+                candidateProcessingMode: "record_only",
+            },
+        });
         const modelClient = makeStructuredModelClient(
             [
                 { text: "Deferred commit fact.", scope: "user", type: "fact" },
@@ -266,11 +299,7 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
             stores: fixture.stores,
             modelClient,
             promptLogger: { writePromptLog: async () => { } },
-            memory: {
-                recorder: memory.recorder,
-                commitService: memory.commitService,
-                config: { enabled: true, immediateCommitEnabled: false },
-            },
+            memoryPipelineService: memory.pipelineService,
         });
 
         await service.chatTurn({
@@ -299,7 +328,12 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
         fixture.seed.userProfile(base.profile);
         seedModelRuntime(fixture, base.userId);
 
-        const memory = buildMemoryBundle();
+        const memory = buildMemoryBundle({
+            settings: {
+                ...DEFAULT_MEMORY_SETTINGS,
+                enabled: false,
+            },
+        });
         const modelClient = makeStructuredModelClient(
             [
                 { text: "Should not be recorded.", scope: "user", type: "fact" },
@@ -319,11 +353,7 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
                 error: () => { },
             },
             promptLogger: { writePromptLog: async () => { } },
-            memory: {
-                recorder: memory.recorder,
-                commitService: memory.commitService,
-                config: { enabled: false, immediateCommitEnabled: true },
-            },
+            memoryPipelineService: memory.pipelineService,
         });
 
         await service.chatTurn({
@@ -334,7 +364,7 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
             senderActorId: base.userActorId,
         });
 
-        // Nothing reached the recorder or commit service.
+        // Nothing reached the recorder or processor.
         assert.equal(memory.stores.candidateStore.snapshotAll().length, 0);
         assert.equal(memory.stores.memoryStore.snapshotAll().length, 0);
         assert.equal(memory.stores.decisionStore.snapshotAll().length, 0);
@@ -346,7 +376,7 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
         );
     });
 
-    it("does not call recorder or commit when there are no candidates", async () => {
+    it("does not call recorder or processor when there are no candidates", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -363,7 +393,7 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
                     events: [
                         { type: "replyText", characterId: base.characterId, text: "hi" },
                     ],
-                    // no memoryWriteCandidates property at all
+                    memoryWriteCandidates: [],
                 },
                 toolCalls: [],
             }),
@@ -375,10 +405,7 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
             stores: fixture.stores,
             modelClient,
             promptLogger: { writePromptLog: async () => { } },
-            memory: {
-                recorder: memory.recorder,
-                commitService: memory.commitService,
-            },
+            memoryPipelineService: memory.pipelineService,
         });
 
         await service.chatTurn({
@@ -393,7 +420,7 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
         assert.equal(memory.embeddingProvider.calls.length, 0);
     });
 
-    it("keeps chat turn successful when the recorder throws (fail-soft)", async () => {
+    it("keeps chat turn successful when the pipeline service throws (fail-soft)", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -403,18 +430,18 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
         fixture.seed.userProfile(base.profile);
         seedModelRuntime(fixture, base.userId);
 
-        const memory = buildMemoryBundle();
-        // Sabotage the recorder so any call throws.
-        const explodingRecorder = {
-            recordCandidates: async () => {
-                throw new Error("simulated recorder explosion");
+        // Sabotage the pipeline service so any handleChatTurnCandidates call throws.
+        const explodingPipeline = {
+            handleChatTurnCandidates: async () => {
+                throw new Error("simulated pipeline explosion");
             },
-        } as unknown as MemoryCandidateRecorder;
+            processCandidates: async () => ({ outcomes: [] }),
+        } as unknown as MemoryPipelineService;
 
         const warnings: { message: string; payload?: unknown }[] = [];
         const modelClient = makeStructuredModelClient(
             [
-                { text: "Will trigger recorder error.", scope: "user", type: "fact" },
+                { text: "Will trigger pipeline error.", scope: "user", type: "fact" },
             ],
             base.characterId,
         );
@@ -430,10 +457,7 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
                 error: () => { },
             },
             promptLogger: { writePromptLog: async () => { } },
-            memory: {
-                recorder: explodingRecorder,
-                commitService: memory.commitService,
-            },
+            memoryPipelineService: explodingPipeline,
         });
 
         const result = await service.chatTurn({
@@ -449,79 +473,11 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
         assert.ok(result.assistantMessageId, "assistant turn should still be persisted");
 
         // Warn was raised by the fail-soft outer handler.
-        const pipelineWarn = warnings.find(w => w.message === "persona-flow/memory: write pipeline failed");
+        const pipelineWarn = warnings.find(w => w.message === "persona-flow/memory: pipeline service failed");
         assert.ok(pipelineWarn, "expected fail-soft pipeline warning to be logged");
-
-        // Commit was never reached.
-        assert.equal(memory.stores.memoryStore.snapshotAll().length, 0);
-        assert.equal(memory.embeddingProvider.calls.length, 0);
     });
 
-    it("keeps chat turn successful when the commit service throws (fail-soft)", async () => {
-        const fixture = createTestFixture();
-        const base = createBaseData();
-        fixture.seed.character(base.character);
-        fixture.seed.conversation(base.conversation);
-        fixture.seed.actor(base.selfActor);
-        fixture.seed.actor(base.userActor);
-        fixture.seed.userProfile(base.profile);
-        seedModelRuntime(fixture, base.userId);
-
-        const memory = buildMemoryBundle();
-        const explodingCommit = {
-            commitCandidates: async () => {
-                throw new Error("simulated commit explosion");
-            },
-        } as unknown as MemoryCommitService;
-
-        const warnings: { message: string; payload?: unknown }[] = [];
-        const modelClient = makeStructuredModelClient(
-            [
-                { text: "Will trigger commit error.", scope: "user", type: "fact" },
-            ],
-            base.characterId,
-        );
-
-        const service = new PersonaFlowChatTurnService({
-            stores: fixture.stores,
-            modelClient,
-            logger: {
-                debug: () => { },
-                verbose: () => { },
-                info: () => { },
-                warn: (message, payload) => { warnings.push({ message, payload }); },
-                error: () => { },
-            },
-            promptLogger: { writePromptLog: async () => { } },
-            memory: {
-                recorder: memory.recorder,
-                commitService: explodingCommit,
-            },
-        });
-
-        const result = await service.chatTurn({
-            userId: base.userId,
-            characterId: base.characterId,
-            conversationId: base.conversationId,
-            userMessageText: "hello",
-            senderActorId: base.userActorId,
-        });
-
-        assert.equal(result.output, "hi");
-        assert.ok(result.assistantMessageId);
-
-        // Recorder ran successfully before the explosion.
-        assert.equal(memory.stores.candidateStore.snapshotAll().length, 1);
-
-        // Pipeline warning was logged via fail-soft catch.
-        const pipelineWarn = warnings.find(w => w.message === "persona-flow/memory: write pipeline failed");
-        assert.ok(pipelineWarn, "expected fail-soft pipeline warning to be logged");
-
-        // No active memories created (commit never finished).
-        assert.equal(memory.stores.memoryStore.snapshotAll().length, 0);
-    });
-
-    it("streamTurn also runs the recorder + commit pipeline", async () => {
+    it("streamTurn also runs the memory pipeline end to end", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -562,10 +518,7 @@ describe("PersonaFlowChatTurnService memory pipeline (Batch 2)", () => {
             stores: fixture.stores,
             modelClient,
             promptLogger: { writePromptLog: async () => { } },
-            memory: {
-                recorder: memory.recorder,
-                commitService: memory.commitService,
-            },
+            memoryPipelineService: memory.pipelineService,
         });
 
         const result = await service.streamTurn({

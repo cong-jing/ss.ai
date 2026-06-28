@@ -1,8 +1,8 @@
 import type { MemoryCandidateDraft } from "./candidate/candidateTypes.js";
 import type { MemoryCandidateRecorder } from "./candidate/MemoryCandidateRecorder.js";
 import type { MemoryPipelineLogger } from "./logging/MemoryPipelineLogger.js";
-import type { MemoryPipelineSettings } from "./memoryPipelineSettings.js";
-import type { MemoryCandidateSource } from "./memoryPipelineTypes.js";
+import type { MemorySettings } from "./settings.js";
+import type { MemoryCandidateSource } from "./types.js";
 import type { MemoryCandidateProcessor } from "./processing/MemoryCandidateProcessor.js";
 import type {
     MemoryCandidateProcessingOutcome,
@@ -16,11 +16,11 @@ import type {
  *  - `settings.enabled` — when `false`, every public method returns
  *    immediately. The chat turn service never has to ask "is the
  *    feature on?"; it just calls the service.
- *  - `settings.processingMode` — `"inline"` runs the processor
- *    synchronously after recording. `"record_only"` stops after the
- *    recorder, leaving candidates in `pending` for a later batch
- *    job. The processor itself does not know about this; the
- *    service mediates.
+ *  - `settings.candidateProcessingMode` — `"inline"` runs the
+ *    processor synchronously after recording. `"record_only"` stops
+ *    after the recorder, leaving candidates in `pending` for a
+ *    later batch job. The processor itself does not know about
+ *    this; the service mediates.
  *
  * Designed so a future async worker (Phase 5 of the refactor plan)
  * can call `processCandidates()` against the same processor instance
@@ -42,7 +42,7 @@ export interface MemoryPipelineServiceDeps {
     candidateRecorder: MemoryCandidateRecorder;
     candidateProcessor: MemoryCandidateProcessor;
     pipelineLogger: MemoryPipelineLogger;
-    settings: MemoryPipelineSettings;
+    settings: MemorySettings;
 }
 
 export class MemoryPipelineService {
@@ -79,7 +79,7 @@ export class MemoryPipelineService {
         logger.pipelineStarted({
             ...baseFields,
             candidateCount: input.candidates.length,
-            processingMode: settings.processingMode,
+            candidateProcessingMode: settings.candidateProcessingMode,
         });
 
         let recordedCount = 0;
@@ -89,18 +89,39 @@ export class MemoryPipelineService {
                 candidates: input.candidates,
             });
             recordedCount = recordResult.accepted.length;
+            // Recorder swallows store outages and reports them via
+            // `storeError`. Surface that here instead of silently
+            // logging `pipelineCompleted`, otherwise dashboards see
+            // a clean turn while no candidate row was actually
+            // written.
+            if (recordResult.storeError) {
+                const storeErr = recordResult.storeError instanceof Error
+                    ? recordResult.storeError
+                    : new Error(String(recordResult.storeError));
+                logger.candidatesRecordingFailed({
+                    ...baseFields,
+                    error: storeErr.message,
+                    attemptedCount: input.candidates.length,
+                });
+                logger.pipelineFailed({
+                    ...baseFields,
+                    error: storeErr.message,
+                    stage: "record",
+                });
+                return { recordedCount: 0 };
+            }
             logger.candidatesRecorded({
                 ...baseFields,
                 acceptedCount: recordResult.accepted.length,
                 rejectedCount: recordResult.rejectedCount,
             });
 
-            if (settings.processingMode === "record_only") {
+            if (settings.candidateProcessingMode === "record_only") {
                 logger.pipelineCompleted({
                     ...baseFields,
                     recordedCount,
                     processedCount: 0,
-                    processingMode: settings.processingMode,
+                    candidateProcessingMode: settings.candidateProcessingMode,
                 });
                 return { recordedCount };
             }
@@ -109,7 +130,7 @@ export class MemoryPipelineService {
                     ...baseFields,
                     recordedCount,
                     processedCount: 0,
-                    processingMode: settings.processingMode,
+                    candidateProcessingMode: settings.candidateProcessingMode,
                 });
                 return { recordedCount };
             }
@@ -121,14 +142,14 @@ export class MemoryPipelineService {
                 ...baseFields,
                 recordedCount,
                 processedCount: processed.outcomes.length,
-                processingMode: settings.processingMode,
+                candidateProcessingMode: settings.candidateProcessingMode,
             });
             return { recordedCount, processed };
         } catch (error) {
             // Recorder and processor both isolate their own per-candidate
             // failures, so this catch only fires on programmer bugs or
             // store outages that escaped internal handling. Fail-soft:
-            // log, do not throw — the chat turn must never break because
+            // log, do not throw �?the chat turn must never break because
             // memory is down.
             const err = error instanceof Error ? error : new Error(String(error));
             logger.pipelineFailed({

@@ -87,72 +87,19 @@
                 }
             }
         },
-        "memoryPipeline": {
+        "memory": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
                 "enabled": {
                     "type": "boolean"
                 },
-                "processingMode": {
+                "candidateProcessingMode": {
                     "type": "string",
                     "enum": [
                         "inline",
                         "record_only"
                     ]
-                },
-                "ranking": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                        "listLimit": {
-                            "type": "integer",
-                            "minimum": 1
-                        },
-                        "topK": {
-                            "type": "integer",
-                            "minimum": 1
-                        },
-                        "needsJudgeThreshold": {
-                            "type": "number",
-                            "minimum": 0,
-                            "maximum": 1
-                        },
-                        "exactDuplicateThreshold": {
-                            "type": "number",
-                            "minimum": 0,
-                            "maximum": 1
-                        }
-                    }
-                },
-                "embedding": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                        "modelCallPurpose": {
-                            "type": "string"
-                        },
-                        "version": {
-                            "type": "integer",
-                            "minimum": 1
-                        }
-                    }
-                },
-                "logging": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                        "detailLevel": {
-                            "type": "string",
-                            "enum": [
-                                "summary",
-                                "debug"
-                            ]
-                        },
-                        "includeCandidateText": {
-                            "type": "boolean"
-                        }
-                    }
                 }
             }
         },

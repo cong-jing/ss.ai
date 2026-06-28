@@ -1,18 +1,18 @@
 import type { ModelAssignmentMap } from "@ss-ai/contracts";
-import type { ModelClient } from "../../llm/modelClient.js";
-import type { AppStores } from "../../stores/appStores.js";
+import type { ModelClient } from "../llm/modelClient.js";
+import type { AppStores } from "../stores/appStores.js";
 import { MemoryCandidateRecorder } from "./candidate/MemoryCandidateRecorder.js";
 import { MemoryEmbeddingStep } from "./embedding/MemoryEmbeddingStep.js";
 import { ModelClientMemoryEmbeddingProvider } from "./embedding/ModelClientMemoryEmbeddingProvider.js";
 import { MemoryPipelineLogger } from "./logging/MemoryPipelineLogger.js";
 import { MemoryPipelineService } from "./MemoryPipelineService.js";
-import type { MemoryPipelineSettings } from "./memoryPipelineSettings.js";
-import { DEFAULT_MEMORY_PIPELINE_SETTINGS } from "./memoryPipelineSettings.js";
+import type { MemorySettings } from "./settings.js";
+import { DEFAULT_MEMORY_SETTINGS } from "./settings.js";
 import type {
     MemoryClock,
     MemoryIdGenerator,
     MemoryLogger,
-} from "./memoryPipelineTypes.js";
+} from "./types.js";
 import { MemoryDecisionRecorder } from "./decision/MemoryDecisionRecorder.js";
 import { MemoryCandidateProcessor } from "./processing/MemoryCandidateProcessor.js";
 
@@ -32,7 +32,7 @@ import { MemoryCandidateProcessor } from "./processing/MemoryCandidateProcessor.
 export interface CreateMemoryPipelineServiceInput {
     stores: AppStores;
     modelClient: ModelClient;
-    settings?: MemoryPipelineSettings;
+    settings?: MemorySettings;
     defaultModelAssignments?: ModelAssignmentMap;
     defaultProviderApiKeys?: Record<string, string>;
     /** Required: every stage logger emits via this. */
@@ -54,7 +54,7 @@ export interface CreateMemoryPipelineServiceInput {
 }
 
 export function createMemoryPipelineService(input: CreateMemoryPipelineServiceInput): MemoryPipelineService {
-    const settings = input.settings ?? DEFAULT_MEMORY_PIPELINE_SETTINGS;
+    const settings = input.settings ?? DEFAULT_MEMORY_SETTINGS;
     const clock: MemoryClock = input.clock ?? { nowIso: () => new Date().toISOString() };
     const ids: MemoryIdGenerator = input.ids ?? { randomId: () => crypto.randomUUID() };
 
