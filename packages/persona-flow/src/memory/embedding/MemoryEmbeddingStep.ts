@@ -6,12 +6,12 @@ import type {
 } from "./embeddingPorts.js";
 
 /**
- * Outcome of the embedding step for a single candidate.
+ * Outcome of the embedding stage for a single candidate.
  *
  * Either the provider returned a usable result (`ok: true` and
  * `result` is set), or it failed (`ok: false` and `error` is set).
  * The processor never has to inspect provider-specific error types
- * — they are flattened into a string message at this boundary and
+ * 閳?they are flattened into a string message at this boundary and
  * the processor maps that to a `embedding_failed` outcome.
  */
 export type MemoryEmbeddingStepOutcome =
@@ -28,7 +28,7 @@ export type MemoryEmbeddingStepOutcome =
  *    catch / log / synthesise outcome` boilerplate.
  *  - Gives logging a single point of truth (`embeddingRequested`,
  *    `embeddingCompleted`, `embeddingFailed` always fire together).
- *  - Lets future cancellation / retry / batching logic live here
+ *  - Lets future cancellation / retry / bulk-processing logic live here
  *    without re-shaping the processor.
  */
 export class MemoryEmbeddingStep {

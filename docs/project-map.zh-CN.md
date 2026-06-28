@@ -377,6 +377,7 @@ QQ bot 集成。
 - `runtimeFiles`：临时目录和用户数据目录
 - `agent`：模型客户端的超时和重试设置
 - `promptLog`：prompt logging 是否启用以及输出路径
+- `memory`：长期记忆写入链路开关和候选处理模式；当前暴露 `enabled` 与 `candidateProcessingMode`，详细说明见 [Project Map - Memory 子系统](project-map-memory.zh-CN.md)
 - `models`：provider 配置、API URL、可选默认 API key、默认 model，以及可选静态 `availableModels`
 - `defaultModelAssignments`：按 `ModelCallPurpose` 配置的默认 provider 和 model 映射
 - `auth`：认证模式、默认用户 id、是否允许注册、session 生命周期和 cookie 设置
@@ -451,11 +452,17 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 - `packages/persona-flow/src/memory/MemoryPipelineService.ts`
 - `packages/persona-flow/src/memory/createMemoryPipelineService.ts`
 - `packages/persona-flow/src/memory/candidate/MemoryCandidateRecorder.ts`
+- `packages/persona-flow/src/memory/candidate/candidatePorts.ts`
+- `packages/persona-flow/src/memory/candidate/textNormalization.ts`
 - `packages/persona-flow/src/memory/processing/MemoryCandidateProcessor.ts`
 - `packages/persona-flow/src/memory/embedding/ModelClientMemoryEmbeddingProvider.ts`
-- `packages/persona-flow/src/memory/ranking/memorySimilarity.ts`
-- `packages/persona-flow/src/memory/decision/memoryDecisionPolicy.ts`
-- `packages/persona-flow/src/memory/duplicate/memoryTextNormalization.ts`
+- `packages/persona-flow/src/memory/embedding/MemoryEmbeddingStep.ts`
+- `packages/persona-flow/src/memory/ranking/similarity.ts`
+- `packages/persona-flow/src/memory/ranking/rankSimilarMemories.ts`
+- `packages/persona-flow/src/memory/decision/decisionPolicy.ts`
+- `packages/persona-flow/src/memory/decision/decisionPorts.ts`
+- `packages/persona-flow/src/memory/decision/MemoryDecisionRecorder.ts`
+- `packages/persona-flow/src/memory/duplicate/exactDuplicateStep.ts`
 - `packages/persona-flow/src/llm/tools/modelTool.ts`
 - `packages/persona-flow/src/llm/tools/submitTurnEventsTool.ts`
 - `packages/persona-flow/src/modelCall/modelRuntime.ts`

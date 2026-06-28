@@ -54,7 +54,7 @@ const FOLDABLE_CHARS = new RegExp(
 /**
  * Normalize text for similarity / exact-match comparisons.
  *
- * Steps (in order):
+ * Normalization order:
  *  1. Unicode NFKC fold (e.g. full-width digits → ASCII).
  *  2. Replace a small allow-listed set of punctuation/whitespace
  *     characters that NFKC leaves alone.

@@ -3,8 +3,8 @@
  *
  * These types are shared by every stage (candidate recording,
  * embedding, ranking, decision, persistence). Keeping them in one
- * small file means each step file only has to import the
- * step-specific shapes plus this module — no central `ports.ts`
+ * small file means each stage file only has to import the
+ * stage-specific shapes plus this module; no central `ports.ts`
  * grab-bag that hides which interface belongs to which stage.
  *
  * Nothing in this file references chat turns, model clients, or
@@ -49,7 +49,7 @@ export interface MemoryClock {
 }
 
 /**
- * Id generator port — abstracted so tests can produce reproducible
+ * Id generator port, abstracted so tests can produce reproducible
  * candidate / memory / decision ids without monkey-patching
  * `crypto.randomUUID`.
  */

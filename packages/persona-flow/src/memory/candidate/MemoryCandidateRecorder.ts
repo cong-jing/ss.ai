@@ -16,7 +16,7 @@ import { normalizeMemoryText } from "./textNormalization.js";
  * of drafts dropped during pre-persistence filtering (empty text
  * after trim, etc.) so callers can surface a metric without
  * re-walking the input. `storeError` is set when the underlying
- * store rejected the whole batch â€?the recorder treats this as a
+ * store rejected the whole candidate list; the recorder treats this as a
  * fail-soft warning so chat turns never break because the memory
  * layer is down.
  */

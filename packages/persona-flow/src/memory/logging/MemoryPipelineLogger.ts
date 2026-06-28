@@ -6,7 +6,7 @@ import { MEMORY_PIPELINE_LOG_EVENTS, type MemoryPipelineLogEvent } from "./memor
  * Stage-aware logger wrapper for the memory pipeline.
  *
  * Stage code calls one of the named methods (`pipelineStarted`,
- * `embeddingFailed`, �? instead of inlining log event strings. This
+ * `embeddingFailed`, etc.) instead of inlining log event strings. This
  * keeps the catalogue of events in `memoryPipelineLogEvents.ts` and
  * lets the wrapper decide:
  *  - whether the event is a `debug` (only emitted when
@@ -134,7 +134,7 @@ export class MemoryPipelineLogger {
 }
 
 // ---------- Payload shapes ----------
-// These are kept loose on purpose �?stage code can grow new fields
+// These are kept loose on purpose: stage code can grow new fields
 // without touching this file as long as common keys keep their meaning.
 
 export interface PipelineBaseFields {

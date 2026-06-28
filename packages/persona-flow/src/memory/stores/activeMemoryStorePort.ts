@@ -14,8 +14,8 @@ import type { MemoryEmbedding } from "../embedding/embeddingPorts.js";
  */
 
 /**
- * Lifecycle status for an active memory row. Batch 2/3 only writes
- * `active`; `archived` is reserved for later work.
+ * Lifecycle status for an active memory row. The current write path
+ * only writes `active`; `archived` is reserved for later work.
  */
 export const MEMORY_STATUSES = ["active", "archived"] as const;
 export type MemoryStatus = typeof MEMORY_STATUSES[number];
@@ -90,7 +90,7 @@ export interface ListActiveMemoriesInput {
      * truncation is reproducible: newest first by `updatedAt`
      * (descending), then `createdAt` (descending), then `id`
      * (ascending) as a tiebreaker. Callers rely on this to keep
-     * processor decisions stable — without it, once a bucket
+     * processor decisions stable; without it, once a bucket
      * exceeds the cap the similarity scan would silently depend on
      * storage order.
      */

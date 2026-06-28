@@ -13,18 +13,18 @@ import type {
  * Top-level entry point for the memory pipeline.
  *
  * Owns the two cross-stage policy switches:
- *  - `settings.enabled` — when `false`, every public method returns
+ *  - `settings.enabled`: when `false`, every public method returns
  *    immediately. The chat turn service never has to ask "is the
  *    feature on?"; it just calls the service.
- *  - `settings.candidateProcessingMode` — `"inline"` runs the
+ *  - `settings.candidateProcessingMode`: `"inline"` runs the
  *    processor synchronously after recording. `"record_only"` stops
  *    after the recorder, leaving candidates in `pending` for a
- *    later batch job. The processor itself does not know about
+ *    later worker. The processor itself does not know about
  *    this; the service mediates.
  *
- * Designed so a future async worker (Phase 5 of the refactor plan)
- * can call `processCandidates()` against the same processor instance
- * without touching the chat turn service.
+ * Designed so a future async worker can call `processCandidates()`
+ * against the same processor instance without touching the chat
+ * turn service.
  */
 export interface HandleChatTurnCandidatesInput {
     source: MemoryCandidateSource;
@@ -149,7 +149,7 @@ export class MemoryPipelineService {
             // Recorder and processor both isolate their own per-candidate
             // failures, so this catch only fires on programmer bugs or
             // store outages that escaped internal handling. Fail-soft:
-            // log, do not throw �?the chat turn must never break because
+            // log, do not throw: the chat turn must never break because
             // memory is down.
             const err = error instanceof Error ? error : new Error(String(error));
             logger.pipelineFailed({
@@ -163,7 +163,7 @@ export class MemoryPipelineService {
 
     /**
      * Process already-recorded candidates. Used by the inline
-     * pipeline and by future async workers (Phase 5). Returns the
+     * pipeline and by future async workers. Returns the
      * outcomes verbatim from {@link MemoryCandidateProcessor}.
      */
     async processCandidates(input: {

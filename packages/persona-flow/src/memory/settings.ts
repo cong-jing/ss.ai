@@ -2,9 +2,9 @@
  * Runtime settings for the memory subsystem.
  *
  * Externally the only two knobs the server exposes are:
- *  - `enabled` — master switch.
- *  - `candidateProcessingMode` — `"inline"` runs the full record →
- *    embed → rank → decide → persist chain inside the chat turn;
+ *  - `enabled` is the master switch.
+ *  - `candidateProcessingMode`: `"inline"` runs the full record ->
+ *    embed -> rank -> decide -> persist chain inside the chat turn;
  *    `"record_only"` stops after the recorder so a background
  *    worker / debug API / human judge can process candidates later.
  *

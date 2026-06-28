@@ -1,7 +1,7 @@
 /**
  * Embedding port shapes and types.
  *
- * Lives under `embedding/` so step code and adapters share a single
+ * Lives under `embedding/` so stage code and adapters share a single
  * source of truth, and so the rest of the pipeline can refer to
  * `MemoryEmbedding` without going through the central type grab-bag
  * that the old `memory/types.ts` had.
@@ -65,7 +65,7 @@ export interface MemoryEmbedResult {
 
 /**
  * Embedding port for the memory pipeline. Adapters that target a
- * real provider (Mistral, OpenAI, …) implement this interface.
+ * real provider (Mistral, OpenAI, 閳? implement this interface.
  */
 export interface MemoryEmbeddingProvider {
     embed(input: MemoryEmbedInput): Promise<MemoryEmbedResult>;

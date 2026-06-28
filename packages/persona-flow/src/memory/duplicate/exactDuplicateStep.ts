@@ -6,7 +6,7 @@ import type {
 } from "../stores/activeMemoryStorePort.js";
 
 /**
- * Exact-duplicate detection step.
+ * Exact-duplicate detection stage.
  *
  * Runs before embedding so we can avoid burning embedding budget on
  * inputs whose `normalizedText` already matches a live memory in

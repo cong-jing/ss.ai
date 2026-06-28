@@ -3,7 +3,7 @@
  *
  * Everything memory-related (the pipeline service, stage helpers,
  * types, logging) is exported from this single file. Stage folders
- * (`candidate/`, `embedding/`, `ranking/` …) are an implementation
+ * (`candidate/`, `embedding/`, `ranking/`, etc.) are an implementation
  * detail and consumers must not reach past this barrel.
  */
 

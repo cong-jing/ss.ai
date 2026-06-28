@@ -43,8 +43,8 @@ import type {
 /**
  * Default importance assigned to newly-created memories. Kept on
  * the processor rather than the policy so future per-scope/type
- * tuning lives in one place; today it is a single number to keep
- * Batch 2/3 minimal.
+ * tuning lives in one place; today it is a single number while the
+ * policy is still conservative.
  */
 const DEFAULT_IMPORTANCE = 0.5;
 
@@ -73,13 +73,13 @@ export interface MemoryCandidateProcessorDeps {
 
 /**
  * Drives a candidate through:
- *   low-value filter â†?exact-duplicate lookup â†?embedding â†?
- *   active-memory scan â†?ranking â†?decision â†?memory create
- *   (if needed) â†?decision row + candidate status update.
+ *   low-value filter -> exact-duplicate lookup -> embedding ->
+ *   active-memory scan -> ranking -> decision -> memory create
+ *   (if needed) -> decision row + candidate status update.
  *
- * Hard requirements (carry-over from the old `MemoryCommitService`):
+ * Hard requirements:
  *  - Per-candidate isolation: a thrown error in one candidate must
- *    not abort the batch. Each candidate ends in either a recorded
+ *    not abort the candidate list. Each candidate ends in either a recorded
  *    decision or a recorded error outcome.
  *  - Embedding signatures gate similarity: a memory whose stored
  *    embedding has a different provider/model/dim/version is
@@ -87,7 +87,7 @@ export interface MemoryCandidateProcessorDeps {
  *  - Conservative duplicates: exact normalized-text matches go to
  *    `ignore_duplicate` (text-level certainty), but near-duplicates
  *    above `exactDuplicateThreshold` go to `needs_judge` per the
- *    Batch 2/3 policy.
+ *    conservative policy.
  *  - Embedding failures degrade to `embedding_failed`, never throw.
  */
 export class MemoryCandidateProcessor {
@@ -126,7 +126,7 @@ export class MemoryCandidateProcessor {
         });
 
         try {
-            // 1. Low-value filter â€?avoid paying for an embedding on
+            // 1. Low-value filter: avoid paying for an embedding on
             //    text we would never accept anyway.
             const lowValue = isLowValueCandidate(candidate);
             if (lowValue.lowValue) {

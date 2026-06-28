@@ -16,15 +16,15 @@ import type { MemoryDecisionKind } from "./decisionPorts.js";
 
 export interface MemoryDecisionPolicy {
     /**
-     * Similarity ≥ this is treated as an exact duplicate. In Batch
-     * 2/3 we conservatively route these to `needs_judge` instead of
+     * Similarity >= this is treated as an exact duplicate. We
+     * conservatively route these to `needs_judge` instead of
      * dropping silently, so an operator can confirm before we stop
      * surfacing them as new memories.
      */
     exactDuplicateThreshold: number;
     /**
-     * Similarity ≥ this (but below `exactDuplicateThreshold`) means
-     * "probably related — let a human / judge decide".
+     * Similarity >= this (but below `exactDuplicateThreshold`) means
+     * "probably related; let a human / judge decide".
      */
     needsJudgeThreshold: number;
     /**
@@ -60,9 +60,9 @@ export interface SimilarityDecision {
  *
  * Returns `create` when nothing meaningfully similar exists.
  * Returns `needs_judge` for anything at or above the lower
- * threshold, including the "exact duplicate" band — Batch 2/3
- * deliberately does NOT auto-drop duplicates so we can observe
- * provider behaviour first.
+ * threshold, including the "exact duplicate" band. We deliberately
+ * do not auto-drop embedding near-duplicates so we can observe
+ * provider behavior first.
  *
  * Never returns `ignore_low_value` or `ignore_duplicate`; those are
  * the caller's responsibility (`isLowValueCandidate` for the former,
@@ -101,7 +101,7 @@ export interface LowValueAssessment {
 /**
  * Minimum normalized length below which a candidate is considered
  * low value (one or two CJK characters, a single English word).
- * Conservative on purpose — false negatives are fine, false
+ * Conservative on purpose: false negatives are fine, false
  * positives are not (we would silently throw away real memories).
  */
 const MIN_NORMALIZED_LENGTH = 2;
