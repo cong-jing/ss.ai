@@ -2,7 +2,7 @@
 
 [English](memory-write-implementation.md)
 
-This document turns the long-term memory write requirements in [memory-instruction.md](memory-instruction.md) into an implementation plan for the current codebase.
+This document turns the long-term memory write requirements, now summarized from the maintainer-facing [Project Map - Memory Subsystem](../project-map-memory.zh-CN.md), into an implementation plan for the current codebase.
 
 The first implementation batch is intentionally narrow: let the chat model propose memory write candidates through a tool call, collect those candidates after the chat turn completes, and write structured logs. It does not create durable memories yet.
 

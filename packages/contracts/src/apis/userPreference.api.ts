@@ -65,6 +65,14 @@ export interface DeleteApiKeyRequest {
 export interface DeleteApiKeyResponse {
     provider: string;
     apiKeySet: boolean;
+    /**
+     * Models still effectively available after the user key is removed.
+     * Includes any static `availableModels` from server config (which do not
+     * depend on the user key) so the UI can keep showing dropdown options
+     * when a default API key or static list still applies. Empty when no
+     * key (user or default) and no static list are configured.
+     */
+    availableModels: ProviderAvailableModels;
 }
 
 // --- POST /v1/user-preference/test-api-key ---

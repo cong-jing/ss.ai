@@ -5,15 +5,13 @@
 このドキュメントは、`ss.ai` の保守者向けプロジェクトマップです。
 ワークスペース構成、メインチャットフロー、ランタイム設定、そして現在どのファイルが挙動の起点になっているかを、コールドスタートで素早く把握したいときに使ってください。
 
-ポートフォリオ寄りの概要、ライブデモ、短いクイックスタートを先に見たい場合は、リポジトリルートの [README](../README.ja.md) を参照してください。
+機能概要、ライブデモ、短いクイックスタートを先に見たい場合は、リポジトリルートの [README](../README.ja.md) を参照してください。
 
 ## Workspace Purpose
 
 `ss.ai` は、LLM 駆動のキャラクター会話と TRPG 風インタラクションのための実験的な TypeScript プロジェクトです。中心にあるのは `packages/persona-flow` で、prompt context の構築、prompt template のレンダリング、model-call purpose ごとのモデル選択、注入されたクライアント経由での LLM 呼び出し、そして生成された chat turn の store 経由での永続化を担います。
 
-このリポジトリは、個人ポートフォリオ兼研究プロジェクトでもあります。
-
-主な目的は、次の領域の経験を示すことです。
+このプロジェクトは、現在次の領域を扱っています。
 
 - TypeScript と Node.js によるアプリケーション設計
 - LLM API 連携
@@ -156,7 +154,7 @@ pnpm --dir ./.deploy-prod/server start
 
 Memory candidate collection は streaming preview に影響しません。streamed text と `turnEventPreview` は structured-output JSON text channel だけから生成されます。memory candidates は model stream 完了後の最終 parsed structured output からのみ消費されます。
 
-Memory write の実装詳細は [memory-module.zh-CN.md](memory-module.zh-CN.md) にあります。現在の write pipeline は structured-output candidates を記録し、設定済み model client で embeddings を生成し、active memories を cosine similarity で rank し、conservative decisions を書き込み、SQLite の `memory_candidates` / `memories` / `memory_decisions` tables に永続化し、assistant persistence 後の chat turn に接続されています。Candidates、active memories、decisions 用の read-only debug API は利用可能で、prompt memory read-back はまだ未実装です。
+Memory write path は現在 write side のみを実装しています。structured output は `memoryWriteCandidates` を含めることができ、server は candidate を記録し、embedding を生成し、active memories を similarity で scan し、candidate / memory / decision rows を書き込みます。Candidates、active memories、decisions 用の read-only debug API は利用可能です。Active memories はまだ prompt context に read-back されないため、完全な RAG loop ではありません。詳細な boundary、ports、decision policy、pending work は [Project Map - Memory 子系统](project-map-memory.zh-CN.md) にあります。
 
 interaction mode は `@ss-ai/contracts` に共有定義されており、全体アーキテクチャとしても将来的に複数 mode を支える前提で設計されています。実行時に実際に登録されているのは現在 `single_character_chat` だけです。他の mode も contracts と UI には将来計画のプレースホルダーとして存在しますが、prompt と model-call dispatch にはまだ接続されていません。
 

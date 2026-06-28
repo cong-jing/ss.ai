@@ -5,15 +5,13 @@
 This document is the maintainer-oriented project map for `ss.ai`.
 Use it when you need a cold-start overview of the workspace, the main chat flow, runtime configuration, and the files that currently anchor behavior.
 
-For a portfolio-style overview, live demo links, and a shorter quick start, see the repository root [README](../README.md).
+For a feature overview, live demo links, and a shorter quick start, see the repository root [README](../README.md).
 
 ## Workspace Purpose
 
 `ss.ai` is an experimental TypeScript project for LLM-driven character chat and TRPG-style interaction. Its center is `packages/persona-flow`: it builds prompt context, renders prompt templates, selects a model for each model-call purpose, calls the LLM through an injected client, and persists the resulting chat turn through injected stores.
 
-This repository is a personal portfolio and research project.
-
-Its main purpose is to demonstrate experience in the following areas:
+The project currently covers these areas:
 
 - application design with TypeScript and Node.js
 - LLM API integration
@@ -157,7 +155,7 @@ The `single_character_chat` streaming path has migrated to structured output: `/
 
 Memory candidate collection intentionally does not affect streaming previews. Streamed text and `turnEventPreview` events still come only from the structured-output JSON text channel; memory candidates are consumed only from the final parsed structured output after the model stream returns.
 
-Memory write implementation details are tracked in [memory-module.zh-CN.md](memory-module.zh-CN.md). The current write pipeline records structured-output candidates, generates embeddings through the configured model client, ranks active memories by cosine similarity, writes conservative decisions, persists the SQLite `memory_candidates` / `memories` / `memory_decisions` tables, and is wired into chat turns after assistant persistence. Read-only debug APIs are available for candidates, active memories, and decisions; prompt memory read-back is still pending.
+The memory write path currently implements the write side only: structured output can include `memoryWriteCandidates`, the server records candidates, generates embeddings, scans active memories by similarity, and writes candidate / memory / decision rows. Read-only debug APIs can list candidates, active memories, and decisions. Active memories are not yet read back into prompt context, so this is not a complete RAG loop yet. Detailed boundaries, ports, decision policy, and pending work are tracked in [Project Map - Memory Subsystem](project-map-memory.zh-CN.md).
 
 Interaction modes are shared from `@ss-ai/contracts`, and the broader architecture is intended to support multiple modes over time. Today only `single_character_chat` is actually implemented for runtime use. Other modes already exist in contracts and UI as planned placeholders, but are not wired into prompt or model-call dispatch yet.
 
@@ -438,10 +436,9 @@ Start here when reviewing or changing behavior:
 - `apps/web/src/panels/chat/turnEventDisplay.ts`
 - `apps/web/src/panels/chat/chatTypes.ts`
 - `apps/web/src/panels/userPreference/useUserPreferenceViewModel.ts`
-- `docs/memory-instruction.md`
-- `docs/memory-module.zh-CN.md`
-- `docs/memory-write-implementation.md`
-- `docs/memory-write-followups.md`
+- `docs/project-map-memory.zh-CN.md`
+- `docs/plans/memory-write-implementation.md`
+- `docs/plans/memory-write-followups.md`
 
 ## Current Maintenance Notes
 

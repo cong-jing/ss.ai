@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { MemoryWriteCandidate } from "@ss-ai/contracts";
 import type {
     Character,
     Conversation,
     ConversationActor,
     MemoryCandidateRecord,
-    MemoryWriteCandidate,
     ModelClient,
     UserProfile,
 } from "../src/index.js";

@@ -5,21 +5,20 @@
 这份文档是 `ss.ai` 的维护者导向项目地图。
 当你需要在冷启动状态下快速理解工作区结构、主聊天流程、运行时配置，以及当前由哪些文件控制行为时，应该先看这里。
 
-如果你想先看偏作品集展示风格的项目概览、在线演示链接和更短的上手方式，请先看仓库根目录的 [README](../README.zh-CN.md)。
+如果你想先看功能概览、在线演示链接和更短的上手方式，请先看仓库根目录的 [README](../README.zh-CN.md)。
 
 ## 工作区目的
 
 `ss.ai` 是一个围绕 LLM 驱动的角色对话与 TRPG 风格交互构建的 TypeScript 实验项目。它的核心是 `packages/persona-flow`：负责组装 prompt 上下文、渲染 prompt 模板、按不同 model-call purpose 选择模型、通过注入的客户端调用 LLM，并把生成出的 chat turn 通过注入的 stores 持久化。
 
-这个仓库同时也是个人作品集与研究项目。
-
-它主要用于展示以下能力：
+它主要覆盖以下工程与产品能力：
 
 - 使用 TypeScript 和 Node.js 做应用设计
 - LLM API 集成
 - 基于 SSE 的流式聊天
 - prompt 组合与模板管理
 - 以 structured output 为主、并保留 provider-neutral tool-call 抽象供未来 agent 工具复用的 turn event 设计
+- 长期记忆写入原型，包括 candidate extraction、embedding、相似度排序和保守提交策略
 - 用 SQLite 持久化对话与角色数据
 - 角色对话与 TRPG 风格交互设计
 - LLM provider abstraction
@@ -156,7 +155,7 @@ pnpm --dir ./.deploy-prod/server start
 
 Memory candidate collection 不影响 streaming preview。流式文本和 `turnEventPreview` 事件仍然只来自 structured-output JSON 文本通道；memory candidates 只在模型 stream 完成后的最终 parsed structured output 中被消费。
 
-Memory 写入实现细节记录在 [memory-module.zh-CN.md](memory-module.zh-CN.md)。当前写入链路会记录 structured-output candidates，通过配置的 model client 生成 embeddings，按 cosine similarity 排序 active memories，写入保守 decisions，持久化 SQLite `memory_candidates` / `memories` / `memory_decisions` 三张表，并在 assistant 持久化后接入 chat turn。当前已有 candidates、active memories、decisions 的只读 debug API；prompt memory read-back 仍待实现。
+Memory 写入链路当前只完成写入侧：structured output 可以提交 `memoryWriteCandidates`，服务端会记录候选、生成 embedding、按相似度扫描 active memories，并写入 candidate / memory / decision 表。只读 debug API 已可查询 candidates、active memories 和 decisions；active memories 尚未回读进 prompt，因此还不是完整 RAG 闭环。详细边界、端口、决策策略和未完成项见 [Project Map - Memory 子系统](project-map-memory.zh-CN.md)。
 
 interaction modes 定义在 `@ss-ai/contracts` 中，整体架构也预期后续支持多个 mode。当前真正落地到运行时的只有 `single_character_chat`；其他 mode 虽然已经在 contracts 和 UI 中存在，作为后续规划的占位，但还没有接入 prompt 和 model-call dispatch。
 
@@ -372,8 +371,10 @@ messages 保存 `senderActorId`、`conversationId`、`kind`、`displayText`、�
 
 - `chat.main`
 - `memory.summarize`
+- `memory.embed`
 
 当前 chat 路径调用模型时使用的 `modelCallPurpose` 是 `"chat.main"`。
+Memory embedding adapter 在生成候选记忆向量时使用 `"memory.embed"`。
 
 模型解析顺序是“用户优先，配置兜底”：
 
@@ -399,13 +400,24 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 
 - `packages/contracts/src/modelCallPurpose.ts`
 - `packages/contracts/src/interactionMode.ts`
+- `packages/contracts/src/memoryCandidates.ts`
+- `packages/contracts/src/memoryCandidates.schema.ts`
 - `packages/contracts/src/turnEvents.ts`
 - `packages/contracts/src/turnEvents.schema.ts`
 - `packages/contracts/src/apis/*.api.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnService.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnPreparation.ts`
+- `packages/persona-flow/src/chatTurn/memoryCandidateLogger.ts`
 - `packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts`
 - `packages/persona-flow/src/chatTurn/events/turnEventText.ts`
+- `packages/persona-flow/src/memory/types.ts`
+- `packages/persona-flow/src/memory/ports.ts`
+- `packages/persona-flow/src/memory/candidateRecorder.ts`
+- `packages/persona-flow/src/memory/commitService.ts`
+- `packages/persona-flow/src/memory/similarity.ts`
+- `packages/persona-flow/src/memory/decisionPolicy.ts`
+- `packages/persona-flow/src/memory/textNormalization.ts`
+- `packages/persona-flow/src/memoryAdapters/modelClientEmbeddingProvider.ts`
 - `packages/persona-flow/src/llm/tools/modelTool.ts`
 - `packages/persona-flow/src/llm/tools/submitTurnEventsTool.ts`
 - `packages/persona-flow/src/modelCall/modelRuntime.ts`
@@ -418,6 +430,7 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 - `packages/persona-flow-sqlite/src/db/CharacterDbRouter.ts`
 - `packages/persona-flow-sqlite/src/createSqliteStores.ts`
 - `packages/persona-flow-model-client/src/defaultModelClient.ts`
+- `packages/persona-flow-model-client/src/mistral/mistralEmbed.ts`
 - `packages/persona-flow-model-client/src/mistral/mistralModelClient.ts`
 - `packages/persona-flow-model-client/src/mistral/mistralToolAdapter.ts`
 - `apps/server/src/http/apis/chat/*.ts`
@@ -426,6 +439,9 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 - `apps/web/src/panels/chat/turnEventDisplay.ts`
 - `apps/web/src/panels/chat/chatTypes.ts`
 - `apps/web/src/panels/userPreference/useUserPreferenceViewModel.ts`
+- `docs/project-map-memory.zh-CN.md`
+- `docs/plans/memory-write-implementation.md`
+- `docs/plans/memory-write-followups.md`
 
 ## 当前维护备注
 

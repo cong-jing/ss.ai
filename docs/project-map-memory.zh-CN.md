@@ -1,6 +1,8 @@
-# Memory 模块实现说明
+# Project Map - Memory 子系统
 
-本文档记录当前长期记忆写入原型的代码边界和函数职责。它描述的是截至 Step 7 的实际实现，不是最终目标状态。
+[返回项目地图](project-map.zh-CN.md)
+
+本文档是 `docs/project-map.zh-CN.md` 拆出的 memory 子系统章节，记录当前长期记忆写入原型的代码边界、函数职责和已知未完成项。它描述的是截至 Step 7 的实际实现，不是最终目标状态。
 
 当前状态一句话：聊天模型已经能在 structured output 中产生 `memoryWriteCandidates`，`packages/persona-flow/src/memory/**` 已经具备候选记录、embedding 相似度判断和提交决策的核心服务，对应的 SQLite stores 已经落在 core `app.db`，并且已经端到端接入 chat turn —— 默认配置下每条带候选的对话都会写入 `memory_candidates` / `memories` / `memory_decisions` 三张表（fail-soft）；Step 7 已提供只读 debug API 查询 candidates、active memories 和 decisions，回读 prompt 仍在后续 step。
 

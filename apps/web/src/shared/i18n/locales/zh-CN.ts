@@ -33,6 +33,7 @@ export const zhCN: MessageSchema = {
     "serverError.userPreference.apiKeyRequired": "API key 不能为空。",
     "serverError.userPreference.modelCallPurposeInvalid": "模型调用用途无效。",
     "serverError.userPreference.modelRequired": "模型不能为空。",
+    "serverError.userPreference.modelNotInCapabilityList": "所选模型不可用于该用途。",
     "serverError.memoryDebug.characterIdRequired": "必须提供 characterId 查询参数。",
     "serverError.memoryDebug.invalidEnumValue": "参数 {param} 的值无效：{value}。",
     "common.loading": "加载中...",

@@ -57,7 +57,7 @@ export interface ModelClientEmbeddingProviderDeps {
  * Adapter that satisfies `MemoryEmbeddingProvider` by delegating to a
  * `ModelClient.embed()` implementation. Lives outside `src/memory/**` so the
  * memory core remains free of provider / runtime dependencies (per the Batch
- * 2/3 architecture rules — see docs/memory-write-batch2-steps.zh-CN.md).
+ * 2/3 architecture rules — see docs/plans/memory-write-batch2-steps.zh-CN.md).
  *
  * Resolution order for the embedding model:
  *  1. If `input.userId` is supplied AND that user has set

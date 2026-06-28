@@ -2,40 +2,37 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | 日本語
 
-`ss.ai` は、LLM を用いたキャラクター会話と TRPG 風インタラクションを中心にした、個人開発の TypeScript/Node.js プロジェクトです。このプロジェクトの重点は単なる prompt 実験ではなく、保守しやすいフルスタックアプリケーションをどう設計するか、つまりモジュール境界、永続化、モデル抽象化、デプロイ可能なランタイム構成をどう組み立てるかにあります。
+`ss.ai` は、LLM 駆動のキャラクター会話、TRPG 風インタラクション、structured chat events、そして初期段階の長期記憶 write pipeline を扱う TypeScript / Node.js フルスタックアプリケーションです。単にモデルへメッセージを送るのではなく、prompt context、キャラクター状態、モデル出力、永続化、streaming、debug 経路を保守しやすい形で組み立てることを重視しています。
 
-Vue 3 を使ったフロントエンド、Express ベースの API、workspace 全体で共有される contracts、そして prompt の組み立てと chat turn のオーケストレーションを担うドメインパッケージによって構成された、アプリケーション設計と実装のサンプルとして読むのが適しています。
-
-全体アーキテクチャは将来的に複数の interaction mode へ拡張できるように設計していますが、現時点でエンドツーエンドに実装されているのは `single_character_chat` のみです。ほかの mode は contracts や UI 上の形は用意されているものの、ランタイムの prompt / model-call 実行系にはまだ接続されていません。
+現時点でもっとも完成している体験は single-character chat です。ユーザーが character と conversation を選び、server が prompt context を組み立て、configured model を structured output で呼び出し、可視 reply、turn events、任意の memory candidates を永続化します。ほかの interaction mode は contracts と UI 形状には存在しますが、runtime model-call dispatch にはまだ接続されていません。
 
 ## Live Demo
 
 - GitHub: <https://github.com/cong-jing/ss.ai>
 - Live Demo: <http://13.159.36.248:8080/>
 
-デモ環境では、ユーザー名とパスワードだけで登録できます。メール認証は不要で、主要な導線は自前の API キーがなくても試せます。
+## Core Features
 
-## Highlights
+- Character / conversation management。
+- `single_character_chat` の end-to-end flow。
+- Structured turn events: model output を `TurnEvent[]` として parse し、UI が text、expression marker、scene-atmosphere marker、debug payload を描画する。
+- SSE streaming preview: `/v1/chat/stream` が structured-output JSON text channel から可視 text と event marker を段階的に preview し、最後に canonical `turnEvents` で整合する。
+- `chat.main`、`memory.summarize`、`memory.embed` ごとの model assignment。
+- User credential と runtime default による provider API key configuration。
+- Long-term-memory write prototype: model が `memoryWriteCandidates` を提出し、server が candidate 記録、embedding、cosine similarity ranking、conservative decision を行う。
+- Memory candidates、active memories、memory decisions 用の read-only debug API。
+- 実モデル呼び出しや永続化なしで prompt assembly を確認できる dry-run endpoint。
 
-- pnpm workspace を使った TypeScript/Node.js モノレポ構成と明確な package 境界
-- Vue 3 + Vite フロントエンドと Express API サーバーの分離構成
-- structured output を中核にした turn-event チャットフローと SSE によるストリーミング preview
-- 会話、キャラクター、ユーザー設定、provider credential を扱う SQLite 永続化
-- purpose ごとのモデル割り当てを含む LLM provider abstraction 設計と、将来の agent / query tools に再利用できる tool-call インターフェース保持
-- 再利用可能なドメインパッケージを中心にした prompt composition と chat turn orchestration
-- ログ、設定管理、テスト、デプロイスクリプトまで含めたエンドツーエンドの実装
-
-## Architecture
+## Core Mechanisms
 
 ```mermaid
 flowchart LR
     UI[apps/web\nVue 3 + Vite]
     API[apps/server\nExpress API + SSE]
-    Contracts[packages/contracts\nShared API contracts]
-    Domain[packages/persona-flow\nPrompt composition\nChat turn orchestration]
-    Persistence[packages/persona-flow-sqlite\nSQLite + Drizzle stores]
-    ModelClient[packages/persona-flow-model-client\nProvider integration]
-    Logger[packages/persona-flow-logger\nRuntime logging]
+    Contracts[packages/contracts\nAPI and shared types]
+    Domain[packages/persona-flow\nPrompt and chat orchestration]
+    Persistence[packages/persona-flow-sqlite\nSQLite stores]
+    ModelClient[packages/persona-flow-model-client\nProvider adapters]
 
     UI <-- types --> Contracts
     UI --> API
@@ -43,37 +40,43 @@ flowchart LR
     API --> Domain
     API --> Persistence
     API --> ModelClient
-    API --> Logger
     Domain --> Contracts
-    Domain --> Persistence
-    Domain --> ModelClient
 ```
+
+- `packages/contracts` は shared API contracts、interaction modes、model-call purposes、turn events、memory candidate types を定義します。
+- `packages/persona-flow` は prompt-context construction、model-call dispatch、chat-turn orchestration、memory core を担当します。
+- `packages/persona-flow-sqlite` は characters、conversations、messages、turn events、user settings、credentials、memory tables の SQLite stores を実装します。
+- `packages/persona-flow-model-client` は provider-neutral `ModelClient` を具体 provider へ接続します。現在は主に Mistral です。
+- `apps/server` は HTTP API、SSE、runtime config、auth modes、dependency wiring を担当します。
+- `apps/web` は 3 ペイン chat UI、settings panel、streaming render path、debug surface を提供します。
+
+## Implemented And Pending
+
+Implemented:
+
+- `single_character_chat` の runtime support。
+- Structured-output `TurnEvent[]` generation、persistence、UI rendering。
+- SSE streaming previews と final event reconciliation。
+- Characters、conversations、preferences、credentials、messages、turn events の SQLite persistence。
+- Memory candidate recording、embedding、similarity ranking、conservative commit decisions、SQLite memory stores、read-only debug APIs。
+- `default-user` と `local-password` auth modes。
+- Staging / production deploy packaging scripts。
+
+Pending or prototype-level:
+
+- `single_character_chat` 以外の interaction modes は runtime model-call dispatch に未接続。
+- Active memories はまだ prompt context に read-back されていないため、memory system は full RAG loop ではなく write side の実装段階。
+- LLM judge / merge pipeline は未実装。near-duplicate は `needs_judge` へ送られ、自動 merge / delete は行わない。
+- `createMemory + candidate status + decision` はまだ単一 transaction boundary ではない。
+- Provider API-key encryption hooks はあるが、at-rest encryption は placeholder。
 
 ## Tech Stack
 
 - Frontend: Vue 3, Vite, TypeScript
 - Backend: Node.js, Express, TypeScript
 - Storage: SQLite, Drizzle ORM, better-sqlite3
-- LLM integration: provider abstraction, model assignment, structured output, streaming path
-- Tooling and ops: pnpm workspace, tsx, workspace tests, deployment scripts
-
-## What Is Working Now
-
-- キャラクター会話 UI と、会話・コンテキスト向けの各種パネル
-- SQLite による会話、キャラクター、ユーザー設定の永続化
-- provider credential 入力と purpose ごとのモデル割り当て
-- structured output ベースの chat 呼び出しと SSE ストリーミング preview 経路
-- Web チャット UI での `TurnEvent[]` ベース描画。`expression` / `sceneAtmosphere` のインライン表示と、stream 終了後の canonical `turnEvents` による最終整合も含む
-- `single_character_chat` のエンドツーエンド実装。ほかの interaction mode は現状まだ計画段階
-- 実際のモデル呼び出しなしで prompt 組み立てを確認できる dry-run 経路
-- staging / production 向けのデプロイ出力
-
-## Current Limitations
-
-- 実行時の model-call dispatch に本格接続されている interaction mode は現状 `single_character_chat` のみで、他の mode はまだプレースホルダー寄りです
-- API とランタイムの一部には、実質的に single-user 前提の箇所が残っています
-- provider credential 用の暗号化フックはあるものの、保存時暗号化はまだプレースホルダー実装です
-- このリポジトリは安定化した汎用 OSS フレームワークではなく、ポートフォリオ兼実装検証プロジェクトです
+- LLM: provider abstraction, structured output, streaming, embeddings
+- Tooling: pnpm workspace, tsx, TypeScript project tests, deploy scripts
 
 ## Quick Start
 
@@ -91,6 +94,7 @@ pnpm run test
 ## Further Reading
 
 - [Project Map](docs/project-map.md)
+- [Memory Subsystem Notes](docs/project-map-memory.zh-CN.md)
 - [Project Map (简体中文)](docs/project-map.zh-CN.md)
 - [Project Map (日本語)](docs/project-map.ja.md)
 - [TODO / Roadmap Notes](docs/todo.md)

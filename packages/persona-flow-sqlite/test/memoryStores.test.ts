@@ -30,6 +30,7 @@ import type {
     MemoryEmbedding,
     MemoryIdGenerator,
     MemoryLogger,
+    MemorySimilaritySummaryEntry,
 } from "@ss-ai/persona-flow";
 
 // ---------- helpers ----------
@@ -48,15 +49,15 @@ function makeIds(prefix = "id"): MemoryIdGenerator {
 }
 
 function makeRecordingLogger(): MemoryLogger & {
-    debugCalls: Array<{ event: string; payload?: Record<string, unknown> }>;
-    infoCalls: Array<{ event: string; payload?: Record<string, unknown> }>;
-    warnCalls: Array<{ event: string; payload?: Record<string, unknown> }>;
-    errorCalls: Array<{ event: string; payload?: Record<string, unknown> }>;
+    debugCalls: Array<{ event: string; payload?: unknown }>;
+    infoCalls: Array<{ event: string; payload?: unknown }>;
+    warnCalls: Array<{ event: string; payload?: unknown }>;
+    errorCalls: Array<{ event: string; payload?: unknown }>;
 } {
-    const debugCalls: Array<{ event: string; payload?: Record<string, unknown> }> = [];
-    const infoCalls: Array<{ event: string; payload?: Record<string, unknown> }> = [];
-    const warnCalls: Array<{ event: string; payload?: Record<string, unknown> }> = [];
-    const errorCalls: Array<{ event: string; payload?: Record<string, unknown> }> = [];
+    const debugCalls: Array<{ event: string; payload?: unknown }> = [];
+    const infoCalls: Array<{ event: string; payload?: unknown }> = [];
+    const warnCalls: Array<{ event: string; payload?: unknown }> = [];
+    const errorCalls: Array<{ event: string; payload?: unknown }> = [];
     return {
         debug: (event, payload) => { debugCalls.push({ event, payload }); },
         info: (event, payload) => { infoCalls.push({ event, payload }); },
@@ -599,13 +600,15 @@ describe("SQLiteMemoryDecisionStore", () => {
 
     it("filters by candidateId and by decision kind (single or array)", async () => {
         const { decisionStore } = freshStores();
+        // `similarity: []` must stay mutable for `AppendMemoryDecisionInput`;
+        // do not freeze with `as const`.
         const base = {
             userId: "user-A",
             characterId: "char-A",
             policyVersion: 1,
-            similarity: [],
+            similarity: [] as MemorySimilaritySummaryEntry[],
             createdAt: "2026-02-04T00:00:00.000Z",
-        } as const;
+        };
         await decisionStore.appendDecision({ ...base, candidateId: "c1", decision: "create", memoryId: "m1" });
         await decisionStore.appendDecision({ ...base, candidateId: "c2", decision: "ignore_duplicate" });
         await decisionStore.appendDecision({ ...base, candidateId: "c3", decision: "ignore_low_value" });
@@ -625,12 +628,14 @@ describe("SQLiteMemoryDecisionStore", () => {
 
     it("filters by characterId so the same user's other character worlds stay isolated", async () => {
         const { decisionStore } = freshStores();
+        // `similarity: []` must stay mutable for `AppendMemoryDecisionInput`;
+        // do not freeze with `as const`.
         const base = {
             userId: "user-A",
             policyVersion: 1,
-            similarity: [],
+            similarity: [] as MemorySimilaritySummaryEntry[],
             createdAt: "2026-02-04T00:00:00.000Z",
-        } as const;
+        };
         await decisionStore.appendDecision({ ...base, characterId: "char-A", candidateId: "cA", decision: "create", memoryId: "mA" });
         await decisionStore.appendDecision({ ...base, characterId: "char-B", candidateId: "cB", decision: "create", memoryId: "mB" });
 

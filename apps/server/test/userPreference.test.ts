@@ -128,6 +128,41 @@ describe("UserPreference API", () => {
             .expect(400);
     });
 
+    it("POST /v1/user-preference/model-assignment — rejects unknown provider with 400", async () => {
+        await app.agent
+            .post("/v1/user-preference/model-assignment")
+            .send({ modelCallPurpose: "chat.main", provider: "openai", model: "gpt-4" })
+            .expect(400);
+    });
+
+    it("POST /v1/user-preference/model-assignment — rejects chat model assigned to memory.embed (capability mismatch)", async () => {
+        // mistral-large-latest is in availableModels.chat but not in
+        // availableModels.embed, so assigning it to memory.embed must fail
+        // at save time, not silently at embed time.
+        const res = await app.agent
+            .post("/v1/user-preference/model-assignment")
+            .send({ modelCallPurpose: "memory.embed", provider: "mistral", model: "mistral-large-latest" })
+            .expect(400);
+        assert.equal(res.body.code, "user_preference.model_not_in_capability_list");
+    });
+
+    it("POST /v1/user-preference/model-assignment — rejects model not in static availableModels list", async () => {
+        const res = await app.agent
+            .post("/v1/user-preference/model-assignment")
+            .send({ modelCallPurpose: "chat.main", provider: "mistral", model: "some-unknown-model" })
+            .expect(400);
+        assert.equal(res.body.code, "user_preference.model_not_in_capability_list");
+    });
+
+    it("POST /v1/user-preference/model-assignment — accepts embed model for memory.embed", async () => {
+        const res = await app.agent
+            .post("/v1/user-preference/model-assignment")
+            .send({ modelCallPurpose: "memory.embed", provider: "mistral", model: "mistral-embed" })
+            .expect(200);
+        const data = res.body as UpsertModelAssignmentResponse;
+        assert.equal(data.modelAssignments["memory.embed"]!.userAssignment?.model, "mistral-embed");
+    });
+
     // ── POST /v1/user-preference/list-models ────────────────────────────────────
 
     it("POST /v1/user-preference/list-models — returns pre-configured models", async () => {
@@ -159,6 +194,12 @@ describe("UserPreference API", () => {
         const data = res.body as DeleteApiKeyResponse;
         assert.equal(data.provider, "mistral");
         assert.equal(data.apiKeySet, false);
+        // The static config availableModels list is independent of the user
+        // API key, so removing the key must not zero the dropdown options.
+        assert.deepEqual(data.availableModels, {
+            chat: ["mistral-large-latest", "mistral-small-latest"],
+            embed: ["mistral-embed"],
+        });
     });
 
     it("GET /v1/user-preference — apiKeySet false after delete", async () => {

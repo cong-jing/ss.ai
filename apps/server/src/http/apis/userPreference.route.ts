@@ -1,6 +1,6 @@
 import * as UserPreferenceApi from "@ss-ai/contracts/apis/userPreference";
 import type { ErrorResponse } from "@ss-ai/contracts";
-import { MODEL_CALL_PURPOSES } from "@ss-ai/contracts";
+import { MODEL_CALL_PURPOSES, MODEL_CALL_PURPOSE_CATEGORIES, type ModelCallPurpose } from "@ss-ai/contracts";
 import { DefaultModelClient } from "@ss-ai/persona-flow-model-client";
 import { registerApi } from "../registerApi.js";
 import { toErrorResponse, resolveRequestUserId, type HttpApiContext } from "./apiContext.js";
@@ -144,7 +144,11 @@ async function deleteApiKey(
     if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
 
     await context.stores.providerCredential.deleteCredential({ userId, provider });
-    return { provider, apiKeySet: false };
+    // Recompute the available-models view after the user key is gone. Static
+    // server-config lists and any default API key path still apply, so the UI
+    // must not blindly assume "key removed -> no models".
+    const availableModels = await listModelsForProvider(context, provider, userId);
+    return { provider, apiKeySet: false, availableModels };
 }
 
 async function testApiKey(
@@ -196,6 +200,35 @@ async function upsertModelAssignment(
     }
     if (!provider) throw new AppHttpError(400, "user_preference.provider_required", "provider is required");
     if (!model) throw new AppHttpError(400, "user_preference.model_required", "model is required");
+
+    // Capability validation mirrors the startup-time check used by the config
+    // loader (`validateDefaultModelAssignments`). Without it, the user could
+    // pin e.g. a chat model to `memory.embed`; the only signal would be a
+    // silent embedding failure later because the memory pipeline is
+    // fail-soft. Catching it here turns that into an explicit 400 right at
+    // save time, where the UI can surface a useful message.
+    const providerEntry = context.config.models[provider];
+    if (!providerEntry) {
+        throw new AppHttpError(
+            400,
+            "user_preference.provider_unsupported",
+            `Unsupported provider: ${provider}`,
+        );
+    }
+    const category = MODEL_CALL_PURPOSE_CATEGORIES[modelCallPurpose as ModelCallPurpose];
+    if (category) {
+        const categoryList = providerEntry.availableModels[category];
+        // When the static list is empty we intentionally fall back to the
+        // model's live `/v1/models` enumeration and skip the strict check,
+        // matching the config-loader behaviour.
+        if (categoryList.length > 0 && !categoryList.includes(model)) {
+            throw new AppHttpError(
+                400,
+                "user_preference.model_not_in_capability_list",
+                `Model "${model}" is not listed under models.${provider}.availableModels.${category}.`,
+            );
+        }
+    }
 
     const now = new Date().toISOString();
     await context.stores.userPreferences.setModelAssignment({
