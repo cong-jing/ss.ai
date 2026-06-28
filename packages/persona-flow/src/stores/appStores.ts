@@ -9,7 +9,7 @@ import type {
     MemoryCandidateStore,
     MemoryDecisionStore,
     MemoryStore,
-} from "../memory/ports.js";
+} from "../memory/index.js";
 
 /**
  * Grouped collection of all application stores.

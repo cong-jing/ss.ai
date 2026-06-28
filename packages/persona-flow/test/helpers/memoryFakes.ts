@@ -28,7 +28,7 @@ import { MEMORY_SCHEMA_VERSION } from "../../src/memory/index.js";
 /**
  * In-memory fakes for the memory-write subsystem.
  *
- * Tests for `MemoryCandidateRecorder` and `MemoryCommitService` need
+ * Tests for `MemoryCandidateRecorder` and `MemoryCandidateProcessor` need
  * real `MemoryCandidateStore` / `MemoryStore` / `MemoryDecisionStore`
  * implementations that round-trip data the same way SQLite will. We
  * keep them in one helper file so:

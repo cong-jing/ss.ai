@@ -5,8 +5,8 @@ import {
     rankSimilarMemories,
     totalSkipped,
     type EmbeddingSignature,
-} from "../src/memory/similarity.js";
-import type { ActiveMemoryRecord, MemoryEmbedding } from "../src/memory/types.js";
+} from "../src/memory/index.js";
+import type { ActiveMemoryRecord, MemoryEmbedding } from "../src/memory/index.js";
 
 const SIG: EmbeddingSignature = {
     provider: "fake",

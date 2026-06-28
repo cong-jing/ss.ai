@@ -1,6 +1,7 @@
-import type { MemoryCandidateDraft, MemoryDecisionKind } from "./types.js";
-import type { RankedMemory } from "./similarity.js";
-import { normalizeMemoryText } from "./textNormalization.js";
+import type { MemoryCandidateDraft } from "../candidate/candidateTypes.js";
+import { normalizeMemoryText } from "../candidate/textNormalization.js";
+import type { RankedMemory } from "../ranking/rankSimilarMemories.js";
+import type { MemoryDecisionKind } from "./decisionPorts.js";
 
 /**
  * Pure decision rules.
@@ -8,9 +9,9 @@ import { normalizeMemoryText } from "./textNormalization.js";
  * Inputs: ranked similar memories + thresholds.
  * Outputs: a decision kind and an explanation.
  *
- * The commit service is responsible for wiring these into the
- * candidate / memory / decision stores. This module does no I/O so
- * thresholds can be tuned with a script in seconds.
+ * The processor wires these into the candidate / memory / decision
+ * stores. This module does no I/O so thresholds can be tuned with
+ * a script in seconds.
  */
 
 export interface MemoryDecisionPolicy {
@@ -27,9 +28,9 @@ export interface MemoryDecisionPolicy {
      */
     needsJudgeThreshold: number;
     /**
-     * Cap on how many similar memories the commit service should
-     * fetch and persist in the decision summary. Kept here (not in
-     * the service) so try-scripts can mutate it in one place.
+     * Cap on how many similar memories the processor should fetch
+     * and persist in the decision summary. Kept here (not in the
+     * service) so try-scripts can mutate it in one place.
      */
     topK: number;
     /**

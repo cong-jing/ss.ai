@@ -1,17 +1,13 @@
 /**
  * Memory write subsystem — public entrypoint.
  *
- * Re-exports all types, ports, pure algorithms, and the services
- * built on top of them. The rest of the codebase should import only
- * from `"@ss-ai/persona-flow/memory"` (via the package root barrel)
- * so we never depend on internal file layout.
+ * The implementation lives under `./memoryPipeline/**`. This file
+ * exists only as the stable import path the rest of the codebase
+ * and dependent packages target (`@ss-ai/persona-flow` re-exports
+ * everything from here through the package barrel).
+ *
+ * Internal layout under `memoryPipeline/` may move freely; consumers
+ * must never reach past this barrel.
  */
 
-export * from "./types.js";
-export * from "./ports.js";
-export * from "./textNormalization.js";
-export * from "./similarity.js";
-export * from "./decisionPolicy.js";
-export * from "./candidateRecorder.js";
-export * from "./commitService.js";
-export * from "./featureConfig.js";
+export * from "./memoryPipeline/index.js";

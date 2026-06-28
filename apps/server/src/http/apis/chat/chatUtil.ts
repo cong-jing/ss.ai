@@ -1,8 +1,5 @@
 import { DEFAULT_INTERACTION_MODE, INTERACTION_MODES, type InteractionMode } from "@ss-ai/contracts";
 import {
-    MemoryCandidateRecorder,
-    MemoryCommitService,
-    ModelClientEmbeddingProvider,
     PersonaFlowChatTurnService,
 } from "@ss-ai/persona-flow";
 import { DefaultModelClient } from "@ss-ai/persona-flow-model-client";
@@ -72,37 +69,11 @@ export async function createChatTurnService(context: HttpApiContext): Promise<Pe
         logger: context.logger,
     });
 
-    // Memory write pipeline dependencies. The recorder and commit service
-    // both reuse the same logical clock + id generator so candidate ids,
-    // memory ids, and decision rows stay consistent across the pipeline.
-    // Keeping them inline (rather than promoting to module-level
-    // singletons) makes it trivial for tests to swap deterministic
-    // versions in via separate ChatTurnService construction.
-    const memoryClock = { nowIso: () => new Date().toISOString() };
-    const memoryIds = { randomId: () => crypto.randomUUID() };
-    const embeddingProvider = new ModelClientEmbeddingProvider({
-        modelClient,
-        appStores: context.stores,
-        defaultModelAssignments: context.config.defaultModelAssignments,
-        defaultProviderApiKeys,
-        logger: context.logger,
-    });
-    const memoryRecorder = new MemoryCandidateRecorder({
-        candidateStore: context.stores.memoryCandidate,
-        clock: memoryClock,
-        ids: memoryIds,
-        logger: context.logger,
-    });
-    const memoryCommitService = new MemoryCommitService({
-        candidateStore: context.stores.memoryCandidate,
-        memoryStore: context.stores.memory,
-        decisionStore: context.stores.memoryDecision,
-        embeddingProvider,
-        clock: memoryClock,
-        ids: memoryIds,
-        logger: context.logger,
-    });
-
+    // The memory pipeline (recorder + embedding provider + processor +
+    // logging) is fully encapsulated by the chat turn service; we only
+    // need to forward the settings derived from the runtime config.
+    // Construction details live in `createMemoryPipelineService`
+    // inside `@ss-ai/persona-flow`.
     return new PersonaFlowChatTurnService({
         stores: context.stores,
         logger: context.logger,
@@ -110,10 +81,6 @@ export async function createChatTurnService(context: HttpApiContext): Promise<Pe
         defaultModelAssignments: context.config.defaultModelAssignments,
         defaultProviderApiKeys,
         modelClient,
-        memory: {
-            recorder: memoryRecorder,
-            commitService: memoryCommitService,
-            config: context.config.memory,
-        },
+        memoryPipelineSettings: context.config.memoryPipeline,
     });
 }

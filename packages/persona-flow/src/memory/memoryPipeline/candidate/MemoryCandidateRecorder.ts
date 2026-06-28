@@ -1,26 +1,24 @@
 import type {
-    MemoryCandidateDraft,
-    MemoryCandidateRecord,
-    MemoryCandidateSource,
-} from "./types.js";
-import type {
-    MemoryCandidateStore,
     MemoryClock,
     MemoryIdGenerator,
     MemoryLogger,
-} from "./ports.js";
+    MemoryCandidateSource,
+} from "../memoryPipelineTypes.js";
+import type { MemoryCandidateStore } from "./candidatePorts.js";
+import type { MemoryCandidateDraft, MemoryCandidateRecord } from "./candidateTypes.js";
 import { normalizeMemoryText } from "./textNormalization.js";
 
 /**
  * Result of one {@link MemoryCandidateRecorder.recordCandidates} call.
  *
  * `accepted` is the list of fully persisted candidate rows ready to
- * be handed to the commit service. `rejectedCount` is the number of
- * drafts dropped during pre-persistence filtering (empty text after
- * trim, etc.) so callers can surface a metric without re-walking the
- * input. `storeError` is set when the underlying store rejected the
- * whole batch — the recorder treats this as a fail-soft warning so
- * chat turns never break because the memory layer is down.
+ * be handed to the processing stage. `rejectedCount` is the number
+ * of drafts dropped during pre-persistence filtering (empty text
+ * after trim, etc.) so callers can surface a metric without
+ * re-walking the input. `storeError` is set when the underlying
+ * store rejected the whole batch — the recorder treats this as a
+ * fail-soft warning so chat turns never break because the memory
+ * layer is down.
  */
 export interface RecordMemoryCandidatesResult {
     accepted: MemoryCandidateRecord[];
@@ -33,7 +31,7 @@ export interface RecordMemoryCandidatesInput {
     candidates: MemoryCandidateDraft[];
 }
 
-interface MemoryCandidateRecorderDeps {
+export interface MemoryCandidateRecorderDeps {
     candidateStore: MemoryCandidateStore;
     clock: MemoryClock;
     ids: MemoryIdGenerator;
@@ -42,20 +40,20 @@ interface MemoryCandidateRecorderDeps {
 
 /**
  * Persists raw model-emitted memory candidates into the candidate
- * store and prepares them for the commit pipeline.
+ * store and prepares them for the processing stage.
  *
  * Design rules:
  *  - Fail-soft: a store outage degrades to "no candidates recorded",
  *    never to "chat turn failed". The chat turn service treats the
  *    memory subsystem as best-effort.
  *  - Pure-text filtering happens here (empty / whitespace-only),
- *    because the commit service should not have to revisit malformed
+ *    because the processor should not have to revisit malformed
  *    drafts. Value judgements (low-value, duplicates, similarity)
- *    belong in the commit service so the recorder stays cheap and
- *    easy to reason about.
- *  - Normalization is the recorder's responsibility so the store can
- *    treat `normalizedText` as authoritative for exact-match lookups
- *    without having to re-implement the policy.
+ *    belong in the processor so the recorder stays cheap and easy
+ *    to reason about.
+ *  - Normalization is the recorder's responsibility so the store
+ *    can treat `normalizedText` as authoritative for exact-match
+ *    lookups without having to re-implement the policy.
  */
 export class MemoryCandidateRecorder {
     private readonly deps: MemoryCandidateRecorderDeps;
@@ -73,7 +71,7 @@ export class MemoryCandidateRecorder {
         // Pre-filter: drop drafts whose `text` is empty / whitespace
         // after trim. We do NOT drop based on `normalizeMemoryText`
         // returning empty here because that's a low-value signal the
-        // commit service owns; the recorder's job is only to reject
+        // processor owns; the recorder's job is only to reject
         // structurally meaningless inputs.
         const accepted: MemoryCandidateDraft[] = [];
         const normalizedTexts: string[] = [];
@@ -111,7 +109,7 @@ export class MemoryCandidateRecorder {
         } catch (error) {
             // Fail-soft: the store failing should never bubble out of
             // the chat turn. Log loud enough for ops, return empty so
-            // the commit service simply finds nothing to do.
+            // the processor simply finds nothing to do.
             const err = error instanceof Error ? error : new Error(String(error));
             this.deps.logger?.warn("memory.recorder.store_error", {
                 message: err.message,

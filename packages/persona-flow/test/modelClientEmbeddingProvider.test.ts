@@ -10,9 +10,9 @@ import type {
 } from "../src/index.js";
 import {
     MEMORY_EMBED_PURPOSE,
-    ModelClientEmbeddingProvider,
-    ModelClientEmbeddingProviderError,
-} from "../src/memoryAdapters/modelClientEmbeddingProvider.js";
+    ModelClientMemoryEmbeddingProvider as ModelClientEmbeddingProvider,
+    ModelClientMemoryEmbeddingProviderError as ModelClientEmbeddingProviderError,
+} from "../src/memory/index.js";
 
 class FakePreferencesStore {
     constructor(private readonly data: UserPreferences | null) { }

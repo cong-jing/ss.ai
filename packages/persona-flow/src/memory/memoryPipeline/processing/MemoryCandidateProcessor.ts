@@ -1,124 +1,83 @@
 import type {
-    ActiveMemoryRecord,
     MemoryCandidateRecord,
-    MemoryDecisionKind,
-    MemoryDecisionRecord,
-    MemoryEmbedding,
-    MemorySimilaritySummaryEntry,
-} from "./types.js";
-import { MEMORY_SCHEMA_VERSION } from "./types.js";
+    MemoryCandidateStatus,
+} from "../candidate/candidateTypes.js";
+import type { MemoryCandidateStore } from "../candidate/candidatePorts.js";
+import { checkExactDuplicate } from "../duplicate/exactDuplicateStep.js";
+import type { MemoryEmbeddingStep } from "../embedding/MemoryEmbeddingStep.js";
+import { MemoryPipelineLogger } from "../logging/MemoryPipelineLogger.js";
+import type { MemoryPipelineSettings } from "../memoryPipelineSettings.js";
 import type {
-    MemoryCandidateStore,
     MemoryClock,
-    MemoryDecisionStore,
-    MemoryEmbeddingProvider,
-    MemoryIdGenerator,
     MemoryLogger,
-    MemoryStore,
-} from "./ports.js";
-import type { EmbeddingSignature, MemoryRankSkipBreakdown, RankedMemory } from "./similarity.js";
-import { rankSimilarMemories, signaturesMatch, totalSkipped } from "./similarity.js";
+} from "../memoryPipelineTypes.js";
+import { MemoryDecisionRecorder } from "../decision/MemoryDecisionRecorder.js";
+import type {
+    MemoryDecisionKind,
+    MemoryDecisionStore,
+    MemorySimilaritySummaryEntry,
+} from "../decision/decisionPorts.js";
 import {
     decideBySimilarity,
     defaultMemoryDecisionPolicy,
     isLowValueCandidate,
     type MemoryDecisionPolicy,
-} from "./decisionPolicy.js";
+} from "../decision/decisionPolicy.js";
+import { rankSimilarMemories, type RankedMemory } from "../ranking/rankSimilarMemories.js";
+import {
+    signaturesMatch,
+    totalSkipped,
+    type EmbeddingSignature,
+    type MemoryRankSkipBreakdown,
+} from "../ranking/similarity.js";
+import type {
+    ActiveMemoryRecord,
+    MemoryStore,
+} from "../stores/activeMemoryStorePort.js";
+import type {
+    MemoryCandidateProcessingOutcome,
+    ProcessMemoryCandidatesInput,
+    ProcessMemoryCandidatesResult,
+} from "./processingTypes.js";
 
 /**
- * Per-candidate outcome of {@link MemoryCommitService.commitCandidates}.
- *
- * Returned even for non-`create` decisions so callers (debug API,
- * tests) can render a uniform table of "what happened" without
- * peeking at internal stores.
+ * Default importance assigned to newly-created memories. Kept on
+ * the processor rather than the policy so future per-scope/type
+ * tuning lives in one place; today it is a single number to keep
+ * Batch 2/3 minimal.
  */
-export interface MemoryCommitOutcome {
-    candidateId: string;
-    decision: MemoryDecisionKind;
-    /** Set only when `decision === "create"`. */
-    memoryId?: string;
-    reason?: string;
-    /** Cosine similarity of the top-ranked existing memory, when computed. */
-    topSimilarity?: number;
-    /**
-     * Total number of active memories fetched from the store for
-     * this candidate's bucket (before any skip filtering). Useful
-     * as the denominator for `skipped`.
-     */
-    scannedCount?: number;
-    /**
-     * Per-reason tally of memories that were inspected but excluded
-     * from the ranking. See {@link MemoryRankSkipBreakdown} for the
-     * meaning of each field. Set whenever a similarity scan ran
-     * (i.e. not for low-value / exact-duplicate / embedding-failed
-     * branches that short-circuited before scanning).
-     */
-    skipped?: MemoryRankSkipBreakdown;
-    /** Set when the per-candidate pipeline threw; never surfaces as a thrown error. */
-    error?: Error;
-}
+const DEFAULT_IMPORTANCE = 0.5;
 
-export interface CommitMemoryCandidatesInput {
-    candidates: MemoryCandidateRecord[];
-}
-
-export interface CommitMemoryCandidatesResult {
-    outcomes: MemoryCommitOutcome[];
-}
-
-interface MemoryCommitServiceDeps {
+export interface MemoryCandidateProcessorDeps {
     candidateStore: MemoryCandidateStore;
     memoryStore: MemoryStore;
     decisionStore: MemoryDecisionStore;
-    embeddingProvider: MemoryEmbeddingProvider;
+    embeddingStep: MemoryEmbeddingStep;
+    decisionRecorder: MemoryDecisionRecorder;
     clock: MemoryClock;
-    ids: MemoryIdGenerator;
-    logger?: MemoryLogger;
+    pipelineLogger: MemoryPipelineLogger;
+    settings: MemoryPipelineSettings;
     /**
-     * Default importance assigned to newly-created memories. Kept on
-     * the service rather than the policy so future per-scope/type
-     * tuning lives in one place; today it is a single number to keep
-     * Batch 2/3 minimal.
+     * Default importance assigned to newly-created memories. Falls
+     * back to a fixed constant; never null/undefined inside the
+     * processor itself.
      */
     defaultImportance?: number;
-}
-
-export interface MemoryCommitServiceOptions {
-    /** Override the default policy (thresholds + topK + policyVersion). */
-    policy?: MemoryDecisionPolicy;
     /**
-     * Hard cap on the brute-force similarity scan. Defaults to a
-     * generous value so the recorder never silently truncates;
-     * production wiring may lower it once the dataset grows.
+     * Override the decision policy. Defaults to
+     * {@link defaultMemoryDecisionPolicy} with thresholds taken
+     * from `settings.ranking`.
      */
-    listLimit?: number;
+    policy?: MemoryDecisionPolicy;
 }
 
 /**
- * Stage names used in verbose logger output. Centralized as a const
- * so test suites can match on the string literals (and a typo in
- * the logger call surfaces as a TS error rather than a silent miss).
- */
-const STAGE = {
-    received: "memory.commit.candidate_received",
-    low_value: "memory.commit.ignore_low_value",
-    duplicate: "memory.commit.ignore_duplicate",
-    embedding_requested: "memory.commit.embedding_requested",
-    embedding_failed: "memory.commit.embedding_failed",
-    similarity_scan_finished: "memory.commit.similarity_scan_finished",
-    decision_made: "memory.commit.decision_made",
-    create_failed: "memory.commit.create_failed",
-    skipped_signature_mismatch: "memory.commit.skipped_signature_mismatch",
-} as const;
-
-const DEFAULT_LIST_LIMIT = 500;
-const DEFAULT_IMPORTANCE = 0.5;
-
-/**
- * Drives a candidate through the embedding → similarity → decision
- * pipeline and persists the outcome.
+ * Drives a candidate through:
+ *   low-value filter → exact-duplicate lookup → embedding →
+ *   active-memory scan → ranking → decision → memory create
+ *   (if needed) → decision row + candidate status update.
  *
- * Hard requirements:
+ * Hard requirements (carry-over from the old `MemoryCommitService`):
  *  - Per-candidate isolation: a thrown error in one candidate must
  *    not abort the batch. Each candidate ends in either a recorded
  *    decision or a recorded error outcome.
@@ -131,41 +90,49 @@ const DEFAULT_IMPORTANCE = 0.5;
  *    Batch 2/3 policy.
  *  - Embedding failures degrade to `embedding_failed`, never throw.
  */
-export class MemoryCommitService {
-    private readonly deps: MemoryCommitServiceDeps;
+export class MemoryCandidateProcessor {
     private readonly policy: MemoryDecisionPolicy;
     private readonly listLimit: number;
+    private readonly defaultImportance: number;
 
-    constructor(deps: MemoryCommitServiceDeps, options: MemoryCommitServiceOptions = {}) {
-        this.deps = deps;
-        this.policy = options.policy ?? defaultMemoryDecisionPolicy;
-        this.listLimit = options.listLimit ?? DEFAULT_LIST_LIMIT;
+    constructor(private readonly deps: MemoryCandidateProcessorDeps) {
+        const ranking = deps.settings.ranking;
+        this.policy = deps.policy ?? {
+            ...defaultMemoryDecisionPolicy,
+            exactDuplicateThreshold: ranking.exactDuplicateThreshold,
+            needsJudgeThreshold: ranking.needsJudgeThreshold,
+            topK: ranking.topK,
+        };
+        this.listLimit = ranking.listLimit;
+        this.defaultImportance = deps.defaultImportance ?? DEFAULT_IMPORTANCE;
     }
 
-    async commitCandidates(input: CommitMemoryCandidatesInput): Promise<CommitMemoryCandidatesResult> {
-        const outcomes: MemoryCommitOutcome[] = [];
+    async processCandidates(input: ProcessMemoryCandidatesInput): Promise<ProcessMemoryCandidatesResult> {
+        const outcomes: MemoryCandidateProcessingOutcome[] = [];
         for (const candidate of input.candidates) {
-            outcomes.push(await this.commitOne(candidate));
+            outcomes.push(await this.processOne(candidate));
         }
         return { outcomes };
     }
 
-    private async commitOne(candidate: MemoryCandidateRecord): Promise<MemoryCommitOutcome> {
-        this.deps.logger?.debug?.(STAGE.received, {
+    private async processOne(candidate: MemoryCandidateRecord): Promise<MemoryCandidateProcessingOutcome> {
+        const logger = this.deps.pipelineLogger;
+        logger.candidateProcessingStarted({
             candidateId: candidate.id,
             requestId: candidate.source.requestId,
             scope: candidate.scope,
             type: candidate.type,
+            ...(logger.includeCandidateText ? { text: candidate.text } : {}),
         });
 
         try {
-            // 1. Cheap low-value filter — avoids paying for an
-            //    embedding on text we would never accept anyway.
+            // 1. Low-value filter — avoid paying for an embedding on
+            //    text we would never accept anyway.
             const lowValue = isLowValueCandidate(candidate);
             if (lowValue.lowValue) {
-                this.deps.logger?.debug?.(STAGE.low_value, {
+                logger.lowValueRejected({
                     candidateId: candidate.id,
-                    reason: lowValue.reason,
+                    reason: lowValue.reason ?? "low_value",
                 });
                 return await this.finalize({
                     candidate,
@@ -175,22 +142,16 @@ export class MemoryCommitService {
                 });
             }
 
-            // 2. Exact normalized-text duplicate check. We trust text
-            //    equality more than embedding similarity at the
-            //    top, so this short-circuits before paying for an
+            // 2. Exact normalized-text duplicate check. Trust text
+            //    equality more than embedding similarity at the top
+            //    so we can short-circuit before paying for an
             //    embedding call.
-            const exactDuplicate = await this.deps.memoryStore.findExactActiveMemory({
-                userId: candidate.source.userId,
-                characterId: candidate.source.characterId,
-                scope: candidate.scope,
-                type: candidate.type,
-                normalizedText: candidate.normalizedText,
-            });
+            const exactDuplicate = await checkExactDuplicate(
+                candidate,
+                this.deps.memoryStore,
+                logger,
+            );
             if (exactDuplicate) {
-                this.deps.logger?.debug?.(STAGE.duplicate, {
-                    candidateId: candidate.id,
-                    memoryId: exactDuplicate.id,
-                });
                 return await this.finalize({
                     candidate,
                     decision: "ignore_duplicate",
@@ -206,30 +167,16 @@ export class MemoryCommitService {
             }
 
             // 3. Embed.
-            this.deps.logger?.debug?.(STAGE.embedding_requested, {
-                candidateId: candidate.id,
-            });
-            let embedded: MemoryEmbedding;
-            try {
-                const result = await this.deps.embeddingProvider.embed({
-                    text: candidate.text,
-                    purpose: "memory.write.candidate",
-                    userId: candidate.source.userId,
-                });
-                embedded = result.embedding;
-            } catch (error) {
-                const err = error instanceof Error ? error : new Error(String(error));
-                this.deps.logger?.warn(STAGE.embedding_failed, {
-                    candidateId: candidate.id,
-                    message: err.message,
-                });
+            const embedOutcome = await this.deps.embeddingStep.embed(candidate);
+            if (!embedOutcome.ok) {
                 return await this.finalize({
                     candidate,
                     decision: "embedding_failed",
                     candidateStatus: "embedding_failed",
-                    reason: err.message,
+                    reason: embedOutcome.error.message,
                 });
             }
+            const embedded = embedOutcome.result.embedding;
 
             await this.deps.candidateStore.saveCandidateEmbedding({
                 candidateId: candidate.id,
@@ -238,7 +185,7 @@ export class MemoryCommitService {
             });
 
             // 4. Fetch existing memories in the same logical bucket
-            //    and rank them. Signature filtering protects us from
+            //    and rank them. Signature filtering protects from
             //    comparing across embedding model changes.
             const signature: EmbeddingSignature = {
                 provider: embedded.provider,
@@ -254,23 +201,28 @@ export class MemoryCommitService {
                 status: "active",
                 limit: this.listLimit,
             });
+            logger.activeMemoriesFetched({
+                candidateId: candidate.id,
+                scannedCount: activeMemories.length,
+            });
+
             const { ranked, skipped } = this.rankWithSkipDiagnostics(
                 embedded.vector,
                 activeMemories,
                 signature,
                 candidate.id,
             );
-            this.deps.logger?.debug?.(STAGE.similarity_scan_finished, {
+            logger.similarityRanked({
                 candidateId: candidate.id,
-                scannedCount: activeMemories.length,
                 rankedCount: ranked.length,
+                topSimilarity: ranked[0]?.similarity,
                 skipped,
                 totalSkipped: totalSkipped(skipped),
             });
 
             // 5. Decide.
             const decision = decideBySimilarity(ranked, this.policy);
-            this.deps.logger?.debug?.(STAGE.decision_made, {
+            logger.decisionMade({
                 candidateId: candidate.id,
                 decision: decision.kind,
                 reason: decision.reason,
@@ -305,7 +257,7 @@ export class MemoryCommitService {
                     normalizedText: candidate.normalizedText,
                     relatedEntities: candidate.relatedEntities,
                     tags: candidate.tags,
-                    importance: this.deps.defaultImportance ?? DEFAULT_IMPORTANCE,
+                    importance: this.defaultImportance,
                     sourceCandidateId: candidate.id,
                     sourceConversationId: candidate.source.conversationId,
                     sourceUserMessageId: candidate.source.userMessageId,
@@ -316,10 +268,7 @@ export class MemoryCommitService {
                 });
             } catch (error) {
                 const err = error instanceof Error ? error : new Error(String(error));
-                this.deps.logger?.warn(STAGE.create_failed, {
-                    candidateId: candidate.id,
-                    message: err.message,
-                });
+                logger.memoryCreateFailed({ candidateId: candidate.id, error: err.message });
                 return await this.finalize({
                     candidate,
                     decision: "error",
@@ -333,6 +282,8 @@ export class MemoryCommitService {
                 });
             }
 
+            logger.memoryCreated({ candidateId: candidate.id, memoryId: newMemory.id });
+
             return await this.finalize({
                 candidate,
                 decision: "create",
@@ -345,13 +296,10 @@ export class MemoryCommitService {
                 skipped,
             });
         } catch (error) {
-            // Anything not caught above (store outage on the early
-            // findExactActiveMemory etc.) ends as an "error" outcome
-            // so the batch keeps moving.
             const err = error instanceof Error ? error : new Error(String(error));
-            this.deps.logger?.warn("memory.commit.unhandled_error", {
+            logger.candidateProcessingFailed({
                 candidateId: candidate.id,
-                message: err.message,
+                error: err.message,
             });
             // Best-effort: try to record an error decision so the
             // candidate row has a paper trail. Swallow any secondary
@@ -378,21 +326,12 @@ export class MemoryCommitService {
 
     /**
      * Two responsibilities:
-     *  - emit one `skipped_signature_mismatch` debug event per
+     *  - emit one `similaritySignatureMismatch` debug event per
      *    mismatched memory, so operators can see which specific
      *    rows were ignored (the breakdown only carries counts);
      *  - call {@link rankSimilarMemories}, which owns the canonical
      *    skip-counting logic and returns a structured breakdown
      *    with one cell per reason.
-     *
-     * Per-memory logging is restricted to signature mismatches
-     * because that's the only reason we expect to investigate
-     * individually ("why didn't this related memory rank?"). The
-     * other reasons (`noEmbedding`, `corruptDim`,
-     * `nonFiniteSimilarity`) are debugged via the aggregate counts:
-     * if any of them is non-zero in production we want to find the
-     * offending row by querying the table directly, not by reading
-     * a noisy log.
      */
     private rankWithSkipDiagnostics(
         candidateVector: number[],
@@ -400,11 +339,12 @@ export class MemoryCommitService {
         signature: EmbeddingSignature,
         candidateId: string,
     ): { ranked: RankedMemory[]; skipped: MemoryRankSkipBreakdown } {
+        const logger = this.deps.pipelineLogger;
         for (const memory of memories) {
             const embedding = memory.embedding;
             if (!embedding) continue;
             if (signaturesMatch(embedding, signature)) continue;
-            this.deps.logger?.debug?.(STAGE.skipped_signature_mismatch, {
+            logger.similaritySignatureMismatch({
                 candidateId,
                 memoryId: memory.id,
                 memorySignature: {
@@ -430,48 +370,44 @@ export class MemoryCommitService {
     }
 
     /**
-     * Persist the candidate-status transition + decision row in a
-     * single helper so all decision branches share the same shape
-     * and the same logger call site. Returns a `MemoryCommitOutcome`
-     * the caller can hand directly to the result list.
+     * Persist the candidate-status transition + decision row via
+     * {@link MemoryDecisionRecorder} and build the
+     * {@link MemoryCandidateProcessingOutcome} the caller can hand
+     * directly to the result list.
      */
     private async finalize(args: {
         candidate: MemoryCandidateRecord;
         decision: MemoryDecisionKind;
-        candidateStatus: MemoryCandidateRecord["status"];
+        candidateStatus: MemoryCandidateStatus;
         memoryId?: string;
         reason?: string;
         similarity?: MemorySimilaritySummaryEntry[];
         topSimilarity?: number;
         scannedCount?: number;
-        /**
-         * Per-reason skip breakdown from the similarity scan. Cloned
-         * into the outcome verbatim; callers should never see a
-         * partial / mutated copy. Absent for branches that didn't
-         * run a scan (low-value, exact-duplicate, embedding-failed,
-         * pre-scan errors).
-         */
         skipped?: MemoryRankSkipBreakdown;
         error?: Error;
-    }): Promise<MemoryCommitOutcome> {
-        const now = this.deps.clock.nowIso();
-        await this.deps.candidateStore.updateCandidateStatus({
-            candidateId: args.candidate.id,
-            status: args.candidateStatus,
-            reason: args.reason,
-            updatedAt: now,
-        });
-
-        const decisionRecord: MemoryDecisionRecord = await this.deps.decisionStore.appendDecision({
-            candidateId: args.candidate.id,
-            userId: args.candidate.source.userId,
-            characterId: args.candidate.source.characterId,
+    }): Promise<MemoryCandidateProcessingOutcome> {
+        const decisionRecord = await this.deps.decisionRecorder.record({
+            candidate: args.candidate,
             decision: args.decision,
+            candidateStatus: args.candidateStatus,
             memoryId: args.memoryId,
             reason: args.reason,
-            similarity: args.similarity ?? [],
+            similarity: args.similarity,
             policyVersion: this.policy.policyVersion,
-            createdAt: now,
+        });
+
+        this.deps.pipelineLogger.decisionRecorded({
+            candidateId: args.candidate.id,
+            decision: decisionRecord.decision,
+            decisionId: decisionRecord.id,
+        });
+
+        this.deps.pipelineLogger.candidateProcessingCompleted({
+            candidateId: args.candidate.id,
+            decision: decisionRecord.decision,
+            ...(args.memoryId !== undefined ? { memoryId: args.memoryId } : {}),
+            ...(args.topSimilarity !== undefined ? { topSimilarity: args.topSimilarity } : {}),
         });
 
         return {
@@ -487,5 +423,7 @@ export class MemoryCommitService {
     }
 }
 
-/** Re-exported so tests / debug API surfaces can share the same names. */
-export { MEMORY_SCHEMA_VERSION };
+// Compile-time discharge of MemoryLogger import (so the export is
+// visible to typedoc consumers without unused-import warnings even
+// when only the type is referenced via dependent files).
+export type { MemoryLogger };

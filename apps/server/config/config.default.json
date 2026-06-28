@@ -24,9 +24,23 @@
         "enabled": true,
         "filePath": ".runtime/logs/ss-ai.prompt.log"
     },
-    "memory": {
+    "memoryPipeline": {
         "enabled": true,
-        "immediateCommitEnabled": true
+        "processingMode": "inline",
+        "ranking": {
+            "listLimit": 500,
+            "topK": 10,
+            "needsJudgeThreshold": 0.80,
+            "exactDuplicateThreshold": 0.95
+        },
+        "embedding": {
+            "modelCallPurpose": "memory.embed",
+            "version": 1
+        },
+        "logging": {
+            "detailLevel": "debug",
+            "includeCandidateText": false
+        }
     },
     "auth": {
         "mode": "default-user",

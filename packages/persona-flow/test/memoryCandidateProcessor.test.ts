@@ -1,14 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-    MemoryCommitService,
-    normalizeMemoryText,
+    DEFAULT_MEMORY_PIPELINE_SETTINGS,
+    MEMORY_PIPELINE_LOG_EVENTS,
     MEMORY_SCHEMA_VERSION,
+    MemoryCandidateProcessor,
+    MemoryDecisionRecorder,
+    MemoryEmbeddingStep,
+    MemoryPipelineLogger,
+    normalizeMemoryText,
 } from "../src/memory/index.js";
 import type {
     MemoryCandidateRecord,
     MemoryCandidateSource,
     MemoryEmbedding,
+    MemoryPipelineSettings,
 } from "../src/memory/index.js";
 import {
     makeFakeEmbeddingProvider,
@@ -56,9 +62,9 @@ function makeCandidate(text: string, overrides: Partial<MemoryCandidateRecord> =
 
 /**
  * Builds a candidate and seeds it into the candidate store so the
- * commit service can update its status. In production the recorder
+ * processor can update its status. In production the recorder
  * inserts the row; in tests we skip the recorder and seed directly
- * to keep the assertions focused on the commit pipeline.
+ * to keep the assertions focused on the processing pipeline.
  */
 function seedCandidate(
     stores: InMemoryMemoryStores,
@@ -70,14 +76,17 @@ function seedCandidate(
     return record;
 }
 
-function makeService(stores: InMemoryMemoryStores, options: {
+interface ProcessorTestOptions {
     embedDim?: number;
     embedFails?: Error;
     logger?: ReturnType<typeof makeRecordingLogger>;
     embedProvider?: string;
     embedModel?: string;
     embedVersion?: number;
-} = {}) {
+    settingsOverrides?: Partial<MemoryPipelineSettings>;
+}
+
+function makeProcessor(stores: InMemoryMemoryStores, options: ProcessorTestOptions = {}) {
     const embeddingProvider = makeFakeEmbeddingProvider({
         dim: options.embedDim ?? 8,
         failWith: options.embedFails,
@@ -85,25 +94,39 @@ function makeService(stores: InMemoryMemoryStores, options: {
         model: options.embedModel,
         version: options.embedVersion,
     });
-    const service = new MemoryCommitService({
+    const settings: MemoryPipelineSettings = {
+        ...DEFAULT_MEMORY_PIPELINE_SETTINGS,
+        ...(options.settingsOverrides ?? {}),
+    };
+    const clock = makeFixedClock(NOW);
+    const ids = makeSequentialIds();
+    const pipelineLogger = new MemoryPipelineLogger(options.logger, settings);
+    const embeddingStep = new MemoryEmbeddingStep(embeddingProvider, pipelineLogger);
+    const decisionRecorder = new MemoryDecisionRecorder({
+        candidateStore: stores.candidateStore,
+        decisionStore: stores.decisionStore,
+        clock,
+    });
+    const processor = new MemoryCandidateProcessor({
         candidateStore: stores.candidateStore,
         memoryStore: stores.memoryStore,
         decisionStore: stores.decisionStore,
-        embeddingProvider,
-        clock: makeFixedClock(NOW),
-        ids: makeSequentialIds(),
-        logger: options.logger,
+        embeddingStep,
+        decisionRecorder,
+        clock,
+        pipelineLogger,
+        settings,
     });
-    return { service, embeddingProvider };
+    return { processor, embeddingProvider };
 }
 
-describe("MemoryCommitService", () => {
+describe("MemoryCandidateProcessor", () => {
     it("creates a new memory when no similar one exists", async () => {
         const stores = makeInMemoryMemoryStores();
-        const { service } = makeService(stores);
+        const { processor } = makeProcessor(stores);
         const candidate = seedCandidate(stores, "用户喜欢喝绿茶");
 
-        const { outcomes } = await service.commitCandidates({ candidates: [candidate] });
+        const { outcomes } = await processor.processCandidates({ candidates: [candidate] });
 
         assert.equal(outcomes.length, 1);
         const outcome = outcomes[0]!;
@@ -145,11 +168,11 @@ describe("MemoryCommitService", () => {
             createdAt: NOW,
             updatedAt: NOW,
         });
-        const { service, embeddingProvider } = makeService(stores);
+        const { processor, embeddingProvider } = makeProcessor(stores);
         // Duplicate by normalization (different casing/whitespace).
         const candidate = seedCandidate(stores, "  user loves coffee  ");
 
-        const { outcomes } = await service.commitCandidates({ candidates: [candidate] });
+        const { outcomes } = await processor.processCandidates({ candidates: [candidate] });
 
         assert.equal(outcomes[0]!.decision, "ignore_duplicate");
         assert.equal(embeddingProvider.calls.length, 0, "exact-dup short-circuit must skip embedding");
@@ -161,11 +184,11 @@ describe("MemoryCommitService", () => {
 
     it("returns ignore_low_value for too-short text and never calls the embedding provider", async () => {
         const stores = makeInMemoryMemoryStores();
-        const { service, embeddingProvider } = makeService(stores);
+        const { processor, embeddingProvider } = makeProcessor(stores);
         // Single non-letter/digit symbol is low value (no_letter_or_digit).
         const candidate = seedCandidate(stores, "!!");
 
-        const { outcomes } = await service.commitCandidates({ candidates: [candidate] });
+        const { outcomes } = await processor.processCandidates({ candidates: [candidate] });
 
         assert.equal(outcomes[0]!.decision, "ignore_low_value");
         assert.ok(outcomes[0]!.reason, "low-value reason must be propagated");
@@ -179,18 +202,18 @@ describe("MemoryCommitService", () => {
         // Force every existing memory to be ranked as very similar
         // by giving them the same vector the embedding provider
         // will return for the new candidate.
-        const { service, embeddingProvider } = makeService(stores, { embedDim: 8 });
-        // First, commit one candidate so a memory with a known
+        const { processor, embeddingProvider } = makeProcessor(stores, { embedDim: 8 });
+        // First, process one candidate so a memory with a known
         // embedding ends up in the store.
         const seedCand = seedCandidate(stores, "loves matcha lattes a lot");
-        await service.commitCandidates({ candidates: [seedCand] });
+        await processor.processCandidates({ candidates: [seedCand] });
         // Now feed a near-duplicate: same text means our deterministic
         // embedder returns the same vector → cosine similarity = 1,
         // which falls in [exactDuplicateThreshold, ∞) and routes to
         // needs_judge per the Batch 2/3 policy.
         const near = seedCandidate(stores, "Loves matcha lattes a lot!", { id: "cand-near" });
 
-        const { outcomes } = await service.commitCandidates({ candidates: [near] });
+        const { outcomes } = await processor.processCandidates({ candidates: [near] });
 
         assert.equal(outcomes[0]!.decision, "needs_judge");
         // embedding still ran (we need a vector to rank)
@@ -205,12 +228,12 @@ describe("MemoryCommitService", () => {
 
     it("degrades to embedding_failed when the provider throws and never bubbles the error", async () => {
         const stores = makeInMemoryMemoryStores();
-        const { service, embeddingProvider } = makeService(stores, {
+        const { processor, embeddingProvider } = makeProcessor(stores, {
             embedFails: new Error("simulated provider outage"),
         });
         const candidate = seedCandidate(stores, "a candidate we cannot embed");
 
-        const { outcomes } = await service.commitCandidates({ candidates: [candidate] });
+        const { outcomes } = await processor.processCandidates({ candidates: [candidate] });
 
         assert.equal(outcomes[0]!.decision, "embedding_failed");
         assert.equal(embeddingProvider.calls.length, 1);
@@ -285,10 +308,10 @@ describe("MemoryCommitService", () => {
             updatedAt: NOW,
         });
         const logger = makeRecordingLogger();
-        const { service } = makeService(stores, { logger });
+        const { processor } = makeProcessor(stores, { logger });
         const candidate = seedCandidate(stores, "fresh fact about a thing");
 
-        const { outcomes } = await service.commitCandidates({ candidates: [candidate] });
+        const { outcomes } = await processor.processCandidates({ candidates: [candidate] });
 
         // Both old memories were excluded, so the scan should look
         // like "no similar memories" and the candidate should be
@@ -301,8 +324,10 @@ describe("MemoryCommitService", () => {
         assert.equal(outcomes[0]!.skipped?.corruptDim, 1);
         assert.equal(outcomes[0]!.skipped?.noEmbedding, 0);
         assert.equal(outcomes[0]!.skipped?.nonFiniteSimilarity, 0);
-        const skippedLog = logger.debugEvents.find((e) => e.message === "memory.commit.skipped_signature_mismatch");
-        assert.ok(skippedLog, "logger must record skipped_signature_mismatch event for the mismatched row");
+        const skippedLog = logger.debugEvents.find(
+            (e) => e.message === MEMORY_PIPELINE_LOG_EVENTS.similaritySignatureMismatch,
+        );
+        assert.ok(skippedLog, "logger must record similarity_signature_mismatch event for the mismatched row");
     });
 
     it("isolates per-candidate failures: a poison candidate doesn't break the rest of the batch", async () => {
@@ -311,7 +336,7 @@ describe("MemoryCommitService", () => {
         // needs_judge threshold so we can assert `create` for the
         // third candidate without the bag-of-chars stub bleeding
         // shared-suffix mass between buckets.
-        const { service } = makeService(stores, { embedDim: 128 });
+        const { processor } = makeProcessor(stores, { embedDim: 128 });
         const ok1 = seedCandidate(stores, "first good fact");
         // Force a failure on the second candidate by giving it a
         // normalizedText our exact-dup lookup will throw on.
@@ -328,7 +353,7 @@ describe("MemoryCommitService", () => {
         const poison = seedCandidate(stores, "this one explodes");
         const ok2 = seedCandidate(stores, "third good fact");
 
-        const { outcomes } = await service.commitCandidates({ candidates: [ok1, poison, ok2] });
+        const { outcomes } = await processor.processCandidates({ candidates: [ok1, poison, ok2] });
 
         assert.equal(outcomes.length, 3);
         assert.equal(outcomes[0]!.decision, "create");
@@ -343,16 +368,16 @@ describe("MemoryCommitService", () => {
     it("emits at least the documented stage events when a verbose logger is wired", async () => {
         const stores = makeInMemoryMemoryStores();
         const logger = makeRecordingLogger();
-        const { service } = makeService(stores, { logger });
+        const { processor } = makeProcessor(stores, { logger });
         const candidate = seedCandidate(stores, "verbose logging fact");
 
-        await service.commitCandidates({ candidates: [candidate] });
+        await processor.processCandidates({ candidates: [candidate] });
 
         const stageMessages = new Set(logger.debugEvents.map((e) => e.message));
-        // These four are explicitly called out by the Step 4 spec.
-        assert.equal(stageMessages.has("memory.commit.candidate_received"), true);
-        assert.equal(stageMessages.has("memory.commit.embedding_requested"), true);
-        assert.equal(stageMessages.has("memory.commit.similarity_scan_finished"), true);
-        assert.equal(stageMessages.has("memory.commit.decision_made"), true);
+        // These four are explicitly called out by the pipeline spec.
+        assert.equal(stageMessages.has(MEMORY_PIPELINE_LOG_EVENTS.candidateProcessingStarted), true);
+        assert.equal(stageMessages.has(MEMORY_PIPELINE_LOG_EVENTS.embeddingRequested), true);
+        assert.equal(stageMessages.has(MEMORY_PIPELINE_LOG_EVENTS.similarityRanked), true);
+        assert.equal(stageMessages.has(MEMORY_PIPELINE_LOG_EVENTS.decisionMade), true);
     });
 });

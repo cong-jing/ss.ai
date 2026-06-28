@@ -4,9 +4,9 @@ import {
     decideBySimilarity,
     defaultMemoryDecisionPolicy,
     isLowValueCandidate,
-} from "../src/memory/decisionPolicy.js";
-import type { RankedMemory } from "../src/memory/similarity.js";
-import type { ActiveMemoryRecord } from "../src/memory/types.js";
+} from "../src/memory/index.js";
+import type { RankedMemory } from "../src/memory/index.js";
+import type { ActiveMemoryRecord } from "../src/memory/index.js";
 
 function mem(id: string): ActiveMemoryRecord {
     return {
