@@ -117,6 +117,42 @@ pnpm --dir ./.deploy-prod/server start
 
 どの workspace package でも、`dependencies`、`devDependencies`、`peerDependencies`、workspace link を含む依存宣言が変わったら、`pnpm-lock.yaml` とデプロイ依存グラフを同期させるために `pnpm install` を再実行してください。
 
+## Module Dependency Map
+
+この図は package import / build dependency の方向を示しており、HTTP request の runtime call flow ではありません。`apps/server` は composition root で、domain package、persistence adapter、model provider adapter、logging、runtime config、HTTP APIs を組み立てます。
+
+```mermaid
+flowchart LR
+    subgraph Apps
+        Web[apps/web\nVue UI]
+        Server[apps/server\nHTTP API + SSE\ncomposition root]
+    end
+
+    subgraph Packages
+        Contracts[packages/contracts\nAPI contracts + shared types]
+        Flow[packages/persona-flow\ndomain core\nprompt / chat / memory ports]
+        Sqlite[packages/persona-flow-sqlite\nSQLite store adapters]
+        ModelClient[packages/persona-flow-model-client\nLLM provider adapters]
+        Logger[packages/persona-flow-logger\nruntime logging]
+    end
+
+    Web --> Contracts
+    Server --> Contracts
+    Server --> Flow
+    Server --> Sqlite
+    Server --> ModelClient
+    Server --> Logger
+    Flow --> Contracts
+    Sqlite --> Contracts
+    Sqlite --> Flow
+    ModelClient --> Flow
+```
+
+- `packages/contracts` は最下層の shared type / API contract layer で、frontend、server、domain、adapter から参照されます。
+- `packages/persona-flow` は framework-agnostic な domain layer で、store/model/memory ports を定義し、prompt、chat turn、memory core の orchestration を担います。
+- `packages/persona-flow-sqlite` と `packages/persona-flow-model-client` は adapter layer です。domain layer が SQLite や provider SDK に依存するのではなく、adapter が domain ports に依存します。
+- `apps/server` は dependency wiring と HTTP / SSE APIs を担当します。`apps/web` は contracts と自分の UI state に留まります。
+
 ## Packages
 
 ### `packages/persona-flow`

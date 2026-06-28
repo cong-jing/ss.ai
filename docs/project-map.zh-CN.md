@@ -118,6 +118,42 @@ pnpm --dir ./.deploy-prod/server start
 
 如果任意 workspace 包的依赖声明发生变化，包括 `dependencies`、`devDependencies`、`peerDependencies` 或 workspace links，请重新执行 `pnpm install`，以保持 `pnpm-lock.yaml` 和部署依赖图同步。
 
+## 模块依赖关系图
+
+这张图表示包之间的 import / build 依赖方向，不表示一次 HTTP 请求的运行时调用顺序。`apps/server` 是 composition root：它负责把领域包、持久化适配器、模型 provider 适配器、日志、运行时配置和 HTTP API 装配到一起。
+
+```mermaid
+flowchart LR
+    subgraph Apps
+        Web[apps/web\nVue UI]
+        Server[apps/server\nHTTP API + SSE\ncomposition root]
+    end
+
+    subgraph Packages
+        Contracts[packages/contracts\nAPI contracts + shared types]
+        Flow[packages/persona-flow\ndomain core\nprompt / chat / memory ports]
+        Sqlite[packages/persona-flow-sqlite\nSQLite store adapters]
+        ModelClient[packages/persona-flow-model-client\nLLM provider adapters]
+        Logger[packages/persona-flow-logger\nruntime logging]
+    end
+
+    Web --> Contracts
+    Server --> Contracts
+    Server --> Flow
+    Server --> Sqlite
+    Server --> ModelClient
+    Server --> Logger
+    Flow --> Contracts
+    Sqlite --> Contracts
+    Sqlite --> Flow
+    ModelClient --> Flow
+```
+
+- `packages/contracts` 是最低层共享类型 / API 契约层，被前端、服务端、领域层和部分适配层共同引用。
+- `packages/persona-flow` 是尽量不绑定框架的领域层，定义 store/model/memory ports，并负责 prompt、chat turn 和 memory core 的编排。
+- `packages/persona-flow-sqlite` 和 `packages/persona-flow-model-client` 是适配层：它们依赖领域层定义的端口，而不是让领域层反向依赖 SQLite 或 provider SDK。
+- `apps/server` 负责依赖装配并暴露 HTTP / SSE API；`apps/web` 只依赖 contracts 和自己的 UI 状态。
+
 ## Packages
 
 ### `packages/persona-flow`

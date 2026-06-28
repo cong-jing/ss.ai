@@ -118,6 +118,42 @@ If you need to override the runtime file root, set `RUNTIME_HOME`.
 
 If dependency declarations change in any workspace package (`dependencies`, `devDependencies`, `peerDependencies`, or workspace links), run `pnpm install` again so `pnpm-lock.yaml` and the deploy dependency graph stay in sync.
 
+## Module Dependency Map
+
+This diagram shows package import / build dependencies, not the runtime request flow. `apps/server` is the composition root: it wires the domain package to persistence, provider adapters, logging, runtime config, and HTTP APIs.
+
+```mermaid
+flowchart LR
+    subgraph Apps
+        Web[apps/web\nVue UI]
+        Server[apps/server\nHTTP API + SSE\ncomposition root]
+    end
+
+    subgraph Packages
+        Contracts[packages/contracts\nAPI contracts + shared types]
+        Flow[packages/persona-flow\ndomain core\nprompt / chat / memory ports]
+        Sqlite[packages/persona-flow-sqlite\nSQLite store adapters]
+        ModelClient[packages/persona-flow-model-client\nLLM provider adapters]
+        Logger[packages/persona-flow-logger\nruntime logging]
+    end
+
+    Web --> Contracts
+    Server --> Contracts
+    Server --> Flow
+    Server --> Sqlite
+    Server --> ModelClient
+    Server --> Logger
+    Flow --> Contracts
+    Sqlite --> Contracts
+    Sqlite --> Flow
+    ModelClient --> Flow
+```
+
+- `packages/contracts` is the lowest shared type/API layer and is imported by both app surfaces and domain/storage code.
+- `packages/persona-flow` is the framework-agnostic domain layer; it defines store/model/memory ports and owns prompt/chat orchestration.
+- `packages/persona-flow-sqlite` and `packages/persona-flow-model-client` are adapters. They depend on domain ports instead of the domain depending on SQLite or provider SDKs.
+- `apps/server` performs dependency wiring and exposes HTTP/SSE APIs. `apps/web` stays on contracts plus its own UI state.
+
 ## Packages
 
 ### `packages/persona-flow`
