@@ -6,7 +6,7 @@ import {
     totalSkipped,
     type EmbeddingSignature,
 } from "../src/memory/index.js";
-import type { ActiveMemoryRecord, MemoryEmbedding } from "../src/memory/index.js";
+import type { MemoryEmbedding, MemoryRetainedRecord } from "../src/memory/index.js";
 
 const SIG: EmbeddingSignature = {
     provider: "fake",
@@ -27,7 +27,7 @@ function embedding(vector: number[], overrides: Partial<MemoryEmbedding> = {}): 
     };
 }
 
-function memory(id: string, text: string, vector?: number[], embeddingOverrides: Partial<MemoryEmbedding> = {}): ActiveMemoryRecord {
+function memory(id: string, text: string, vector?: number[], embeddingOverrides: Partial<MemoryEmbedding> = {}): MemoryRetainedRecord {
     return {
         id,
         userId: "u1",

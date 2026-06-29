@@ -57,7 +57,11 @@ export class MemoryEmbeddingStep {
             const err = error instanceof Error ? error : new Error(String(error));
             this.logger.embeddingFailed({
                 candidateId: candidate.id,
-                error: err.message,
+                userId: candidate.source.userId,
+                characterId: candidate.source.characterId,
+                scope: candidate.scope,
+                type: candidate.type,
+                reason: err.message,
             });
             return { ok: false, error: err };
         }

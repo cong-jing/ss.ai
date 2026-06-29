@@ -1,28 +1,29 @@
 /**
- * SQLite memory store integration tests.
+ * SQLite memory store integration tests (Batch 3.5).
  *
- * Covers the three concrete stores added in Step 5:
- *   - SQLiteMemoryCandidateStore
- *   - SQLiteMemoryStore
- *   - SQLiteMemoryDecisionStore
+ * Covers the three concrete stores after the staging refactor:
+ *   - SQLiteMemoryCandidateStore      (intake + listPendingCandidates + status updates)
+ *   - SQLiteMemoryStagingStore        (find/create/link/incrementOccurrence/list)
+ *   - SQLiteMemoryRetainedStore       (read-only list; table empty in 3.5)
  *
  * The goal is to lock down the storage contract (schema mapping,
- * JSON columns, character-bound isolation, embedding round-trip,
- * graceful handling of corrupt JSON). The commit pipeline already
- * has its own tests against the in-memory fakes; here we only check
- * that the SQLite adapters honour the ports the same way.
+ * JSON columns, embedding round-trip, transactional create, UNIQUE
+ * constraint on candidate_id, graceful handling of corrupt JSON).
+ * The staging processor and pipeline tests already cover behavioural
+ * orchestration against in-memory fakes — here we only check that
+ * the SQLite adapters honour the ports the same way.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+    createSqliteStores,
     openDatabase,
     SQLiteMemoryCandidateStore,
-    SQLiteMemoryStore,
-    SQLiteMemoryDecisionStore,
-    createSqliteStores,
+    SQLiteMemoryRetainedStore,
+    SQLiteMemoryStagingStore,
 } from "../src/index.js";
-import { memoryCandidates, memories } from "../src/db/schema.js";
+import { memoryCandidates, memoryStaging, memoryStagingSources } from "../src/db/schema.js";
 import { eq } from "drizzle-orm";
 import type {
     MemoryCandidateSource,
@@ -30,7 +31,6 @@ import type {
     MemoryEmbedding,
     MemoryIdGenerator,
     MemoryLogger,
-    MemorySimilaritySummaryEntry,
 } from "@ss-ai/persona-flow";
 
 // ---------- helpers ----------
@@ -48,12 +48,14 @@ function makeIds(prefix = "id"): MemoryIdGenerator {
     return { randomId: () => { n += 1; return `${prefix}-${n}`; } };
 }
 
-function makeRecordingLogger(): MemoryLogger & {
+interface RecordingLogger extends MemoryLogger {
     debugCalls: Array<{ event: string; payload?: unknown }>;
     infoCalls: Array<{ event: string; payload?: unknown }>;
     warnCalls: Array<{ event: string; payload?: unknown }>;
     errorCalls: Array<{ event: string; payload?: unknown }>;
-} {
+}
+
+function makeRecordingLogger(): RecordingLogger {
     const debugCalls: Array<{ event: string; payload?: unknown }> = [];
     const infoCalls: Array<{ event: string; payload?: unknown }> = [];
     const warnCalls: Array<{ event: string; payload?: unknown }> = [];
@@ -107,42 +109,45 @@ function freshStores() {
         ids,
         logger,
         candidateStore: new SQLiteMemoryCandidateStore({ db, clock, ids, logger }),
-        memoryStore: new SQLiteMemoryStore({ db, ids, logger }),
-        decisionStore: new SQLiteMemoryDecisionStore({ db, ids, logger }),
+        stagingStore: new SQLiteMemoryStagingStore({ db, ids, logger }),
+        retainedStore: new SQLiteMemoryRetainedStore({ db, logger }),
     };
 }
 
-// ---------- candidate store ----------
+// ============================================================================
+// candidate store
+// ============================================================================
 
 describe("SQLiteMemoryCandidateStore — appendCandidates", () => {
     it("inserts multiple rows with monotonically increasing seq inside one assistant turn", async () => {
         const { candidateStore } = freshStores();
         const source = makeSource();
-        const records = await candidateStore.appendCandidates({
+
+        const written = await candidateStore.appendCandidates({
             source,
             candidates: [
-                { scope: "user", type: "fact", text: "alpha" },
-                { scope: "user", type: "fact", text: "beta" },
-                { scope: "user", type: "preference", text: "gamma" },
+                { scope: "user", type: "fact", text: "first" },
+                { scope: "user", type: "fact", text: "second" },
+                { scope: "user", type: "fact", text: "third" },
             ],
-            normalizedTexts: ["alpha", "beta", "gamma"],
         });
-        assert.equal(records.length, 3);
-        assert.deepEqual(records.map((r) => r.seq), [0, 1, 2]);
-        for (const r of records) {
-            assert.equal(r.status, "pending");
-            assert.equal(r.schemaVersion, 1);
-            assert.equal(r.source.assistantMessageId, "amsg-1");
+
+        assert.equal(written.length, 3);
+        assert.equal(written[0]!.seq, 0);
+        assert.equal(written[1]!.seq, 1);
+        assert.equal(written[2]!.seq, 2);
+        for (const row of written) {
+            assert.equal(row.status, "pending");
+            assert.equal(row.source.assistantMessageId, source.assistantMessageId);
         }
     });
 
-    it("continues seq across separate appendCandidates calls in the same assistant turn", async () => {
+    it("continues seq across subsequent appends in the same assistant turn", async () => {
         const { candidateStore } = freshStores();
         const source = makeSource();
         await candidateStore.appendCandidates({
             source,
             candidates: [{ scope: "user", type: "fact", text: "first" }],
-            normalizedTexts: ["first"],
         });
         const more = await candidateStore.appendCandidates({
             source,
@@ -150,534 +155,301 @@ describe("SQLiteMemoryCandidateStore — appendCandidates", () => {
                 { scope: "user", type: "fact", text: "second" },
                 { scope: "user", type: "fact", text: "third" },
             ],
-            normalizedTexts: ["second", "third"],
         });
-        assert.deepEqual(more.map((r) => r.seq), [1, 2]);
+        assert.equal(more[0]!.seq, 1);
+        assert.equal(more[1]!.seq, 2);
     });
 
-    it("rejects mismatched candidates / normalizedTexts length", async () => {
+    it("isolates seq between different (conversation, assistantMessageId) pairs", async () => {
         const { candidateStore } = freshStores();
-        await assert.rejects(
-            () => candidateStore.appendCandidates({
-                source: makeSource(),
-                candidates: [
-                    { scope: "user", type: "fact", text: "x" },
-                    { scope: "user", type: "fact", text: "y" },
-                ],
-                normalizedTexts: ["only-one"],
-            }),
-            /normalizedTexts\.length/,
-        );
+        await candidateStore.appendCandidates({
+            source: makeSource({ assistantMessageId: "amsg-A" }),
+            candidates: [{ scope: "user", type: "fact", text: "a" }],
+        });
+        const second = await candidateStore.appendCandidates({
+            source: makeSource({ assistantMessageId: "amsg-B" }),
+            candidates: [{ scope: "user", type: "fact", text: "b" }],
+        });
+        assert.equal(second[0]!.seq, 0);
+    });
+
+    it("persists candidateReason in its own column (Batch 3.5 schema)", async () => {
+        const { candidateStore, db } = freshStores();
+        const [written] = await candidateStore.appendCandidates({
+            source: makeSource(),
+            candidates: [{
+                scope: "user",
+                type: "fact",
+                text: "User likes ramen.",
+                reason: "user_explicit_statement",
+            }],
+        });
+        assert.ok(written);
+        assert.equal(written.candidateReason, "user_explicit_statement");
+
+        const row = (await db.select().from(memoryCandidates).where(eq(memoryCandidates.id, written.id)))[0]!;
+        assert.equal(row.candidateReason, "user_explicit_statement");
+        // status_reason starts as NULL until the processor sets it.
+        assert.equal(row.statusReason, null);
+    });
+
+    it("round-trips relatedEntities and tags through their JSON columns", async () => {
+        const { candidateStore } = freshStores();
+        const [written] = await candidateStore.appendCandidates({
+            source: makeSource(),
+            candidates: [{
+                scope: "user",
+                type: "fact",
+                text: "user mentioned dog Alfa",
+                relatedEntities: ["Alfa", "user"],
+                tags: ["pet", "name"],
+            }],
+        });
+        assert.deepEqual(written!.relatedEntities, ["Alfa", "user"]);
+        assert.deepEqual(written!.tags, ["pet", "name"]);
+
+        const listed = await candidateStore.listCandidates({
+            userId: "user-A",
+            characterId: "char-A",
+            assistantMessageId: "amsg-1",
+        });
+        assert.equal(listed.length, 1);
+        assert.deepEqual(listed[0]!.relatedEntities, ["Alfa", "user"]);
+        assert.deepEqual(listed[0]!.tags, ["pet", "name"]);
+    });
+
+    it("returns [] for appendCandidates with no candidates", async () => {
+        const { candidateStore } = freshStores();
+        const out = await candidateStore.appendCandidates({
+            source: makeSource(),
+            candidates: [],
+        });
+        assert.deepEqual(out, []);
     });
 });
 
-describe("SQLiteMemoryCandidateStore — listCandidates", () => {
-    it("filters by conversationId, assistantMessageId, and status (single or array)", async () => {
-        const { candidateStore } = freshStores();
-        const sourceA = makeSource({ conversationId: "conv-1", assistantMessageId: "amsg-1" });
-        const sourceB = makeSource({ conversationId: "conv-1", assistantMessageId: "amsg-2" });
-        const sourceC = makeSource({ conversationId: "conv-2", assistantMessageId: "amsg-3" });
+describe("SQLiteMemoryCandidateStore — read paths", () => {
+    it("listPendingCandidates filters by (userId, characterId, status='pending') ordered by createdAt then seq", async () => {
+        const { candidateStore, clock } = freshStores();
+
+        // Two pending rows in conv-1.
         await candidateStore.appendCandidates({
-            source: sourceA,
+            source: makeSource({ assistantMessageId: "amsg-1" }),
             candidates: [
-                { scope: "user", type: "fact", text: "a1" },
-                { scope: "user", type: "fact", text: "a2" },
+                { scope: "user", type: "fact", text: "p1" },
+                { scope: "user", type: "fact", text: "p2" },
             ],
-            normalizedTexts: ["a1", "a2"],
         });
+        clock.advance(1000);
+        // One more pending row in a later turn so createdAt differs.
         await candidateStore.appendCandidates({
-            source: sourceB,
-            candidates: [{ scope: "user", type: "fact", text: "b1" }],
-            normalizedTexts: ["b1"],
+            source: makeSource({ assistantMessageId: "amsg-2" }),
+            candidates: [{ scope: "user", type: "fact", text: "p3" }],
         });
+        // A different character — must be excluded.
         await candidateStore.appendCandidates({
-            source: sourceC,
-            candidates: [{ scope: "user", type: "fact", text: "c1" }],
-            normalizedTexts: ["c1"],
+            source: makeSource({ characterId: "char-B", assistantMessageId: "amsg-X" }),
+            candidates: [{ scope: "user", type: "fact", text: "other-char" }],
+        });
+        // A different user — must be excluded.
+        await candidateStore.appendCandidates({
+            source: makeSource({ userId: "user-B", assistantMessageId: "amsg-Y" }),
+            candidates: [{ scope: "user", type: "fact", text: "other-user" }],
         });
 
-        const byConv = await candidateStore.listCandidates({ userId: "user-A", conversationId: "conv-1" });
-        assert.equal(byConv.length, 3);
-
-        const byTurn = await candidateStore.listCandidates({ userId: "user-A", assistantMessageId: "amsg-1" });
-        assert.deepEqual(byTurn.map((r) => r.text), ["a1", "a2"]);
-        assert.deepEqual(byTurn.map((r) => r.seq), [0, 1]);
-
-        const byStatusSingle = await candidateStore.listCandidates({ userId: "user-A", status: "pending" });
-        assert.equal(byStatusSingle.length, 4);
-
-        const byStatusArray = await candidateStore.listCandidates({
+        const pending = await candidateStore.listPendingCandidates({
             userId: "user-A",
-            status: ["pending", "committed"],
+            characterId: "char-A",
+            limit: 50,
         });
-        assert.equal(byStatusArray.length, 4);
+        assert.equal(pending.length, 3);
+        assert.deepEqual(pending.map((r) => r.text), ["p1", "p2", "p3"]);
     });
 
-    it("honours the limit option", async () => {
+    it("listPendingCandidates respects the requested limit", async () => {
         const { candidateStore } = freshStores();
-        const source = makeSource();
         await candidateStore.appendCandidates({
-            source,
+            source: makeSource(),
             candidates: [
-                { scope: "user", type: "fact", text: "1" },
-                { scope: "user", type: "fact", text: "2" },
-                { scope: "user", type: "fact", text: "3" },
+                { scope: "user", type: "fact", text: "p1" },
+                { scope: "user", type: "fact", text: "p2" },
+                { scope: "user", type: "fact", text: "p3" },
             ],
-            normalizedTexts: ["1", "2", "3"],
         });
-        const got = await candidateStore.listCandidates({
+        const limited = await candidateStore.listPendingCandidates({
             userId: "user-A",
-            assistantMessageId: "amsg-1",
+            characterId: "char-A",
             limit: 2,
         });
-        assert.equal(got.length, 2);
+        assert.equal(limited.length, 2);
     });
-});
 
-describe("SQLiteMemoryCandidateStore — updateCandidateStatus / saveCandidateEmbedding", () => {
-    it("updates status and reason", async () => {
-        const { candidateStore } = freshStores();
-        const [rec] = await candidateStore.appendCandidates({
+    it("excludes rows whose status was advanced away from pending", async () => {
+        const { candidateStore, clock } = freshStores();
+        const written = await candidateStore.appendCandidates({
             source: makeSource(),
-            candidates: [{ scope: "user", type: "fact", text: "hi" }],
-            normalizedTexts: ["hi"],
-        });
-        await candidateStore.updateCandidateStatus({
-            candidateId: rec!.id,
-            status: "commit_failed",
-            reason: "policy:exceeds-importance-cap",
-            updatedAt: "2026-02-02T00:00:00.000Z",
-        });
-        const got = await candidateStore.listCandidates({ userId: "user-A", assistantMessageId: "amsg-1" });
-        assert.equal(got[0]!.status, "commit_failed");
-        assert.equal(got[0]!.reason, "policy:exceeds-importance-cap");
-        assert.equal(got[0]!.updatedAt, "2026-02-02T00:00:00.000Z");
-    });
-
-    it("saveCandidateEmbedding writes the embedding and flips status to embedded", async () => {
-        const { candidateStore } = freshStores();
-        const [rec] = await candidateStore.appendCandidates({
-            source: makeSource(),
-            candidates: [{ scope: "user", type: "fact", text: "hi" }],
-            normalizedTexts: ["hi"],
-        });
-        const embedding = makeEmbedding([0.1, 0.2, 0.3, 0.4]);
-        await candidateStore.saveCandidateEmbedding({
-            candidateId: rec!.id,
-            embedding,
-            updatedAt: "2026-02-02T00:00:00.000Z",
-        });
-        const got = await candidateStore.listCandidates({ userId: "user-A", assistantMessageId: "amsg-1" });
-        assert.equal(got[0]!.status, "embedded");
-        assert.ok(got[0]!.embedding, "embedding should round-trip");
-        assert.deepEqual(got[0]!.embedding!.vector, [0.1, 0.2, 0.3, 0.4]);
-        assert.equal(got[0]!.embedding!.provider, "mistral");
-        assert.equal(got[0]!.embedding!.dim, 4);
-    });
-});
-
-// ---------- memory store ----------
-
-describe("SQLiteMemoryStore — createMemory + listActiveMemories", () => {
-    it("filters by user/character/scope/type/status, scoped to one character world", async () => {
-        const { memoryStore } = freshStores();
-        const baseInput = {
-            userId: "user-A",
-            normalizedText: "x",
-            relatedEntities: [],
-            tags: [],
-            importance: 0.5,
-            createdAt: "2026-02-01T00:00:00.000Z",
-            updatedAt: "2026-02-01T00:00:00.000Z",
-        };
-        await memoryStore.createMemory({
-            ...baseInput,
-            characterId: "char-A",
-            scope: "character",
-            type: "fact",
-            text: "ch-A fact",
-            normalizedText: "ch-A fact",
-        });
-        await memoryStore.createMemory({
-            ...baseInput,
-            characterId: "char-B",
-            scope: "character",
-            type: "fact",
-            text: "ch-B fact",
-            normalizedText: "ch-B fact",
-        });
-        // `scope: "user"` is still bound to a character world: it
-        // classifies a fact about the user *inside* that character
-        // world, it does not let memories cross characters.
-        await memoryStore.createMemory({
-            ...baseInput,
-            characterId: "char-A",
-            scope: "user",
-            type: "preference",
-            text: "user pref under char-A",
-            normalizedText: "user pref under char-A",
-        });
-        // `scope: "world"` is also character-bound: it represents
-        // worldbuilding facts inside one character world.
-        await memoryStore.createMemory({
-            ...baseInput,
-            characterId: "char-B",
-            scope: "world",
-            type: "fact",
-            text: "world fact under char-B",
-            normalizedText: "world fact under char-B",
-        });
-
-        const onlyCharA = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-A" });
-        assert.deepEqual(
-            onlyCharA.map((m) => m.text).sort(),
-            ["ch-A fact", "user pref under char-A"].sort(),
-        );
-        for (const m of onlyCharA) {
-            assert.equal(m.characterId, "char-A", "memory must always carry the character it belongs to");
-        }
-
-        const onlyCharB = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-B" });
-        assert.deepEqual(
-            onlyCharB.map((m) => m.text).sort(),
-            ["ch-B fact", "world fact under char-B"].sort(),
-        );
-
-        // Filtering by scope/type still applies inside the character bucket.
-        const userScope = await memoryStore.listActiveMemories({
-            userId: "user-A",
-            characterId: "char-A",
-            scope: "user",
-            type: "preference",
-            status: "active",
-        });
-        assert.equal(userScope.length, 1);
-        assert.equal(userScope[0]!.text, "user pref under char-A");
-
-        const scopedArrays = await memoryStore.listActiveMemories({
-            userId: "user-A",
-            characterId: "char-A",
-            scope: ["character", "user"],
-            type: ["fact", "preference"],
-            status: ["active"],
-        });
-        assert.equal(scopedArrays.length, 2);
-    });
-
-    it("same user + same scope/type + same normalizedText but different character live as separate memories", async () => {
-        const { memoryStore } = freshStores();
-        const base = {
-            userId: "user-A",
-            scope: "user" as const,
-            type: "preference" as const,
-            text: "User likes coffee",
-            normalizedText: "user likes coffee",
-            relatedEntities: [],
-            tags: [],
-            importance: 0.5,
-            createdAt: "2026-02-01T00:00:00.000Z",
-            updatedAt: "2026-02-01T00:00:00.000Z",
-        };
-        await memoryStore.createMemory({ ...base, characterId: "char-A" });
-        await memoryStore.createMemory({ ...base, characterId: "char-B" });
-
-        const onA = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-A" });
-        assert.equal(onA.length, 1);
-        assert.equal(onA[0]!.characterId, "char-A");
-
-        const onB = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-B" });
-        assert.equal(onB.length, 1);
-        assert.equal(onB[0]!.characterId, "char-B");
-    });
-
-    it("orders by updatedAt DESC, createdAt DESC, id ASC so `limit` truncates the oldest rows", async () => {
-        const { memoryStore } = freshStores();
-        const base = {
-            userId: "user-A",
-            characterId: "char-A",
-            scope: "character" as const,
-            type: "fact" as const,
-            relatedEntities: [],
-            tags: [],
-            importance: 0.5,
-        };
-        // Insert in non-monotonic order to prove the order does not
-        // come from row insertion. updatedAt is the primary sort key:
-        // we expect [m-new, m-mid, m-old] regardless of insertion order.
-        await memoryStore.createMemory({
-            ...base,
-            text: "mid",
-            normalizedText: "mid",
-            createdAt: "2026-01-02T00:00:00.000Z",
-            updatedAt: "2026-01-02T00:00:00.000Z",
-        });
-        await memoryStore.createMemory({
-            ...base,
-            text: "old",
-            normalizedText: "old",
-            createdAt: "2026-01-01T00:00:00.000Z",
-            updatedAt: "2026-01-01T00:00:00.000Z",
-        });
-        await memoryStore.createMemory({
-            ...base,
-            text: "new",
-            normalizedText: "new",
-            createdAt: "2026-01-03T00:00:00.000Z",
-            updatedAt: "2026-01-03T00:00:00.000Z",
-        });
-
-        const all = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-A" });
-        assert.deepEqual(all.map((m) => m.text), ["new", "mid", "old"]);
-
-        // With limit smaller than the bucket, the newest survive and
-        // the oldest gets dropped — this is what the commit service
-        // relies on to keep similarity scans reproducible.
-        const capped = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-A", limit: 2 });
-        assert.deepEqual(capped.map((m) => m.text), ["new", "mid"]);
-    });
-
-    it("uses id ASC as a tiebreaker when updatedAt and createdAt are identical", async () => {
-        const { db } = openDatabase(":memory:");
-        const ids = makeIds("tie");
-        const memoryStore = new SQLiteMemoryStore({ db, ids });
-        const sameTs = "2026-04-01T00:00:00.000Z";
-        const base = {
-            userId: "user-A",
-            characterId: "char-A",
-            scope: "character" as const,
-            type: "fact" as const,
-            relatedEntities: [],
-            tags: [],
-            importance: 0.5,
-            createdAt: sameTs,
-            updatedAt: sameTs,
-        };
-        // Inserting in reverse-id order: ids will be tie-1, tie-2, tie-3
-        // because the id generator advances on each createMemory; we
-        // want the read order to come back in id-ASC order regardless.
-        await memoryStore.createMemory({ ...base, text: "first", normalizedText: "first" });
-        await memoryStore.createMemory({ ...base, text: "second", normalizedText: "second" });
-        await memoryStore.createMemory({ ...base, text: "third", normalizedText: "third" });
-
-        const all = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-A" });
-        // id-ASC ⇒ insertion order ⇒ ["first", "second", "third"]
-        assert.deepEqual(all.map((m) => m.text), ["first", "second", "third"]);
-    });
-});
-
-describe("SQLiteMemoryStore — findExactActiveMemory", () => {
-    it("matches normalized text inside one character bucket and never crosses characters", async () => {
-        const { memoryStore } = freshStores();
-        await memoryStore.createMemory({
-            userId: "user-A",
-            characterId: "char-A",
-            scope: "character",
-            type: "fact",
-            text: "Likes apples",
-            normalizedText: "likes apples",
-            relatedEntities: [],
-            tags: [],
-            importance: 0.5,
-            createdAt: "2026-02-01T00:00:00.000Z",
-            updatedAt: "2026-02-01T00:00:00.000Z",
-        });
-        await memoryStore.createMemory({
-            userId: "user-A",
-            characterId: "char-A",
-            scope: "user",
-            type: "preference",
-            text: "Likes apples",
-            normalizedText: "likes apples",
-            relatedEntities: [],
-            tags: [],
-            importance: 0.5,
-            createdAt: "2026-02-01T00:00:00.000Z",
-            updatedAt: "2026-02-01T00:00:00.000Z",
-        });
-
-        const hitChar = await memoryStore.findExactActiveMemory({
-            userId: "user-A",
-            characterId: "char-A",
-            scope: "character",
-            type: "fact",
-            normalizedText: "likes apples",
-        });
-        assert.ok(hitChar);
-        assert.equal(hitChar!.scope, "character");
-        assert.equal(hitChar!.characterId, "char-A");
-
-        const hitUser = await memoryStore.findExactActiveMemory({
-            userId: "user-A",
-            characterId: "char-A",
-            scope: "user",
-            type: "preference",
-            normalizedText: "likes apples",
-        });
-        assert.ok(hitUser);
-        assert.equal(hitUser!.scope, "user");
-        assert.equal(hitUser!.characterId, "char-A");
-
-        // Same user / same scope / same normalizedText, but a
-        // different character → must miss. char-A's memories never
-        // leak into char-B's bucket.
-        const missOtherCharacter = await memoryStore.findExactActiveMemory({
-            userId: "user-A",
-            characterId: "char-B",
-            scope: "user",
-            type: "preference",
-            normalizedText: "likes apples",
-        });
-        assert.equal(missOtherCharacter, undefined);
-
-        // Same normalized text but a different scope/type should miss.
-        const missScope = await memoryStore.findExactActiveMemory({
-            userId: "user-A",
-            characterId: "char-A",
-            scope: "world",
-            type: "fact",
-            normalizedText: "likes apples",
-        });
-        assert.equal(missScope, undefined);
-    });
-});
-
-describe("SQLiteMemoryStore — saveMemoryEmbedding", () => {
-    it("round-trips an embedding through the JSON column", async () => {
-        const { memoryStore } = freshStores();
-        const created = await memoryStore.createMemory({
-            userId: "user-A",
-            characterId: "char-A",
-            scope: "user",
-            type: "fact",
-            text: "x",
-            normalizedText: "x",
-            relatedEntities: [],
-            tags: [],
-            importance: 0.5,
-            createdAt: "2026-02-01T00:00:00.000Z",
-            updatedAt: "2026-02-01T00:00:00.000Z",
-        });
-        const embedding = makeEmbedding([0.5, 0.5]);
-        await memoryStore.saveMemoryEmbedding({
-            memoryId: created.id,
-            embedding,
-            updatedAt: "2026-02-03T00:00:00.000Z",
-        });
-        const got = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-A" });
-        assert.equal(got.length, 1);
-        assert.deepEqual(got[0]!.embedding?.vector, [0.5, 0.5]);
-        assert.equal(got[0]!.updatedAt, "2026-02-03T00:00:00.000Z");
-    });
-});
-
-// ---------- decision store ----------
-
-describe("SQLiteMemoryDecisionStore", () => {
-    it("persists similarity entries as JSON and round-trips them on read", async () => {
-        const { decisionStore } = freshStores();
-        const created = await decisionStore.appendDecision({
-            candidateId: "cand-1",
-            userId: "user-A",
-            characterId: "char-A",
-            decision: "create",
-            memoryId: "mem-1",
-            similarity: [
-                { memoryId: "mem-old", similarity: 0.42, text: "old text" },
-                { memoryId: "mem-other", similarity: 0.18, text: "other text" },
+            candidates: [
+                { scope: "user", type: "fact", text: "stays pending" },
+                { scope: "user", type: "fact", text: "gets processed" },
             ],
-            policyVersion: 1,
-            createdAt: "2026-02-04T00:00:00.000Z",
         });
-        assert.equal(created.id.length > 0, true);
-        const got = await decisionStore.listDecisions({ userId: "user-A" });
-        assert.equal(got.length, 1);
-        assert.equal(got[0]!.decision, "create");
-        assert.equal(got[0]!.memoryId, "mem-1");
-        assert.equal(got[0]!.similarity.length, 2);
-        assert.equal(got[0]!.similarity[0]!.memoryId, "mem-old");
-        assert.equal(got[0]!.similarity[0]!.similarity, 0.42);
-    });
+        clock.advance(500);
+        await candidateStore.updateCandidateStatus({
+            candidateId: written[1]!.id,
+            status: "processed",
+            statusReason: "staging_created",
+            updatedAt: clock.nowIso(),
+        });
 
-    it("filters by candidateId and by decision kind (single or array)", async () => {
-        const { decisionStore } = freshStores();
-        // `similarity: []` must stay mutable for `AppendMemoryDecisionInput`;
-        // do not freeze with `as const`.
-        const base = {
+        const pending = await candidateStore.listPendingCandidates({
             userId: "user-A",
             characterId: "char-A",
-            policyVersion: 1,
-            similarity: [] as MemorySimilaritySummaryEntry[],
-            createdAt: "2026-02-04T00:00:00.000Z",
-        };
-        await decisionStore.appendDecision({ ...base, candidateId: "c1", decision: "create", memoryId: "m1" });
-        await decisionStore.appendDecision({ ...base, candidateId: "c2", decision: "ignore_duplicate" });
-        await decisionStore.appendDecision({ ...base, candidateId: "c3", decision: "ignore_low_value" });
-
-        const onlyC1 = await decisionStore.listDecisions({ userId: "user-A", candidateId: "c1" });
-        assert.equal(onlyC1.length, 1);
-
-        const onlyCreate = await decisionStore.listDecisions({ userId: "user-A", decision: "create" });
-        assert.equal(onlyCreate.length, 1);
-
-        const ignored = await decisionStore.listDecisions({
-            userId: "user-A",
-            decision: ["ignore_duplicate", "ignore_low_value"],
+            limit: 10,
         });
-        assert.equal(ignored.length, 2);
-    });
-
-    it("filters by characterId so the same user's other character worlds stay isolated", async () => {
-        const { decisionStore } = freshStores();
-        // `similarity: []` must stay mutable for `AppendMemoryDecisionInput`;
-        // do not freeze with `as const`.
-        const base = {
-            userId: "user-A",
-            policyVersion: 1,
-            similarity: [] as MemorySimilaritySummaryEntry[],
-            createdAt: "2026-02-04T00:00:00.000Z",
-        };
-        await decisionStore.appendDecision({ ...base, characterId: "char-A", candidateId: "cA", decision: "create", memoryId: "mA" });
-        await decisionStore.appendDecision({ ...base, characterId: "char-B", candidateId: "cB", decision: "create", memoryId: "mB" });
-
-        const onlyA = await decisionStore.listDecisions({ userId: "user-A", characterId: "char-A" });
-        assert.equal(onlyA.length, 1);
-        assert.equal(onlyA[0]!.characterId, "char-A");
-        assert.equal(onlyA[0]!.candidateId, "cA");
-
-        // Sanity: without the filter both rows still come back.
-        const both = await decisionStore.listDecisions({ userId: "user-A" });
-        assert.equal(both.length, 2);
+        assert.equal(pending.length, 1);
+        assert.equal(pending[0]!.text, "stays pending");
     });
 });
 
-// ---------- corrupt JSON ----------
-
-describe("Memory stores — corrupt JSON columns", () => {
-    it("memory_candidates: returns the row with no embedding and warns when embedding_json is malformed", async () => {
-        const { db, candidateStore, logger } = freshStores();
-        const [rec] = await candidateStore.appendCandidates({
+describe("SQLiteMemoryCandidateStore — updateCandidateStatus", () => {
+    it("persists statusReason and updatedAt", async () => {
+        const { candidateStore, db, clock } = freshStores();
+        const [written] = await candidateStore.appendCandidates({
             source: makeSource(),
-            candidates: [{ scope: "user", type: "fact", text: "hi" }],
-            normalizedTexts: ["hi"],
+            candidates: [{ scope: "user", type: "fact", text: "x" }],
         });
-        // Inject a corrupt embedding_json directly (bypass the store).
-        await db
-            .update(memoryCandidates)
-            .set({ embeddingJson: "{not json" })
-            .where(eq(memoryCandidates.id, rec!.id));
+        assert.ok(written);
+        clock.advance(1000);
+        const updatedAt = clock.nowIso();
+        await candidateStore.updateCandidateStatus({
+            candidateId: written.id,
+            status: "rejected_by_rule",
+            statusReason: "too_short",
+            updatedAt,
+        });
+        const row = (await db.select().from(memoryCandidates).where(eq(memoryCandidates.id, written.id)))[0]!;
+        assert.equal(row.status, "rejected_by_rule");
+        assert.equal(row.statusReason, "too_short");
+        assert.equal(row.updatedAt, updatedAt);
+    });
 
-        const got = await candidateStore.listCandidates({ userId: "user-A", assistantMessageId: "amsg-1" });
-        assert.equal(got.length, 1);
-        assert.equal(got[0]!.embedding, undefined);
-        assert.ok(
-            logger.warnCalls.some((c) => c.event === "memory.sqlite.json_parse_failed"),
-            "expected a json_parse_failed warning",
+    it("leaves statusReason untouched when not provided", async () => {
+        const { candidateStore, db, clock } = freshStores();
+        const [written] = await candidateStore.appendCandidates({
+            source: makeSource(),
+            candidates: [{ scope: "user", type: "fact", text: "x" }],
+        });
+        assert.ok(written);
+        await candidateStore.updateCandidateStatus({
+            candidateId: written.id,
+            status: "processed",
+            statusReason: "first_reason",
+            updatedAt: clock.nowIso(),
+        });
+        clock.advance(1000);
+        await candidateStore.updateCandidateStatus({
+            candidateId: written.id,
+            status: "processed",
+            updatedAt: clock.nowIso(),
+        });
+        const row = (await db.select().from(memoryCandidates).where(eq(memoryCandidates.id, written.id)))[0]!;
+        assert.equal(row.statusReason, "first_reason");
+    });
+});
+
+// ============================================================================
+// staging store
+// ============================================================================
+
+describe("SQLiteMemoryStagingStore — create + findExact + findBySourceCandidate", () => {
+    it("transactionally creates the staging row and its first source link", async () => {
+        const { stagingStore, db, clock } = freshStores();
+        const created = await stagingStore.create({
+            userId: "user-A",
+            characterId: "char-A",
+            scope: "user",
+            type: "fact",
+            text: "User likes ramen",
+            normalizedText: "user likes ramen",
+            relatedEntities: ["ramen"],
+            tags: ["food"],
+            status: "pending",
+            statusReason: "created_from_candidate",
+            firstSeenAt: "2026-02-01T00:00:00.000Z",
+            now: clock.nowIso(),
+            embedding: makeEmbedding([0.1, 0.2, 0.3]),
+            initialSource: {
+                candidateId: "cand-1",
+                candidateSeq: 0,
+            },
+        });
+
+        assert.equal(created.occurrenceCount, 1);
+        assert.equal(created.embedding?.vector.length, 3);
+
+        const stagingRows = await db.select().from(memoryStaging).where(eq(memoryStaging.id, created.id));
+        assert.equal(stagingRows.length, 1);
+        const sourceRows = await db
+            .select()
+            .from(memoryStagingSources)
+            .where(eq(memoryStagingSources.memoryStagingId, created.id));
+        assert.equal(sourceRows.length, 1);
+        assert.equal(sourceRows[0]!.candidateId, "cand-1");
+    });
+
+    it("findExact matches on (userId, characterId, scope, type, normalizedText) only", async () => {
+        const { stagingStore, clock } = freshStores();
+        await stagingStore.create({
+            userId: "user-A",
+            characterId: "char-A",
+            scope: "user",
+            type: "fact",
+            text: "User likes ramen",
+            normalizedText: "user likes ramen",
+            relatedEntities: [],
+            tags: [],
+            status: "pending",
+            firstSeenAt: clock.nowIso(),
+            now: clock.nowIso(),
+            initialSource: { candidateId: "cand-1", candidateSeq: 0 },
+        });
+        const hit = await stagingStore.findExact({
+            userId: "user-A",
+            characterId: "char-A",
+            scope: "user",
+            type: "fact",
+            normalizedText: "user likes ramen",
+        });
+        assert.ok(hit);
+
+        // Different normalized text → miss.
+        assert.equal(
+            await stagingStore.findExact({
+                userId: "user-A",
+                characterId: "char-A",
+                scope: "user",
+                type: "fact",
+                normalizedText: "user likes pizza",
+            }),
+            undefined,
+        );
+
+        // Different character → miss (no cross-character matching).
+        assert.equal(
+            await stagingStore.findExact({
+                userId: "user-A",
+                characterId: "char-B",
+                scope: "user",
+                type: "fact",
+                normalizedText: "user likes ramen",
+            }),
+            undefined,
         );
     });
 
-    it("memories: returns the row with no embedding when the JSON shape is invalid", async () => {
-        const { db, memoryStore, logger } = freshStores();
-        const created = await memoryStore.createMemory({
+    it("findBySourceCandidate returns the staging row a candidate is linked to", async () => {
+        const { stagingStore, clock } = freshStores();
+        const created = await stagingStore.create({
             userId: "user-A",
             characterId: "char-A",
             scope: "user",
@@ -686,67 +458,253 @@ describe("Memory stores — corrupt JSON columns", () => {
             normalizedText: "x",
             relatedEntities: [],
             tags: [],
-            importance: 0.5,
-            createdAt: "2026-02-01T00:00:00.000Z",
-            updatedAt: "2026-02-01T00:00:00.000Z",
+            status: "pending",
+            firstSeenAt: clock.nowIso(),
+            now: clock.nowIso(),
+            initialSource: { candidateId: "cand-1", candidateSeq: 0 },
         });
-        // Valid JSON but wrong shape (missing required fields).
-        await db
-            .update(memories)
-            .set({ embeddingJson: JSON.stringify({ vector: [0.1] }) })
-            .where(eq(memories.id, created.id));
+        const got = await stagingStore.findBySourceCandidate({ candidateId: "cand-1" });
+        assert.ok(got);
+        assert.equal(got.id, created.id);
 
-        const got = await memoryStore.listActiveMemories({ userId: "user-A", characterId: "char-A" });
-        assert.equal(got.length, 1);
-        assert.equal(got[0]!.embedding, undefined);
-        assert.ok(
-            logger.warnCalls.some((c) => c.event.startsWith("memory.sqlite.embedding_")),
-            "expected an embedding_* warning",
+        assert.equal(
+            await stagingStore.findBySourceCandidate({ candidateId: "cand-unknown" }),
+            undefined,
+        );
+    });
+
+    it("warns and returns undefined when a candidate link points at a missing staging row", async () => {
+        const { stagingStore, db, logger } = freshStores();
+        // Insert a dangling link manually.
+        await db.insert(memoryStagingSources).values({
+            memoryStagingId: "missing-staging",
+            candidateId: "orphan-cand",
+            candidateSeq: 0,
+            createdAt: "2026-02-01T00:00:00.000Z",
+        });
+        const got = await stagingStore.findBySourceCandidate({ candidateId: "orphan-cand" });
+        assert.equal(got, undefined);
+        assert.equal(
+            logger.warnCalls.some((c) => c.event === "memory.sqlite.staging_link_orphan"),
+            true,
         );
     });
 });
 
-// ---------- createSqliteStores wiring ----------
-
-describe("createSqliteStores — memory store wiring", () => {
-    it("wires SQLite memory stores onto AppStores even when no characterDbDir is provided", async () => {
-        const { db } = openDatabase(":memory:");
-        const stores = createSqliteStores({
-            db,
-            memoryClock: makeClock(),
-            memoryIds: makeIds("wired"),
-        });
-        // Smoke test all three keys exist and behave.
-        const candRecords = await stores.memoryCandidate.appendCandidates({
-            source: makeSource(),
-            candidates: [{ scope: "user", type: "fact", text: "wired" }],
-            normalizedTexts: ["wired"],
-        });
-        assert.equal(candRecords.length, 1);
-        const mem = await stores.memory.createMemory({
+describe("SQLiteMemoryStagingStore — linkSource + incrementOccurrence", () => {
+    it("linkSource enforces UNIQUE on candidate_id so retries cannot double-link", async () => {
+        const { stagingStore, clock } = freshStores();
+        const created = await stagingStore.create({
             userId: "user-A",
             characterId: "char-A",
             scope: "user",
             type: "fact",
-            text: "wired",
-            normalizedText: "wired",
+            text: "x",
+            normalizedText: "x",
             relatedEntities: [],
             tags: [],
-            importance: 0.5,
-            createdAt: "2026-02-01T00:00:00.000Z",
-            updatedAt: "2026-02-01T00:00:00.000Z",
+            status: "pending",
+            firstSeenAt: clock.nowIso(),
+            now: clock.nowIso(),
+            initialSource: { candidateId: "cand-1", candidateSeq: 0 },
         });
-        const decision = await stores.memoryDecision.appendDecision({
-            candidateId: candRecords[0]!.id,
+        // Re-linking the same candidate must throw (the UNIQUE
+        // constraint is what makes processor retries idempotent).
+        await assert.rejects(
+            stagingStore.linkSource({
+                memoryStagingId: created.id,
+                candidateId: "cand-1",
+                candidateSeq: 0,
+                createdAt: clock.nowIso(),
+            }),
+            /UNIQUE|constraint/i,
+        );
+    });
+
+    it("incrementOccurrence atomically bumps occurrenceCount and refreshes lastSeenAt/updatedAt", async () => {
+        const { stagingStore, clock } = freshStores();
+        const created = await stagingStore.create({
             userId: "user-A",
             characterId: "char-A",
-            decision: "create",
-            memoryId: mem.id,
-            similarity: [],
-            policyVersion: 1,
-            createdAt: "2026-02-01T00:00:00.000Z",
+            scope: "user",
+            type: "fact",
+            text: "x",
+            normalizedText: "x",
+            relatedEntities: [],
+            tags: [],
+            status: "pending",
+            firstSeenAt: "2026-02-01T00:00:00.000Z",
+            now: "2026-02-01T00:00:00.000Z",
+            initialSource: { candidateId: "cand-1", candidateSeq: 0 },
         });
-        assert.equal(decision.decision, "create");
-        assert.equal(decision.memoryId, mem.id);
+        assert.equal(created.occurrenceCount, 1);
+
+        clock.advance(60_000);
+        const newNow = clock.nowIso();
+        // Link a fresh candidate first (mirrors the processor flow).
+        await stagingStore.linkSource({
+            memoryStagingId: created.id,
+            candidateId: "cand-2",
+            candidateSeq: 1,
+            createdAt: newNow,
+        });
+        const incremented = await stagingStore.incrementOccurrence({
+            memoryStagingId: created.id,
+            lastSeenAt: newNow,
+            updatedAt: newNow,
+        });
+        assert.equal(incremented.occurrenceCount, 2);
+        assert.equal(incremented.lastSeenAt, newNow);
+        assert.equal(incremented.updatedAt, newNow);
+
+        // First-seen timestamp is sticky.
+        assert.equal(incremented.firstSeenAt, "2026-02-01T00:00:00.000Z");
+    });
+
+    it("incrementOccurrence is additive across many invocations", async () => {
+        const { stagingStore, clock } = freshStores();
+        const created = await stagingStore.create({
+            userId: "user-A",
+            characterId: "char-A",
+            scope: "user",
+            type: "fact",
+            text: "x",
+            normalizedText: "x",
+            relatedEntities: [],
+            tags: [],
+            status: "pending",
+            firstSeenAt: clock.nowIso(),
+            now: clock.nowIso(),
+            initialSource: { candidateId: "cand-1", candidateSeq: 0 },
+        });
+        for (let i = 0; i < 4; i += 1) {
+            const tick = clock.nowIso();
+            clock.advance(1);
+            await stagingStore.linkSource({
+                memoryStagingId: created.id,
+                candidateId: `cand-extra-${i}`,
+                candidateSeq: i + 1,
+                createdAt: tick,
+            });
+            await stagingStore.incrementOccurrence({
+                memoryStagingId: created.id,
+                lastSeenAt: tick,
+                updatedAt: tick,
+            });
+        }
+        const [row] = await stagingStore.list({
+            userId: "user-A",
+            characterId: "char-A",
+            scope: "user",
+            type: "fact",
+            status: "pending",
+            limit: 10,
+        });
+        assert.equal(row!.occurrenceCount, 5);
+    });
+});
+
+describe("SQLiteMemoryStagingStore — list", () => {
+    it("returns rows for the requested (userId, characterId, scope, type, status) bucket", async () => {
+        const { stagingStore, clock } = freshStores();
+        await stagingStore.create({
+            userId: "user-A",
+            characterId: "char-A",
+            scope: "user",
+            type: "fact",
+            text: "in-bucket",
+            normalizedText: "in-bucket",
+            relatedEntities: [],
+            tags: [],
+            status: "pending",
+            firstSeenAt: clock.nowIso(),
+            now: clock.nowIso(),
+            initialSource: { candidateId: "cand-A", candidateSeq: 0 },
+        });
+        await stagingStore.create({
+            userId: "user-A",
+            characterId: "char-B", // different character
+            scope: "user",
+            type: "fact",
+            text: "other-char",
+            normalizedText: "other-char",
+            relatedEntities: [],
+            tags: [],
+            status: "pending",
+            firstSeenAt: clock.nowIso(),
+            now: clock.nowIso(),
+            initialSource: { candidateId: "cand-B", candidateSeq: 0 },
+        });
+
+        const rows = await stagingStore.list({
+            userId: "user-A",
+            characterId: "char-A",
+            scope: "user",
+            type: "fact",
+            status: "pending",
+            limit: 50,
+        });
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0]!.text, "in-bucket");
+    });
+
+    it("sourceCandidateId filters to just the staging row a candidate is linked to", async () => {
+        const { stagingStore, clock } = freshStores();
+        const staging = await stagingStore.create({
+            userId: "user-A",
+            characterId: "char-A",
+            scope: "user",
+            type: "fact",
+            text: "ramen",
+            normalizedText: "ramen",
+            relatedEntities: [],
+            tags: [],
+            status: "pending",
+            firstSeenAt: clock.nowIso(),
+            now: clock.nowIso(),
+            initialSource: { candidateId: "cand-1", candidateSeq: 0 },
+        });
+
+        const linked = await stagingStore.list({
+            userId: "user-A",
+            sourceCandidateId: "cand-1",
+        });
+        assert.equal(linked.length, 1);
+        assert.equal(linked[0]!.id, staging.id);
+
+        const notLinked = await stagingStore.list({
+            userId: "user-A",
+            sourceCandidateId: "cand-nope",
+        });
+        assert.equal(notLinked.length, 0);
+    });
+});
+
+// ============================================================================
+// retained store (read-only in Batch 3.5)
+// ============================================================================
+
+describe("SQLiteMemoryRetainedStore", () => {
+    it("returns [] from an empty table without error", async () => {
+        const { retainedStore } = freshStores();
+        const rows = await retainedStore.list({ userId: "user-A", characterId: "char-A" });
+        assert.deepEqual(rows, []);
+    });
+});
+
+// ============================================================================
+// createSqliteStores wiring
+// ============================================================================
+
+describe("createSqliteStores", () => {
+    it("wires the three memory stores onto AppStores", () => {
+        const { db } = openDatabase(":memory:");
+        const clock = makeClock();
+        const ids = makeIds();
+        const logger = makeRecordingLogger();
+        const stores = createSqliteStores({ db, memoryClock: clock, memoryIds: ids, memoryLogger: logger });
+        assert.ok(stores.memoryCandidate);
+        assert.ok(stores.memoryStaging);
+        assert.ok(stores.memoryRetained);
     });
 });

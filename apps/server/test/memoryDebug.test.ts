@@ -1,24 +1,29 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import type {
-    ActiveMemoryInfo,
-    ListMemoriesResponse,
     ListMemoryCandidatesResponse,
-    ListMemoryDecisionsResponse,
+    ListMemoryRetainedResponse,
+    ListMemoryStagingResponse,
     MemoryCandidateInfo,
     MemoryCandidateType,
-    MemoryDecisionInfo,
+    MemoryRetainedInfo,
     MemoryScope,
+    MemoryStagingInfo,
 } from "@ss-ai/contracts";
 import { createTestApp, type TestApp } from "./helpers/testServer.js";
 import {
     StubMemoryCandidateStore,
-    StubMemoryDecisionStore,
-    StubMemoryStore,
+    StubMemoryRetainedStore,
+    StubMemoryStagingStore,
 } from "./helpers/inMemoryMemoryStores.js";
 
 /**
- * Step 7 debug API tests.
+ * Memory debug API tests (Batch 3.5 surface).
+ *
+ * The surface is:
+ *  - GET /v1/debug/memory-candidates  — list raw candidate rows
+ *  - GET /v1/debug/memory-staging     — list staging (aggregated) rows
+ *  - GET /v1/debug/memory-retained    — list retained (consolidated) rows; required `characterId`
  *
  * In the default `default-user` auth mode every request is
  * implicitly the user `"default"`. We seed rows for both `"default"`
@@ -30,6 +35,8 @@ import {
  */
 
 const NOW = "2026-06-27T00:00:00.000Z";
+
+// ── seed helpers ─────────────────────────────────────────────────────────────
 
 interface SeedCandidateOptions {
     userId?: string;
@@ -59,22 +66,21 @@ async function seedCandidate(store: StubMemoryCandidateStore, opts: SeedCandidat
                 text: opts.text ?? "User said hi",
             },
         ],
-        normalizedTexts: [(opts.text ?? "User said hi").toLowerCase()],
     });
 }
 
-interface SeedMemoryOptions {
+interface SeedStagingOptions {
     userId?: string;
     characterId?: string;
     scope?: MemoryScope;
     type?: MemoryCandidateType;
     text?: string;
-    status?: "active" | "archived";
+    candidateId?: string;
 }
 
-async function seedMemory(store: StubMemoryStore, opts: SeedMemoryOptions = {}): Promise<void> {
-    const text = opts.text ?? "a memory";
-    const record = await store.createMemory({
+async function seedStaging(store: StubMemoryStagingStore, opts: SeedStagingOptions = {}): Promise<MemoryStagingInfo["id"]> {
+    const text = opts.text ?? "staged evidence";
+    const record = await store.create({
         userId: opts.userId ?? "default",
         characterId: opts.characterId ?? "char-A",
         scope: opts.scope ?? "user",
@@ -83,38 +89,46 @@ async function seedMemory(store: StubMemoryStore, opts: SeedMemoryOptions = {}):
         normalizedText: text.toLowerCase(),
         relatedEntities: [],
         tags: [],
+        status: "pending",
+        firstSeenAt: NOW,
+        now: NOW,
+        initialSource: { candidateId: opts.candidateId ?? `cand-${Math.random().toString(36).slice(2)}`, candidateSeq: 0 },
+    });
+    return record.id;
+}
+
+interface SeedRetainedOptions {
+    userId?: string;
+    characterId?: string;
+    scope?: MemoryScope;
+    type?: MemoryCandidateType;
+    text?: string;
+    status?: "active" | "archived";
+}
+
+function seedRetained(store: StubMemoryRetainedStore, opts: SeedRetainedOptions = {}): void {
+    const text = opts.text ?? "a memory";
+    store.rows.push({
+        id: `ret-${store.rows.length + 1}`,
+        userId: opts.userId ?? "default",
+        characterId: opts.characterId ?? "char-A",
+        scope: opts.scope ?? "user",
+        type: opts.type ?? "fact",
+        text,
+        normalizedText: text.toLowerCase(),
+        relatedEntities: [],
+        tags: [],
+        status: opts.status ?? "active",
         importance: 0.5,
+        schemaVersion: 1,
         createdAt: NOW,
         updatedAt: NOW,
     });
-    if (opts.status === "archived") {
-        // The stub doesn't expose a transition helper; mutate the
-        // record in-place because `rows` holds the same reference
-        // (createMemory pushes and returns a clone).
-        const stored = store.rows.find((r) => r.id === record.id);
-        if (stored) stored.status = "archived";
-    }
 }
 
-interface SeedDecisionOptions {
-    userId?: string;
-    characterId?: string;
-    candidateId?: string;
-    decision?: "create" | "ignore_duplicate" | "ignore_low_value" | "needs_judge" | "embedding_failed" | "error";
-}
-
-async function seedDecision(store: StubMemoryDecisionStore, opts: SeedDecisionOptions = {}): Promise<void> {
-    await store.appendDecision({
-        candidateId: opts.candidateId ?? "cand-1",
-        userId: opts.userId ?? "default",
-        characterId: opts.characterId ?? "char-A",
-        decision: opts.decision ?? "create",
-        memoryId: "mem-1",
-        similarity: [],
-        policyVersion: 1,
-        createdAt: NOW,
-    });
-}
+// ============================================================================
+// /v1/debug/memory-candidates
+// ============================================================================
 
 describe("Memory Debug API — /v1/debug/memory-candidates", () => {
     let app: TestApp;
@@ -159,14 +173,18 @@ describe("Memory Debug API — /v1/debug/memory-candidates", () => {
             ["A1"],
         );
 
-        // status filter (single + comma-separated list); both seeded
-        // rows are still "pending" so the same filter returns both.
         const byStatusSingle = await app.agent.get("/v1/debug/memory-candidates?status=pending").expect(200);
         assert.equal((byStatusSingle.body as ListMemoryCandidatesResponse).candidates.length, 2);
-        const byStatusList = await app.agent.get("/v1/debug/memory-candidates?status=pending,committed").expect(200);
+        const byStatusList = await app.agent.get("/v1/debug/memory-candidates?status=pending,processed").expect(200);
         assert.equal((byStatusList.body as ListMemoryCandidatesResponse).candidates.length, 2);
-        const byStatusUnknown = await app.agent.get("/v1/debug/memory-candidates?status=committed").expect(200);
+        const byStatusUnknown = await app.agent.get("/v1/debug/memory-candidates?status=processed").expect(200);
         assert.equal((byStatusUnknown.body as ListMemoryCandidatesResponse).candidates.length, 0);
+    });
+
+    it("returns 400 on invalid candidate status enum tokens", async () => {
+        const bad = await app.agent.get("/v1/debug/memory-candidates?status=committed").expect(400);
+        assert.equal(bad.body.code, "memory.debug.invalid_enum_value");
+        assert.deepEqual(bad.body.params, { param: "status", value: "committed" });
     });
 
     it("clamps limit to the [1, 500] window with default 100", async () => {
@@ -177,21 +195,17 @@ describe("Memory Debug API — /v1/debug/memory-candidates", () => {
         const explicit = await app.agent.get("/v1/debug/memory-candidates?limit=2").expect(200);
         assert.equal((explicit.body as ListMemoryCandidatesResponse).candidates.length, 2);
 
-        // Non-numeric falls back to default (100), which is bigger than the seed count.
         const fallback = await app.agent.get("/v1/debug/memory-candidates?limit=notanumber").expect(200);
         assert.equal((fallback.body as ListMemoryCandidatesResponse).candidates.length, 3);
 
-        // Negative falls back to default.
         const negative = await app.agent.get("/v1/debug/memory-candidates?limit=-5").expect(200);
         assert.equal((negative.body as ListMemoryCandidatesResponse).candidates.length, 3);
 
-        // Above-max is clamped to MAX_LIMIT (500); we just confirm
-        // the route accepts it without errors and returns all rows.
         const aboveMax = await app.agent.get("/v1/debug/memory-candidates?limit=9999").expect(200);
         assert.equal((aboveMax.body as ListMemoryCandidatesResponse).candidates.length, 3);
     });
 
-    it("projects record fields including embedding signature without raw vector", async () => {
+    it("projects candidate fields with candidateReason / statusReason split (Batch 3.5)", async () => {
         await seedCandidate(candidateStore, { text: "with no embedding" });
         const res = await app.agent.get("/v1/debug/memory-candidates").expect(200);
         const info: MemoryCandidateInfo = (res.body as ListMemoryCandidatesResponse).candidates[0]!;
@@ -201,152 +215,167 @@ describe("Memory Debug API — /v1/debug/memory-candidates", () => {
         assert.equal(info.modelCallPurpose, "chat.main");
         assert.equal(info.text, "with no embedding");
         assert.equal(info.status, "pending");
-        // No embedding was attached -> null, never an object with a vector.
-        assert.equal(info.embedding, null);
-        assert.ok(!("vector" in (info as unknown as Record<string, unknown>)));
+        assert.equal(info.candidateReason, null);
+        assert.equal(info.statusReason, null);
+        // normalizedText/embedding now live on staging — never on the candidate projection.
+        assert.equal((info as unknown as Record<string, unknown>).normalizedText, undefined);
+        assert.equal((info as unknown as Record<string, unknown>).embedding, undefined);
     });
 });
 
-describe("Memory Debug API — /v1/debug/memories", () => {
+// ============================================================================
+// /v1/debug/memory-staging
+// ============================================================================
+
+describe("Memory Debug API — /v1/debug/memory-staging", () => {
     let app: TestApp;
-    let memoryStore: StubMemoryStore;
+    let stagingStore: StubMemoryStagingStore;
 
     beforeEach(() => {
         app = createTestApp();
-        memoryStore = app.stores.memory as StubMemoryStore;
+        stagingStore = app.stores.memoryStaging as StubMemoryStagingStore;
+    });
+    afterEach(() => app.cleanup());
+
+    it("returns only the current user's staging rows", async () => {
+        await seedStaging(stagingStore, { userId: "default", text: "mine", candidateId: "c-1" });
+        await seedStaging(stagingStore, { userId: "other", text: "theirs", candidateId: "c-2" });
+
+        const res = await app.agent.get("/v1/debug/memory-staging").expect(200);
+        const body = res.body as ListMemoryStagingResponse;
+        assert.equal(body.staging.length, 1);
+        assert.equal(body.staging[0]!.userId, "default");
+    });
+
+    it("filters by characterId / scope / type / status / sourceCandidateId", async () => {
+        await seedStaging(stagingStore, { characterId: "char-A", scope: "user", type: "fact", text: "A-fact", candidateId: "c-A" });
+        await seedStaging(stagingStore, { characterId: "char-B", scope: "user", type: "fact", text: "B-fact", candidateId: "c-B" });
+        await seedStaging(stagingStore, { characterId: "char-A", scope: "world", type: "event", text: "world-event", candidateId: "c-W" });
+
+        const byChar = await app.agent.get("/v1/debug/memory-staging?characterId=char-A").expect(200);
+        assert.equal((byChar.body as ListMemoryStagingResponse).staging.length, 2);
+        for (const row of (byChar.body as ListMemoryStagingResponse).staging) {
+            assert.equal(row.characterId, "char-A");
+        }
+
+        const byScope = await app.agent.get("/v1/debug/memory-staging?scope=world").expect(200);
+        assert.deepEqual(
+            (byScope.body as ListMemoryStagingResponse).staging.map((r) => r.text),
+            ["world-event"],
+        );
+
+        const byType = await app.agent.get("/v1/debug/memory-staging?type=event").expect(200);
+        assert.deepEqual(
+            (byType.body as ListMemoryStagingResponse).staging.map((r) => r.text),
+            ["world-event"],
+        );
+
+        const bySource = await app.agent.get("/v1/debug/memory-staging?sourceCandidateId=c-A").expect(200);
+        assert.deepEqual(
+            (bySource.body as ListMemoryStagingResponse).staging.map((r) => r.text),
+            ["A-fact"],
+        );
+
+        const byStatus = await app.agent.get("/v1/debug/memory-staging?status=pending").expect(200);
+        assert.equal((byStatus.body as ListMemoryStagingResponse).staging.length, 3);
+    });
+
+    it("returns 400 on an invalid staging status token", async () => {
+        const res = await app.agent.get("/v1/debug/memory-staging?status=committed").expect(400);
+        assert.equal(res.body.code, "memory.debug.invalid_enum_value");
+        assert.deepEqual(res.body.params, { param: "status", value: "committed" });
+    });
+
+    it("projects staging fields without raw embedding vector", async () => {
+        await seedStaging(stagingStore, { text: "staged fact" });
+        const res = await app.agent.get("/v1/debug/memory-staging").expect(200);
+        const row: MemoryStagingInfo = (res.body as ListMemoryStagingResponse).staging[0]!;
+        assert.equal(row.text, "staged fact");
+        assert.equal(row.occurrenceCount, 1);
+        assert.equal(row.firstSeenAt, NOW);
+        assert.equal(row.lastSeenAt, NOW);
+        assert.equal(row.embedding, null);
+        assert.ok(!("vector" in (row as unknown as Record<string, unknown>)));
+    });
+});
+
+// ============================================================================
+// /v1/debug/memory-retained
+// ============================================================================
+
+describe("Memory Debug API — /v1/debug/memory-retained", () => {
+    let app: TestApp;
+    let retainedStore: StubMemoryRetainedStore;
+
+    beforeEach(() => {
+        app = createTestApp();
+        retainedStore = app.stores.memoryRetained as StubMemoryRetainedStore;
     });
     afterEach(() => app.cleanup());
 
     it("requires characterId and returns 400 otherwise", async () => {
-        const res = await app.agent.get("/v1/debug/memories").expect(400);
+        const res = await app.agent.get("/v1/debug/memory-retained").expect(400);
         assert.equal(res.body.code, "memory.debug.characterId_required");
     });
 
     it("returns only memories for the requested character and user", async () => {
-        await seedMemory(memoryStore, { userId: "default", characterId: "char-A", text: "A-self" });
-        await seedMemory(memoryStore, { userId: "default", characterId: "char-B", text: "B-self" });
-        await seedMemory(memoryStore, { userId: "other", characterId: "char-A", text: "A-other" });
+        seedRetained(retainedStore, { userId: "default", characterId: "char-A", text: "A-self" });
+        seedRetained(retainedStore, { userId: "default", characterId: "char-B", text: "B-self" });
+        seedRetained(retainedStore, { userId: "other", characterId: "char-A", text: "A-other" });
 
-        const res = await app.agent.get("/v1/debug/memories?characterId=char-A").expect(200);
-        const body = res.body as ListMemoriesResponse;
-        assert.equal(body.memories.length, 1);
-        const memory: ActiveMemoryInfo = body.memories[0]!;
-        assert.equal(memory.userId, "default");
-        assert.equal(memory.characterId, "char-A");
-        assert.equal(memory.text, "A-self");
-        // Source fields projected as null instead of undefined.
-        assert.equal(memory.sourceCandidateId, null);
-        assert.equal(memory.embedding, null);
+        const res = await app.agent.get("/v1/debug/memory-retained?characterId=char-A").expect(200);
+        const body = res.body as ListMemoryRetainedResponse;
+        assert.equal(body.retained.length, 1);
+        const row: MemoryRetainedInfo = body.retained[0]!;
+        assert.equal(row.userId, "default");
+        assert.equal(row.characterId, "char-A");
+        assert.equal(row.text, "A-self");
+        assert.equal(row.embedding, null);
     });
 
     it("filters by scope / type / status inside one character world", async () => {
-        await seedMemory(memoryStore, { scope: "user", type: "fact", text: "u-fact" });
-        await seedMemory(memoryStore, { scope: "user", type: "preference", text: "u-pref" });
-        await seedMemory(memoryStore, { scope: "world", type: "fact", text: "w-fact" });
-        await seedMemory(memoryStore, { scope: "user", type: "fact", text: "u-archived", status: "archived" });
+        seedRetained(retainedStore, { scope: "user", type: "fact", text: "u-fact" });
+        seedRetained(retainedStore, { scope: "user", type: "preference", text: "u-pref" });
+        seedRetained(retainedStore, { scope: "world", type: "fact", text: "w-fact" });
+        seedRetained(retainedStore, { scope: "user", type: "fact", text: "u-archived", status: "archived" });
 
-        const byScope = await app.agent.get("/v1/debug/memories?characterId=char-A&scope=user").expect(200);
+        const byScope = await app.agent.get("/v1/debug/memory-retained?characterId=char-A&scope=user").expect(200);
         assert.deepEqual(
-            (byScope.body as ListMemoriesResponse).memories.map((m) => m.text).sort(),
+            (byScope.body as ListMemoryRetainedResponse).retained.map((m) => m.text).sort(),
             ["u-fact", "u-pref"].sort(),
         );
 
-        const byType = await app.agent.get("/v1/debug/memories?characterId=char-A&type=fact").expect(200);
+        const byType = await app.agent.get("/v1/debug/memory-retained?characterId=char-A&type=fact").expect(200);
         assert.deepEqual(
-            (byType.body as ListMemoriesResponse).memories.map((m) => m.text).sort(),
+            (byType.body as ListMemoryRetainedResponse).retained.map((m) => m.text).sort(),
             ["u-fact", "w-fact"].sort(),
         );
 
-        // Default status filter is `active`, applied at the route
-        // layer (the underlying store has no implicit default).
-        const defaultStatus = await app.agent.get("/v1/debug/memories?characterId=char-A").expect(200);
-        assert.equal((defaultStatus.body as ListMemoriesResponse).memories.length, 3);
+        // Default status filter is `active`, applied at the route layer.
+        const defaultStatus = await app.agent.get("/v1/debug/memory-retained?characterId=char-A").expect(200);
+        assert.equal((defaultStatus.body as ListMemoryRetainedResponse).retained.length, 3);
 
-        // Explicit `status=archived` surfaces it.
-        const archived = await app.agent.get("/v1/debug/memories?characterId=char-A&status=archived").expect(200);
+        const archived = await app.agent.get("/v1/debug/memory-retained?characterId=char-A&status=archived").expect(200);
         assert.deepEqual(
-            (archived.body as ListMemoriesResponse).memories.map((m) => m.text),
+            (archived.body as ListMemoryRetainedResponse).retained.map((m) => m.text),
             ["u-archived"],
         );
     });
 
     it("returns 400 on invalid status / scope / type enum tokens", async () => {
-        const badStatus = await app.agent.get("/v1/debug/memories?characterId=char-A&status=archivd").expect(400);
+        const badStatus = await app.agent.get("/v1/debug/memory-retained?characterId=char-A&status=archivd").expect(400);
         assert.equal(badStatus.body.code, "memory.debug.invalid_enum_value");
         assert.deepEqual(badStatus.body.params, { param: "status", value: "archivd" });
 
-        const badScope = await app.agent.get("/v1/debug/memories?characterId=char-A&scope=usr").expect(400);
+        const badScope = await app.agent.get("/v1/debug/memory-retained?characterId=char-A&scope=usr").expect(400);
         assert.equal(badScope.body.code, "memory.debug.invalid_enum_value");
         assert.deepEqual(badScope.body.params, { param: "scope", value: "usr" });
     });
 });
 
-describe("Memory Debug API — /v1/debug/memory-decisions", () => {
-    let app: TestApp;
-    let decisionStore: StubMemoryDecisionStore;
-
-    beforeEach(() => {
-        app = createTestApp();
-        decisionStore = app.stores.memoryDecision as StubMemoryDecisionStore;
-    });
-    afterEach(() => app.cleanup());
-
-    it("returns only the current user's decisions", async () => {
-        await seedDecision(decisionStore, { userId: "default", candidateId: "c-1" });
-        await seedDecision(decisionStore, { userId: "other", candidateId: "c-2" });
-
-        const res = await app.agent.get("/v1/debug/memory-decisions").expect(200);
-        const body = res.body as ListMemoryDecisionsResponse;
-        assert.equal(body.decisions.length, 1);
-        const decision: MemoryDecisionInfo = body.decisions[0]!;
-        assert.equal(decision.userId, "default");
-        assert.equal(decision.candidateId, "c-1");
-    });
-
-    it("filters by characterId, candidateId, and decision", async () => {
-        await seedDecision(decisionStore, { characterId: "char-A", candidateId: "c-1", decision: "create" });
-        await seedDecision(decisionStore, { characterId: "char-A", candidateId: "c-2", decision: "ignore_duplicate" });
-        await seedDecision(decisionStore, { characterId: "char-B", candidateId: "c-3", decision: "create" });
-
-        const byChar = await app.agent.get("/v1/debug/memory-decisions?characterId=char-A").expect(200);
-        assert.equal((byChar.body as ListMemoryDecisionsResponse).decisions.length, 2);
-        for (const d of (byChar.body as ListMemoryDecisionsResponse).decisions) {
-            assert.equal(d.characterId, "char-A");
-        }
-
-        const byCandidate = await app.agent.get("/v1/debug/memory-decisions?candidateId=c-3").expect(200);
-        assert.equal((byCandidate.body as ListMemoryDecisionsResponse).decisions.length, 1);
-        assert.equal((byCandidate.body as ListMemoryDecisionsResponse).decisions[0]!.characterId, "char-B");
-
-        const byDecision = await app.agent.get("/v1/debug/memory-decisions?decision=create").expect(200);
-        assert.equal((byDecision.body as ListMemoryDecisionsResponse).decisions.length, 2);
-
-        const byDecisionList = await app.agent
-            .get("/v1/debug/memory-decisions?decision=create,ignore_duplicate")
-            .expect(200);
-        assert.equal((byDecisionList.body as ListMemoryDecisionsResponse).decisions.length, 3);
-    });
-
-    it("projects record fields including null for missing memoryId / reason", async () => {
-        await decisionStore.appendDecision({
-            candidateId: "c-fail",
-            userId: "default",
-            characterId: "char-A",
-            decision: "embedding_failed",
-            reason: "provider down",
-            similarity: [{ memoryId: "m-1", similarity: 0.42, text: "old" }],
-            policyVersion: 1,
-            createdAt: NOW,
-        });
-
-        const res = await app.agent.get("/v1/debug/memory-decisions").expect(200);
-        const decision = (res.body as ListMemoryDecisionsResponse).decisions[0]!;
-        assert.equal(decision.decision, "embedding_failed");
-        assert.equal(decision.memoryId, null);
-        assert.equal(decision.reason, "provider down");
-        assert.deepEqual(decision.similarity, [{ memoryId: "m-1", similarity: 0.42, text: "old" }]);
-    });
-});
+// ============================================================================
+// auth
+// ============================================================================
 
 describe("Memory Debug API — auth", () => {
     it("returns 401 when the request is not authenticated (local-password mode)", async () => {
@@ -362,8 +391,8 @@ describe("Memory Debug API — auth", () => {
         });
         try {
             await app.agent.get("/v1/debug/memory-candidates").expect(401);
-            await app.agent.get("/v1/debug/memories?characterId=char-A").expect(401);
-            await app.agent.get("/v1/debug/memory-decisions").expect(401);
+            await app.agent.get("/v1/debug/memory-staging").expect(401);
+            await app.agent.get("/v1/debug/memory-retained?characterId=char-A").expect(401);
         } finally {
             app.cleanup();
         }

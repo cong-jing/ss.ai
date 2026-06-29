@@ -681,7 +681,6 @@ memory: {
   staging: {
     enabled: boolean; // default true
     candidateBatchLimit: number; // default 50
-    allowMissingEmbedding: boolean; // default false
     duplicate: {
       normalizedText: boolean; // default true
     };
@@ -715,7 +714,6 @@ Batch 3.5 需要写入 server config schema 和 config loader 的部分：
 
 - `memory.staging.enabled`
 - `memory.staging.candidateBatchLimit`
-- `memory.staging.allowMissingEmbedding`
 - `memory.staging.duplicate.normalizedText`
 - `memory.staging.similaritySampling.*`
 

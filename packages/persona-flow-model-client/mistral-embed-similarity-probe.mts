@@ -19,7 +19,7 @@ import {
     defaultMemoryDecisionPolicy,
     normalizeMemoryText,
     rankSimilarMemories,
-    type ActiveMemoryRecord,
+    type MemoryRetainedRecord,
 } from "@ss-ai/persona-flow";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -82,7 +82,7 @@ function resolveApiKey(): { apiKey: string; source: string } {
     throw new Error("Missing API key. Set apps/prompt-debug-cli/.apikey.yaml, .apikey.yaml, MISTRAL_API_KEY, or apps/server/config/config.local.json models['mistral.ai'].apiKey.");
 }
 
-function toMemoryRecord(text: string, vector: number[], index: number, responseModel: string): ActiveMemoryRecord {
+function toMemoryRecord(text: string, vector: number[], index: number, responseModel: string): MemoryRetainedRecord {
     const now = new Date().toISOString();
     return {
         id: `probe-memory-${index + 1}`,

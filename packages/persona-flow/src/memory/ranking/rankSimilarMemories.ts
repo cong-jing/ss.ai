@@ -1,4 +1,4 @@
-import type { ActiveMemoryRecord } from "../stores/activeMemoryStorePort.js";
+import type { MemoryEmbedding } from "../embedding/embeddingPorts.js";
 import {
     cosineSimilarity,
     emptyMemoryRankSkipBreakdown,
@@ -18,13 +18,22 @@ export interface RankSimilarMemoriesOptions {
     requireSignature?: EmbeddingSignature;
 }
 
-export interface RankedMemory {
-    memory: ActiveMemoryRecord;
+/**
+ * Minimal shape the ranker reads off each memory record. Genericised
+ * so the same helper can rank retained memories, staging rows, or
+ * any future record type that carries an optional embedding.
+ */
+export interface RankableMemory {
+    embedding?: MemoryEmbedding;
+}
+
+export interface RankedMemory<R extends RankableMemory = RankableMemory> {
+    memory: R;
     similarity: number;
 }
 
-export interface RankSimilarMemoriesResult {
-    ranked: RankedMemory[];
+export interface RankSimilarMemoriesResult<R extends RankableMemory = RankableMemory> {
+    ranked: RankedMemory<R>[];
     skipped: MemoryRankSkipBreakdown;
 }
 
@@ -63,11 +72,11 @@ export interface RankSimilarMemoriesResult {
  * that need a deterministic display order should sort again by
  * memory id.
  */
-export function rankSimilarMemories(
+export function rankSimilarMemories<R extends RankableMemory>(
     candidateVector: readonly number[],
-    memories: readonly ActiveMemoryRecord[],
+    memories: readonly R[],
     options: RankSimilarMemoriesOptions,
-): RankSimilarMemoriesResult {
+): RankSimilarMemoriesResult<R> {
     const skipped = emptyMemoryRankSkipBreakdown();
     if (!Array.isArray(candidateVector) || candidateVector.length === 0) {
         return { ranked: [], skipped };
@@ -77,7 +86,7 @@ export function rankSimilarMemories(
         return { ranked: [], skipped };
     }
 
-    const scored: RankedMemory[] = [];
+    const scored: RankedMemory<R>[] = [];
     for (const memory of memories) {
         const embedding = memory.embedding;
         if (!embedding) {

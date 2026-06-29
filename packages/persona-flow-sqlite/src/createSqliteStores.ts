@@ -8,8 +8,8 @@ import { SQLiteUserProfileStore } from "./db/SQLiteUserProfileStore.js";
 import { SQLiteUserPreferencesStore } from "./db/SQLiteUserPreferencesStore.js";
 import { SQLiteUserProviderCredentialStore } from "./db/SQLiteUserProviderCredentialStore.js";
 import { SQLiteMemoryCandidateStore } from "./db/SQLiteMemoryCandidateStore.js";
-import { SQLiteMemoryStore } from "./db/SQLiteMemoryStore.js";
-import { SQLiteMemoryDecisionStore } from "./db/SQLiteMemoryDecisionStore.js";
+import { SQLiteMemoryStagingStore } from "./db/SQLiteMemoryStagingStore.js";
+import { SQLiteMemoryRetainedStore } from "./db/SQLiteMemoryRetainedStore.js";
 import { CharacterDbRouter } from "./db/CharacterDbRouter.js";
 import type { DbLog } from "./db/openDatabase.js";
 
@@ -21,12 +21,10 @@ import type { DbLog } from "./db/openDatabase.js";
  *
  * Memory tables live in the core DB even when a `characterDbDir` is
  * supplied. Every memory is bound to one character world, but
- * keeping all three memory tables in one place lets the
- * brute-force similarity scan run a single query per
- * `(user, character, scope, type)` bucket and avoids per-character
- * DB plumbing for the memory subsystem. Sharding by character is a
- * Step 7+ optimization tracked in `docs/todo.md` rather than a
- * Batch 2/3 requirement.
+ * keeping the memory tables in one place lets the brute-force
+ * similarity scan run a single query per `(user, character, scope,
+ * type)` bucket and avoids per-character DB plumbing for the memory
+ * subsystem.
  */
 export function createSqliteStores(options: {
     db: DrizzleDb;
@@ -65,14 +63,13 @@ export function createSqliteStores(options: {
             ids: memoryIds,
             logger: memoryLogger,
         }),
-        memory: new SQLiteMemoryStore({
+        memoryStaging: new SQLiteMemoryStagingStore({
             db,
             ids: memoryIds,
             logger: memoryLogger,
         }),
-        memoryDecision: new SQLiteMemoryDecisionStore({
+        memoryRetained: new SQLiteMemoryRetainedStore({
             db,
-            ids: memoryIds,
             logger: memoryLogger,
         }),
     };

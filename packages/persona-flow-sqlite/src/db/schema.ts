@@ -163,16 +163,12 @@ export type NewAppSessionRow = typeof appSessions.$inferInsert;
 
 // ── memory_candidates ─────────────────────────────────────────────────────────
 // Per-turn candidates that the model proposed during a chat turn.
-// Lifecycle: pending -> embedded -> committed | ignored_* | needs_judge |
-// embedding_failed | commit_failed. See `MemoryCandidateStatus` in
-// `@ss-ai/persona-flow/memory`.
-//
-// `embedding_json` stores the full `MemoryEmbedding` shape (vector +
-// signature + createdAt) as JSON. We keep the vector in JSON for
-// Batch 2/3 because SQLite has no native vector type and the
-// candidate volume is bounded by chat turns; if we ever want ANN
-// search over candidates (we don't today), this row becomes a join
-// target rather than the storage format.
+// Lifecycle (Batch 3.5): pending -> processed | rejected_by_rule |
+// failed. (`processing` is reserved for the Batch 4 async worker
+// and is not currently written by inline processing.)
+// Downstream evidence — normalized text, embedding, occurrence
+// aggregation — now lives on `memory_staging` and is no longer
+// folded back onto the candidate row.
 export const memoryCandidates = sqliteTable("memory_candidates", {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
@@ -186,12 +182,11 @@ export const memoryCandidates = sqliteTable("memory_candidates", {
     scope: text("scope").notNull(),
     type: text("type").notNull(),
     text: text("text").notNull(),
-    normalizedText: text("normalized_text").notNull(),
     relatedEntitiesJson: text("related_entities_json").notNull().default("[]"),
     tagsJson: text("tags_json").notNull().default("[]"),
-    reason: text("reason"),
+    candidateReason: text("candidate_reason"),
     status: text("status").notNull(),
-    embeddingJson: text("embedding_json"),
+    statusReason: text("status_reason"),
     schemaVersion: integer("schema_version").notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -200,19 +195,14 @@ export const memoryCandidates = sqliteTable("memory_candidates", {
 export type MemoryCandidateRow = typeof memoryCandidates.$inferSelect;
 export type NewMemoryCandidateRow = typeof memoryCandidates.$inferInsert;
 
-// ── memories ─────────────────────────────────────────────────────────────────
-// Active long-term memories. Every row belongs to one character
-// world: `character_id` is required, and `scope` (`user`,
-// `character`, `relationship`, `conversation`, `world`) only
-// classifies the memory inside that world — it never lets a memory
-// cross characters. `findExactActiveMemory` and similarity scans
-// always filter by `(user_id, character_id, scope, type, status)`.
-//
-// `embedding_json` shape and rationale mirrors `memory_candidates`.
-// Brute-force cosine ranking happens in JS today; the row layout
-// only needs to keep enough metadata to validate the signature
-// before computing similarity.
-export const memories = sqliteTable("memories", {
+// ── memory_staging ────────────────────────────────────────────────────────────
+// Staging rows aggregate one or more candidates that say the same
+// thing. Created/updated by the Batch 3.5 staging processor.
+// `embedding_json` stores the full MemoryEmbedding shape (vector +
+// signature + createdAt) as JSON, mirroring how candidates used to
+// carry embeddings. The consolidation pass into `memory_retained`
+// ships in Batch 4.
+export const memoryStaging = sqliteTable("memory_staging", {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     characterId: text("character_id").notNull(),
@@ -222,10 +212,55 @@ export const memories = sqliteTable("memories", {
     normalizedText: text("normalized_text").notNull(),
     relatedEntitiesJson: text("related_entities_json").notNull().default("[]"),
     tagsJson: text("tags_json").notNull().default("[]"),
-    sourceCandidateId: text("source_candidate_id"),
-    sourceConversationId: text("source_conversation_id"),
-    sourceUserMessageId: text("source_user_message_id"),
-    sourceAssistantMessageId: text("source_assistant_message_id"),
+    status: text("status").notNull(),
+    statusReason: text("status_reason"),
+    occurrenceCount: integer("occurrence_count").notNull().default(1),
+    firstSeenAt: text("first_seen_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+    embeddingJson: text("embedding_json"),
+    schemaVersion: integer("schema_version").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+});
+
+export type MemoryStagingRow = typeof memoryStaging.$inferSelect;
+export type NewMemoryStagingRow = typeof memoryStaging.$inferInsert;
+
+// ── memory_staging_sources ────────────────────────────────────────────────────
+// Link rows: which candidates contributed evidence to which staging
+// row. Composite primary key on (memory_staging_id, candidate_id).
+// `candidate_id` is UNIQUE so a single candidate can only ever
+// contribute to one staging row — retries detect the existing link
+// and short-circuit instead of double-counting `occurrence_count`.
+export const memoryStagingSources = sqliteTable("memory_staging_sources", {
+    memoryStagingId: text("memory_staging_id").notNull(),
+    candidateId: text("candidate_id").notNull().unique(),
+    candidateSeq: integer("candidate_seq").notNull(),
+    createdAt: text("created_at").notNull(),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.memoryStagingId, t.candidateId] }),
+}));
+
+export type MemoryStagingSourceRow = typeof memoryStagingSources.$inferSelect;
+export type NewMemoryStagingSourceRow = typeof memoryStagingSources.$inferInsert;
+
+// ── memory_retained ───────────────────────────────────────────────────────────
+// Consolidated long-term memory. Batch 3.5 ships the empty table
+// + read-only port so the debug surface and storage adapter can be
+// wired now; the consolidation pass that writes into this table
+// lives in Batch 4. `source_staging_id` is the staging row this
+// memory was promoted from (null for manual / judge-driven insertions).
+export const memoryRetained = sqliteTable("memory_retained", {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    characterId: text("character_id").notNull(),
+    scope: text("scope").notNull(),
+    type: text("type").notNull(),
+    text: text("text").notNull(),
+    normalizedText: text("normalized_text").notNull(),
+    relatedEntitiesJson: text("related_entities_json").notNull().default("[]"),
+    tagsJson: text("tags_json").notNull().default("[]"),
+    sourceStagingId: text("source_staging_id"),
     status: text("status").notNull(),
     importance: real("importance").notNull(),
     embeddingJson: text("embedding_json"),
@@ -234,29 +269,5 @@ export const memories = sqliteTable("memories", {
     updatedAt: text("updated_at").notNull(),
 });
 
-export type MemoryRow = typeof memories.$inferSelect;
-export type NewMemoryRow = typeof memories.$inferInsert;
-
-// ── memory_decisions ──────────────────────────────────────────────────────────
-// Audit trail: one row per decision the commit service made for a
-// candidate. Includes the top-K similarity summary as JSON so we
-// can reproduce the reasoning without re-running embeddings.
-//
-// `memory_id` is set only for `decision = "create"`. `reason` is a
-// short token from `decisionPolicy.ts` (or an error message for
-// failure branches).
-export const memoryDecisions = sqliteTable("memory_decisions", {
-    id: text("id").primaryKey(),
-    candidateId: text("candidate_id").notNull(),
-    userId: text("user_id").notNull(),
-    characterId: text("character_id").notNull(),
-    decision: text("decision").notNull(),
-    memoryId: text("memory_id"),
-    reason: text("reason"),
-    similarityJson: text("similarity_json").notNull().default("[]"),
-    policyVersion: integer("policy_version").notNull(),
-    createdAt: text("created_at").notNull(),
-});
-
-export type MemoryDecisionRow = typeof memoryDecisions.$inferSelect;
-export type NewMemoryDecisionRow = typeof memoryDecisions.$inferInsert;
+export type MemoryRetainedRow = typeof memoryRetained.$inferSelect;
+export type NewMemoryRetainedRow = typeof memoryRetained.$inferInsert;

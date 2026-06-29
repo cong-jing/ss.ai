@@ -1,47 +1,47 @@
 import type {
-    ActiveMemoryRecord,
     AppendMemoryCandidatesInput,
-    AppendMemoryDecisionInput,
-    CreateMemoryInput,
-    FindExactActiveMemoryInput,
-    ListActiveMemoriesInput,
+    CreateMemoryStagingInput,
+    FindBySourceCandidateInput,
+    FindExactStagingInput,
+    IncrementMemoryStagingOccurrenceInput,
+    LinkStagingSourceInput,
     ListMemoryCandidatesInput,
-    ListMemoryDecisionsInput,
+    ListMemoryRetainedInput,
+    ListMemoryStagingInput,
+    ListPendingMemoryCandidatesInput,
     MemoryCandidateRecord,
     MemoryCandidateStore,
     MemoryClock,
-    MemoryDecisionKind,
-    MemoryDecisionRecord,
-    MemoryDecisionStore,
     MemoryEmbedInput,
     MemoryEmbedResult,
     MemoryEmbeddingProvider,
     MemoryIdGenerator,
     MemoryLogger,
-    MemoryStore,
-    SaveCandidateEmbeddingInput,
-    SaveMemoryEmbeddingInput,
+    MemoryRetainedRecord,
+    MemoryRetainedStore,
+    MemoryStagingRecord,
+    MemoryStagingSourceRecord,
+    MemoryStagingStore,
     UpdateMemoryCandidateStatusInput,
 } from "../../src/memory/index.js";
 import { MEMORY_SCHEMA_VERSION } from "../../src/memory/index.js";
 
 /**
- * In-memory fakes for the memory-write subsystem.
+ * In-memory fakes for the memory-write subsystem (Batch 3.5).
  *
- * Tests for `MemoryCandidateRecorder` and `MemoryCandidateProcessor` need
- * real `MemoryCandidateStore` / `MemoryStore` / `MemoryDecisionStore`
- * implementations that round-trip data the same way SQLite will. We
- * keep them in one helper file so:
- *  - test files stay focused on the assertions, not on rebuilding
- *    Maps and dummy `appendXxx` functions;
- *  - the recorder and the commit service can share fixtures (and any
- *    behavioural mismatch between fakes and the real SQLite store
- *    surfaces in one place).
+ * Tests for the recorder, staging processor, and pipeline service
+ * need a `MemoryCandidateStore` / `MemoryStagingStore` /
+ * `MemoryRetainedStore` triple that round-trips data the same way
+ * SQLite will. We keep them in one helper file so:
+ *  - test files stay focused on assertions, not on rebuilding Maps
+ *    and dummy `appendXxx` functions;
+ *  - any behavioural mismatch between fakes and the real SQLite
+ *    stores surfaces in one place.
  *
- * The fakes are intentionally small: no transactions, no concurrency
- * control, no JSON corruption guards. Production behaviour belongs in
- * the real SQLite stores; these fakes only need to be
- * faithful enough to drive the in-process pipeline.
+ * Intentionally small: no transactions, no concurrency control, no
+ * JSON corruption guards. Production behaviour belongs in the real
+ * SQLite stores; these fakes only need to be faithful enough to
+ * drive the in-process pipeline.
  */
 
 // ---------- Candidate store ----------
@@ -64,42 +64,27 @@ class InMemoryMemoryCandidateStore implements MemoryCandidateStore {
 
     /** Read-only escape hatch for tests that need to inspect state. */
     snapshotAll(): MemoryCandidateRecord[] {
-        return this.records.map((record) => ({ ...record }));
+        return this.records.map((record) => cloneCandidate(record));
     }
 
     /**
      * Test convenience: insert a pre-built candidate row, as if
-     * `appendCandidates` had already persisted it. Lets commit-service
-     * tests skip the recorder and assert directly against the
-     * candidate state machine.
+     * `appendCandidates` had already persisted it. Lets staging
+     * processor tests skip the recorder and assert directly against
+     * the candidate state machine.
      */
     seedCandidate(record: MemoryCandidateRecord): MemoryCandidateRecord {
-        const stored: MemoryCandidateRecord = {
-            ...record,
-            source: { ...record.source },
-            relatedEntities: [...record.relatedEntities],
-            tags: [...record.tags],
-            embedding: record.embedding
-                ? { ...record.embedding, vector: [...record.embedding.vector] }
-                : undefined,
-        };
+        const stored = cloneCandidate(record);
         this.records.push(stored);
-        return { ...stored };
+        return cloneCandidate(stored);
     }
 
     async appendCandidates(input: AppendMemoryCandidatesInput): Promise<MemoryCandidateRecord[]> {
         if (this.options.failOnAppend) throw this.options.failOnAppend;
-        if (input.candidates.length !== input.normalizedTexts.length) {
-            throw new Error(
-                `InMemoryMemoryCandidateStore: candidates.length (${input.candidates.length}) != normalizedTexts.length (${input.normalizedTexts.length})`,
-            );
-        }
         const turnKey = `${input.source.userId}:${input.source.assistantMessageId}`;
         const now = "2026-06-27T00:00:00.000Z";
         const created: MemoryCandidateRecord[] = [];
-        for (let i = 0; i < input.candidates.length; i += 1) {
-            const draft = input.candidates[i]!;
-            const normalized = input.normalizedTexts[i]!;
+        for (const draft of input.candidates) {
             const prevSeq = this.seqByTurn.get(turnKey) ?? -1;
             const seq = prevSeq + 1;
             this.seqByTurn.set(turnKey, seq);
@@ -110,17 +95,16 @@ class InMemoryMemoryCandidateStore implements MemoryCandidateStore {
                 scope: draft.scope,
                 type: draft.type,
                 text: draft.text,
-                normalizedText: normalized,
                 relatedEntities: draft.relatedEntities ? [...draft.relatedEntities] : [],
                 tags: draft.tags ? [...draft.tags] : [],
-                reason: draft.reason,
+                candidateReason: draft.reason,
                 status: "pending",
                 schemaVersion: MEMORY_SCHEMA_VERSION,
                 createdAt: now,
                 updatedAt: now,
             };
             this.records.push(record);
-            created.push({ ...record });
+            created.push(cloneCandidate(record));
         }
         return created;
     }
@@ -134,7 +118,21 @@ class InMemoryMemoryCandidateStore implements MemoryCandidateStore {
             .filter((r) => input.assistantMessageId === undefined || r.source.assistantMessageId === input.assistantMessageId)
             .filter((r) => statusFilter.length === 0 || statusFilter.includes(r.status))
             .slice(0, input.limit ?? Number.POSITIVE_INFINITY)
-            .map((r) => ({ ...r }));
+            .map((r) => cloneCandidate(r));
+    }
+
+    async listPendingCandidates(input: ListPendingMemoryCandidatesInput): Promise<MemoryCandidateRecord[]> {
+        return this.records
+            .filter((r) => r.source.userId === input.userId)
+            .filter((r) => r.source.characterId === input.characterId)
+            .filter((r) => r.status === "pending")
+            .slice()
+            .sort((a, b) => {
+                if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+                return a.seq - b.seq;
+            })
+            .slice(0, input.limit)
+            .map((r) => cloneCandidate(r));
     }
 
     async updateCandidateStatus(input: UpdateMemoryCandidateStatusInput): Promise<void> {
@@ -142,63 +140,87 @@ class InMemoryMemoryCandidateStore implements MemoryCandidateStore {
         if (!record) throw new Error(`unknown candidate ${input.candidateId}`);
         record.status = input.status;
         record.updatedAt = input.updatedAt;
-        if (input.reason !== undefined) {
-            // Reason lives on the decision row in the real schema; the
-            // fake keeps it on the candidate too for easier assertion.
-            record.reason = input.reason;
+        if (input.statusReason !== undefined) {
+            record.statusReason = input.statusReason || undefined;
         }
     }
-
-    async saveCandidateEmbedding(input: SaveCandidateEmbeddingInput): Promise<void> {
-        const record = this.records.find((r) => r.id === input.candidateId);
-        if (!record) throw new Error(`unknown candidate ${input.candidateId}`);
-        record.embedding = {
-            ...input.embedding,
-            vector: [...input.embedding.vector],
-        };
-        record.updatedAt = input.updatedAt;
-        record.status = "embedded";
-    }
 }
 
-// ---------- Memory store ----------
+function cloneCandidate(record: MemoryCandidateRecord): MemoryCandidateRecord {
+    return {
+        ...record,
+        source: { ...record.source },
+        relatedEntities: [...record.relatedEntities],
+        tags: [...record.tags],
+    };
+}
 
-interface MemoryStoreOptions {
-    /** When set, `createMemory` throws this error instead of persisting. */
+// ---------- Staging store ----------
+
+interface MemoryStagingStoreOptions {
+    /** When set, `create` throws this error instead of persisting. */
     failOnCreate?: Error;
-    /** When set, `listActiveMemories` throws this error. */
-    failOnList?: Error;
 }
 
-class InMemoryMemoryStore implements MemoryStore {
-    private readonly records: ActiveMemoryRecord[] = [];
+class InMemoryMemoryStagingStore implements MemoryStagingStore {
+    private readonly records: MemoryStagingRecord[] = [];
+    private readonly sources: MemoryStagingSourceRecord[] = [];
     private nextId = 1;
 
-    constructor(private readonly options: MemoryStoreOptions = {}) { }
+    constructor(private readonly options: MemoryStagingStoreOptions = {}) { }
 
-    snapshotAll(): ActiveMemoryRecord[] {
-        return this.records.map((record) => ({ ...record }));
+    snapshotAll(): MemoryStagingRecord[] {
+        return this.records.map((r) => cloneStaging(r));
     }
 
-    /** Test convenience: seed the store with pre-built memories. */
-    seedMemory(record: Omit<ActiveMemoryRecord, "id" | "schemaVersion"> & { id?: string }): ActiveMemoryRecord {
-        const id = record.id ?? `mem-${this.nextId++}`;
-        const stored: ActiveMemoryRecord = {
-            ...record,
-            id,
-            schemaVersion: MEMORY_SCHEMA_VERSION,
-            relatedEntities: [...record.relatedEntities],
-            tags: [...record.tags],
-            embedding: record.embedding ? { ...record.embedding, vector: [...record.embedding.vector] } : undefined,
-        };
+    snapshotSources(): MemoryStagingSourceRecord[] {
+        return this.sources.map((s) => ({ ...s }));
+    }
+
+    seedStaging(record: MemoryStagingRecord, sources: MemoryStagingSourceRecord[] = []): MemoryStagingRecord {
+        const stored = cloneStaging(record);
         this.records.push(stored);
-        return { ...stored };
+        for (const link of sources) {
+            this.sources.push({ ...link });
+        }
+        return cloneStaging(stored);
     }
 
-    async createMemory(input: CreateMemoryInput): Promise<ActiveMemoryRecord> {
+    async findBySourceCandidate(input: FindBySourceCandidateInput): Promise<MemoryStagingRecord | undefined> {
+        const link = this.sources.find((s) => s.candidateId === input.candidateId);
+        if (!link) return undefined;
+        const staging = this.records.find((r) => r.id === link.memoryStagingId);
+        if (!staging) return undefined;
+        return cloneStaging(staging);
+    }
+
+    async findExact(input: FindExactStagingInput): Promise<MemoryStagingRecord | undefined> {
+        const found = this.records
+            .filter((r) => r.userId === input.userId)
+            .filter((r) => r.characterId === input.characterId)
+            .filter((r) => r.scope === input.scope)
+            .filter((r) => r.type === input.type)
+            .filter((r) => r.normalizedText === input.normalizedText)
+            .slice()
+            .sort((a, b) => {
+                if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+                return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+            })[0];
+        return found ? cloneStaging(found) : undefined;
+    }
+
+    async create(input: CreateMemoryStagingInput): Promise<MemoryStagingRecord> {
         if (this.options.failOnCreate) throw this.options.failOnCreate;
-        const record: ActiveMemoryRecord = {
-            id: `mem-${this.nextId++}`,
+        // Mirror the SQLite UNIQUE(candidate_id) constraint on the
+        // sources table.
+        if (this.sources.some((s) => s.candidateId === input.initialSource.candidateId)) {
+            throw new Error(
+                `InMemoryMemoryStagingStore.create: candidate ${input.initialSource.candidateId} already linked`,
+            );
+        }
+        const id = `staging-${this.nextId++}`;
+        const record: MemoryStagingRecord = {
+            id,
             userId: input.userId,
             characterId: input.characterId,
             scope: input.scope,
@@ -207,31 +229,117 @@ class InMemoryMemoryStore implements MemoryStore {
             normalizedText: input.normalizedText,
             relatedEntities: [...input.relatedEntities],
             tags: [...input.tags],
-            sourceCandidateId: input.sourceCandidateId,
-            sourceConversationId: input.sourceConversationId,
-            sourceUserMessageId: input.sourceUserMessageId,
-            sourceAssistantMessageId: input.sourceAssistantMessageId,
-            status: "active",
-            importance: input.importance,
+            status: input.status,
+            statusReason: input.statusReason,
+            occurrenceCount: 1,
+            firstSeenAt: input.firstSeenAt,
+            lastSeenAt: input.now,
             embedding: input.embedding ? { ...input.embedding, vector: [...input.embedding.vector] } : undefined,
             schemaVersion: MEMORY_SCHEMA_VERSION,
-            createdAt: input.createdAt,
-            updatedAt: input.updatedAt,
+            createdAt: input.now,
+            updatedAt: input.now,
         };
         this.records.push(record);
-        return { ...record };
+        this.sources.push({
+            memoryStagingId: id,
+            candidateId: input.initialSource.candidateId,
+            candidateSeq: input.initialSource.candidateSeq,
+            createdAt: input.now,
+        });
+        return cloneStaging(record);
     }
 
-    async listActiveMemories(input: ListActiveMemoriesInput): Promise<ActiveMemoryRecord[]> {
-        if (this.options.failOnList) throw this.options.failOnList;
+    async linkSource(input: LinkStagingSourceInput): Promise<MemoryStagingSourceRecord> {
+        if (this.sources.some((s) => s.candidateId === input.candidateId)) {
+            throw new Error(
+                `InMemoryMemoryStagingStore.linkSource: candidate ${input.candidateId} already linked`,
+            );
+        }
+        const link: MemoryStagingSourceRecord = {
+            memoryStagingId: input.memoryStagingId,
+            candidateId: input.candidateId,
+            candidateSeq: input.candidateSeq,
+            createdAt: input.createdAt,
+        };
+        this.sources.push(link);
+        return { ...link };
+    }
+
+    async incrementOccurrence(input: IncrementMemoryStagingOccurrenceInput): Promise<MemoryStagingRecord> {
+        const record = this.records.find((r) => r.id === input.memoryStagingId);
+        if (!record) throw new Error(`unknown staging row ${input.memoryStagingId}`);
+        record.occurrenceCount += 1;
+        record.lastSeenAt = input.lastSeenAt;
+        record.updatedAt = input.updatedAt;
+        return cloneStaging(record);
+    }
+
+    async list(input: ListMemoryStagingInput): Promise<MemoryStagingRecord[]> {
         const scopeFilter = toArray(input.scope);
         const typeFilter = toArray(input.type);
-        const statusFilter = toArray(input.status ?? "active");
-        // Mirror the port contract: every memory is bound to one
-        // character world, so always filter by `characterId` and
-        // sort deterministically (updatedAt DESC, createdAt DESC,
-        // id ASC) before any truncation so this fake matches the
-        // SQLite store.
+        const statusFilter = toArray(input.status);
+
+        let candidates = this.records.slice();
+        if (input.sourceCandidateId !== undefined) {
+            const link = this.sources.find((s) => s.candidateId === input.sourceCandidateId);
+            if (!link) return [];
+            candidates = candidates.filter((r) => r.id === link.memoryStagingId);
+        }
+        return candidates
+            .filter((r) => r.userId === input.userId)
+            .filter((r) => input.characterId === undefined || r.characterId === input.characterId)
+            .filter((r) => scopeFilter.length === 0 || scopeFilter.includes(r.scope))
+            .filter((r) => typeFilter.length === 0 || typeFilter.includes(r.type))
+            .filter((r) => statusFilter.length === 0 || statusFilter.includes(r.status))
+            .slice()
+            .sort((a, b) => {
+                if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1;
+                if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
+                return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+            })
+            .slice(0, input.limit ?? Number.POSITIVE_INFINITY)
+            .map((r) => cloneStaging(r));
+    }
+}
+
+function cloneStaging(record: MemoryStagingRecord): MemoryStagingRecord {
+    return {
+        ...record,
+        relatedEntities: [...record.relatedEntities],
+        tags: [...record.tags],
+        embedding: record.embedding ? { ...record.embedding, vector: [...record.embedding.vector] } : undefined,
+    };
+}
+
+// ---------- Retained store (Batch 4 placeholder) ----------
+
+class InMemoryMemoryRetainedStore implements MemoryRetainedStore {
+    private readonly records: MemoryRetainedRecord[] = [];
+    private nextId = 1;
+
+    snapshotAll(): MemoryRetainedRecord[] {
+        return this.records.map((r) => cloneRetained(r));
+    }
+
+    /** Test convenience: seed pre-built retained memories. */
+    seedRetained(record: Omit<MemoryRetainedRecord, "id" | "schemaVersion"> & { id?: string }): MemoryRetainedRecord {
+        const id = record.id ?? `mem-${this.nextId++}`;
+        const stored: MemoryRetainedRecord = {
+            ...record,
+            id,
+            schemaVersion: MEMORY_SCHEMA_VERSION,
+            relatedEntities: [...record.relatedEntities],
+            tags: [...record.tags],
+            embedding: record.embedding ? { ...record.embedding, vector: [...record.embedding.vector] } : undefined,
+        };
+        this.records.push(stored);
+        return cloneRetained(stored);
+    }
+
+    async list(input: ListMemoryRetainedInput): Promise<MemoryRetainedRecord[]> {
+        const scopeFilter = toArray(input.scope);
+        const typeFilter = toArray(input.type);
+        const statusFilter = toArray(input.status);
         return this.records
             .filter((r) => r.userId === input.userId)
             .filter((r) => r.characterId === input.characterId)
@@ -245,69 +353,17 @@ class InMemoryMemoryStore implements MemoryStore {
                 return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
             })
             .slice(0, input.limit ?? Number.POSITIVE_INFINITY)
-            .map((r) => ({ ...r, embedding: r.embedding ? { ...r.embedding, vector: [...r.embedding.vector] } : undefined }));
-    }
-
-    async findExactActiveMemory(input: FindExactActiveMemoryInput): Promise<ActiveMemoryRecord | undefined> {
-        const found = this.records.find((r) =>
-            r.userId === input.userId
-            && r.characterId === input.characterId
-            && r.scope === input.scope
-            && r.type === input.type
-            && r.status === "active"
-            && r.normalizedText === input.normalizedText,
-        );
-        return found ? { ...found } : undefined;
-    }
-
-    async saveMemoryEmbedding(input: SaveMemoryEmbeddingInput): Promise<void> {
-        const record = this.records.find((r) => r.id === input.memoryId);
-        if (!record) throw new Error(`unknown memory ${input.memoryId}`);
-        record.embedding = { ...input.embedding, vector: [...input.embedding.vector] };
-        record.updatedAt = input.updatedAt;
+            .map((r) => cloneRetained(r));
     }
 }
 
-// ---------- Decision store ----------
-
-class InMemoryMemoryDecisionStore implements MemoryDecisionStore {
-    private readonly records: MemoryDecisionRecord[] = [];
-    private nextId = 1;
-
-    snapshotAll(): MemoryDecisionRecord[] {
-        return this.records.map((record) => ({
-            ...record,
-            similarity: record.similarity.map((entry) => ({ ...entry })),
-        }));
-    }
-
-    async appendDecision(input: AppendMemoryDecisionInput): Promise<MemoryDecisionRecord> {
-        const record: MemoryDecisionRecord = {
-            id: `dec-${this.nextId++}`,
-            candidateId: input.candidateId,
-            userId: input.userId,
-            characterId: input.characterId,
-            decision: input.decision,
-            memoryId: input.memoryId,
-            reason: input.reason,
-            similarity: input.similarity.map((entry) => ({ ...entry })),
-            policyVersion: input.policyVersion,
-            createdAt: input.createdAt,
-        };
-        this.records.push(record);
-        return { ...record, similarity: record.similarity.map((entry) => ({ ...entry })) };
-    }
-
-    async listDecisions(input: ListMemoryDecisionsInput): Promise<MemoryDecisionRecord[]> {
-        const decisionFilter = toArray<MemoryDecisionKind>(input.decision);
-        return this.records
-            .filter((r) => r.userId === input.userId)
-            .filter((r) => input.characterId === undefined || r.characterId === input.characterId)
-            .filter((r) => input.candidateId === undefined || r.candidateId === input.candidateId)
-            .filter((r) => decisionFilter.length === 0 || decisionFilter.includes(r.decision))
-            .slice(0, input.limit ?? Number.POSITIVE_INFINITY)
-            .map((r) => ({ ...r, similarity: r.similarity.map((entry) => ({ ...entry })) }));
-    }
+function cloneRetained(record: MemoryRetainedRecord): MemoryRetainedRecord {
+    return {
+        ...record,
+        relatedEntities: [...record.relatedEntities],
+        tags: [...record.tags],
+        embedding: record.embedding ? { ...record.embedding, vector: [...record.embedding.vector] } : undefined,
+    };
 }
 
 // ---------- Embedding provider ----------
@@ -336,7 +392,7 @@ interface FakeEmbeddingProviderOptions {
  *
  * The default `vectorFor` produces a positional bag-of-char vector:
  * each cell is `sum_over_i 1 if (charCode_i * (i+1)) % dim == cell`.
- * Identical texts 鈫?identical vectors (cosine = 1, so the
+ * Identical texts -> identical vectors (cosine = 1, so the
  * `needs_judge` branch fires reliably), while two different ASCII
  * English strings end up in mostly disjoint cells (cosine well
  * below `needsJudgeThreshold`, so `create` fires reliably). Real
@@ -430,18 +486,18 @@ export function makeSequentialIds(prefix: string = "id"): MemoryIdGenerator {
 
 export interface InMemoryMemoryStores {
     candidateStore: InMemoryMemoryCandidateStore;
-    memoryStore: InMemoryMemoryStore;
-    decisionStore: InMemoryMemoryDecisionStore;
+    stagingStore: InMemoryMemoryStagingStore;
+    retainedStore: InMemoryMemoryRetainedStore;
 }
 
 export function makeInMemoryMemoryStores(options: {
     candidateStore?: MemoryCandidateStoreOptions;
-    memoryStore?: MemoryStoreOptions;
+    stagingStore?: MemoryStagingStoreOptions;
 } = {}): InMemoryMemoryStores {
     return {
         candidateStore: new InMemoryMemoryCandidateStore(options.candidateStore),
-        memoryStore: new InMemoryMemoryStore(options.memoryStore),
-        decisionStore: new InMemoryMemoryDecisionStore(),
+        stagingStore: new InMemoryMemoryStagingStore(options.stagingStore),
+        retainedStore: new InMemoryMemoryRetainedStore(),
     };
 }
 

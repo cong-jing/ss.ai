@@ -1,53 +1,52 @@
 import {
-    ApiListMemories,
     ApiListMemoryCandidates,
-    ApiListMemoryDecisions,
+    ApiListMemoryRetained,
+    ApiListMemoryStaging,
     MEMORY_CANDIDATE_TYPES,
     MEMORY_SCOPES,
-    type ActiveMemoryInfo,
-    type ListMemoriesResponse,
     type ListMemoryCandidatesResponse,
-    type ListMemoryDecisionsResponse,
+    type ListMemoryRetainedResponse,
+    type ListMemoryStagingResponse,
     type MemoryCandidateInfo,
     type MemoryCandidateStatus,
     type MemoryCandidateType,
-    type MemoryDecisionInfo,
-    type MemoryDecisionKind,
     type MemoryEmbeddingSignature,
+    type MemoryRetainedInfo,
+    type MemoryRetainedStatus,
     type MemoryScope,
-    type MemoryStatus,
+    type MemoryStagingInfo,
+    type MemoryStagingStatus,
 } from "@ss-ai/contracts";
 import type {
-    ActiveMemoryRecord,
     MemoryCandidateRecord,
-    MemoryDecisionRecord,
     MemoryEmbedding,
+    MemoryRetainedRecord,
+    MemoryStagingRecord,
 } from "@ss-ai/persona-flow";
 import { registerApi } from "../registerApi.js";
 import { AppHttpError, getAppErrorStatusCode } from "../errors/appHttpError.js";
 import { resolveRequestUserId, toErrorResponse, type HttpApiContext } from "./apiContext.js";
 
+// Allowlists for query-string enums. Mirrors the Batch 3.5 lifecycle
+// constants in `@ss-ai/persona-flow`. Declared as `as const satisfies …`
+// so the TS compiler enforces the mirror at the type level.
 const MEMORY_CANDIDATE_STATUSES = [
     "pending",
-    "embedded",
-    "committed",
-    "ignored_duplicate",
-    "ignored_low_value",
-    "needs_judge",
-    "embedding_failed",
-    "commit_failed",
+    "processing",
+    "processed",
+    "rejected_by_rule",
+    "failed",
 ] as const satisfies readonly MemoryCandidateStatus[];
 
-const MEMORY_STATUSES = ["active", "archived"] as const satisfies readonly MemoryStatus[];
+const MEMORY_STAGING_STATUSES = [
+    "pending",
+    "processed",
+    "archived",
+    "forgotten",
+    "failed",
+] as const satisfies readonly MemoryStagingStatus[];
 
-const MEMORY_DECISION_KINDS = [
-    "create",
-    "ignore_duplicate",
-    "ignore_low_value",
-    "needs_judge",
-    "embedding_failed",
-    "error",
-] as const satisfies readonly MemoryDecisionKind[];
+const MEMORY_RETAINED_STATUSES = ["active", "archived"] as const satisfies readonly MemoryRetainedStatus[];
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
@@ -153,19 +152,18 @@ function toCandidateInfo(record: MemoryCandidateRecord): MemoryCandidateInfo {
         scope: record.scope,
         type: record.type,
         text: record.text,
-        normalizedText: record.normalizedText,
         relatedEntities: [...record.relatedEntities],
         tags: [...record.tags],
-        reason: record.reason ?? null,
+        candidateReason: record.candidateReason ?? null,
         status: record.status,
-        embedding: toEmbeddingSignature(record.embedding),
+        statusReason: record.statusReason ?? null,
         schemaVersion: record.schemaVersion,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
     };
 }
 
-function toMemoryInfo(record: ActiveMemoryRecord): ActiveMemoryInfo {
+function toStagingInfo(record: MemoryStagingRecord): MemoryStagingInfo {
     return {
         id: record.id,
         userId: record.userId,
@@ -176,12 +174,11 @@ function toMemoryInfo(record: ActiveMemoryRecord): ActiveMemoryInfo {
         normalizedText: record.normalizedText,
         relatedEntities: [...record.relatedEntities],
         tags: [...record.tags],
-        sourceCandidateId: record.sourceCandidateId ?? null,
-        sourceConversationId: record.sourceConversationId ?? null,
-        sourceUserMessageId: record.sourceUserMessageId ?? null,
-        sourceAssistantMessageId: record.sourceAssistantMessageId ?? null,
         status: record.status,
-        importance: record.importance,
+        statusReason: record.statusReason ?? null,
+        occurrenceCount: record.occurrenceCount,
+        firstSeenAt: record.firstSeenAt,
+        lastSeenAt: record.lastSeenAt,
         embedding: toEmbeddingSignature(record.embedding),
         schemaVersion: record.schemaVersion,
         createdAt: record.createdAt,
@@ -189,18 +186,23 @@ function toMemoryInfo(record: ActiveMemoryRecord): ActiveMemoryInfo {
     };
 }
 
-function toDecisionInfo(record: MemoryDecisionRecord): MemoryDecisionInfo {
+function toRetainedInfo(record: MemoryRetainedRecord): MemoryRetainedInfo {
     return {
         id: record.id,
-        candidateId: record.candidateId,
         userId: record.userId,
         characterId: record.characterId,
-        decision: record.decision,
-        memoryId: record.memoryId ?? null,
-        reason: record.reason ?? null,
-        similarity: record.similarity.map((s) => ({ ...s })),
-        policyVersion: record.policyVersion,
+        scope: record.scope,
+        type: record.type,
+        text: record.text,
+        normalizedText: record.normalizedText,
+        relatedEntities: [...record.relatedEntities],
+        tags: [...record.tags],
+        status: record.status,
+        importance: record.importance,
+        embedding: toEmbeddingSignature(record.embedding),
+        schemaVersion: record.schemaVersion,
         createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
     };
 }
 
@@ -225,15 +227,33 @@ export function registerMemoryDebugRoutes(context: HttpApiContext): void {
         handleError: (error) => ({ status: getAppErrorStatusCode(error, 400), body: toErrorResponse(error) }),
     });
 
-    // GET /v1/debug/memories
-    registerApi(context.app, ApiListMemories, {
-        handleRequest: async (req): Promise<ListMemoriesResponse> => {
+    // GET /v1/debug/memory-staging
+    registerApi(context.app, ApiListMemoryStaging, {
+        handleRequest: async (req): Promise<ListMemoryStagingResponse> => {
+            const userId = await resolveRequestUserId(req, context);
+            const rows = await context.stores.memoryStaging.list({
+                userId,
+                characterId: parseString(req.query.characterId),
+                scope: parseEnumList<MemoryScope>(req.query.scope, MEMORY_SCOPES, "scope"),
+                type: parseEnumList<MemoryCandidateType>(req.query.type, MEMORY_CANDIDATE_TYPES, "type"),
+                status: parseEnumList(req.query.status, MEMORY_STAGING_STATUSES, "status"),
+                sourceCandidateId: parseString(req.query.sourceCandidateId),
+                limit: parseLimit(req.query.limit),
+            });
+            return { staging: rows.map(toStagingInfo) };
+        },
+        handleError: (error) => ({ status: getAppErrorStatusCode(error, 400), body: toErrorResponse(error) }),
+    });
+
+    // GET /v1/debug/memory-retained
+    registerApi(context.app, ApiListMemoryRetained, {
+        handleRequest: async (req): Promise<ListMemoryRetainedResponse> => {
             const userId = await resolveRequestUserId(req, context);
             const characterId = parseString(req.query.characterId);
-            // Every memory is bound to one character world. Without
-            // `characterId` the port would not have a bucket to scan
-            // and the response would be meaningless, so we fail fast
-            // with 400 instead of silently returning [].
+            // Every retained memory is bound to one character world.
+            // Without `characterId` the port would not have a bucket
+            // to scan and the response would be meaningless, so we
+            // fail fast with 400 instead of silently returning [].
             if (!characterId) {
                 throw new AppHttpError(
                     400,
@@ -241,35 +261,19 @@ export function registerMemoryDebugRoutes(context: HttpApiContext): void {
                     "characterId is required",
                 );
             }
-            const rows = await context.stores.memory.listActiveMemories({
+            const rows = await context.stores.memoryRetained.list({
                 userId,
                 characterId,
                 scope: parseEnumList<MemoryScope>(req.query.scope, MEMORY_SCOPES, "scope"),
                 type: parseEnumList<MemoryCandidateType>(req.query.type, MEMORY_CANDIDATE_TYPES, "type"),
                 // Debug API defaults to active-only so an unguarded
                 // GET doesn't accidentally surface archived rows.
-                // The underlying SQLite store has no implicit default,
-                // so we make the policy explicit at the route layer.
-                status: parseEnumList(req.query.status, MEMORY_STATUSES, "status") ?? ["active"],
+                // The underlying store has no implicit default, so we
+                // make the policy explicit at the route layer.
+                status: parseEnumList(req.query.status, MEMORY_RETAINED_STATUSES, "status") ?? ["active"],
                 limit: parseLimit(req.query.limit),
             });
-            return { memories: rows.map(toMemoryInfo) };
-        },
-        handleError: (error) => ({ status: getAppErrorStatusCode(error, 400), body: toErrorResponse(error) }),
-    });
-
-    // GET /v1/debug/memory-decisions
-    registerApi(context.app, ApiListMemoryDecisions, {
-        handleRequest: async (req): Promise<ListMemoryDecisionsResponse> => {
-            const userId = await resolveRequestUserId(req, context);
-            const rows = await context.stores.memoryDecision.listDecisions({
-                userId,
-                characterId: parseString(req.query.characterId),
-                candidateId: parseString(req.query.candidateId),
-                decision: parseEnumList(req.query.decision, MEMORY_DECISION_KINDS, "decision"),
-                limit: parseLimit(req.query.limit),
-            });
-            return { decisions: rows.map(toDecisionInfo) };
+            return { retained: rows.map(toRetainedInfo) };
         },
         handleError: (error) => ({ status: getAppErrorStatusCode(error, 400), body: toErrorResponse(error) }),
     });

@@ -1,4 +1,5 @@
 import type { MemoryLogger } from "../types.js";
+import type { MemoryCandidateType, MemoryScope } from "@ss-ai/contracts";
 import type { MemorySettings } from "../settings.js";
 import { MEMORY_PIPELINE_LOG_EVENTS, type MemoryPipelineLogEvent } from "./memoryPipelineLogEvents.js";
 
@@ -215,9 +216,24 @@ export interface EmbeddingCompletedPayload {
     version: number;
 }
 
+/**
+ * Warning-level payload for `memory.pipeline.embedding_failed`.
+ *
+ * Carries enough context to triage "why did this turn lose memory
+ * staging" without cross-referencing the candidate row: who the
+ * user/character was, which scope/type the candidate fell into,
+ * and the provider error message. The candidate row itself is
+ * marked `failed/embedding_failed` so the log + the DB row
+ * triangulate together.
+ */
 export interface EmbeddingFailedPayload {
     candidateId: string;
-    error: string;
+    userId: string;
+    characterId: string;
+    scope: MemoryScope;
+    type: MemoryCandidateType;
+    /** Provider error message, flattened to a string at the step boundary. */
+    reason: string;
 }
 
 export interface ActiveMemoriesFetchedPayload {

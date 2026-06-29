@@ -358,8 +358,8 @@ export function createTestFixture(): PersonaFlowTestFixture {
         userPreferences,
         providerCredential,
         memoryCandidate: memoryStores.candidateStore,
-        memory: memoryStores.memoryStore,
-        memoryDecision: memoryStores.decisionStore,
+        memoryStaging: memoryStores.stagingStore,
+        memoryRetained: memoryStores.retainedStore,
     };
 
     return {

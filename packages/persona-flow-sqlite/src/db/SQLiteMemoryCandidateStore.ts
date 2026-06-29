@@ -4,6 +4,7 @@ import type { DrizzleDb } from "./openDatabase.js";
 import type {
     AppendMemoryCandidatesInput,
     ListMemoryCandidatesInput,
+    ListPendingMemoryCandidatesInput,
     MemoryCandidateRecord,
     MemoryCandidateStatus,
     MemoryCandidateStore,
@@ -11,26 +12,24 @@ import type {
     MemoryEmbedding,
     MemoryIdGenerator,
     MemoryLogger,
-    SaveCandidateEmbeddingInput,
     UpdateMemoryCandidateStatusInput,
 } from "@ss-ai/persona-flow";
 
 /**
  * SQLite-backed implementation of {@link MemoryCandidateStore}.
  *
- * Persists per-turn memory candidates with their normalized text and,
- * once embedded, their full {@link MemoryEmbedding} blob (vector +
- * provider/model/dim/version + createdAt) in a single TEXT column
- * encoded as JSON. We keep the vector in JSON for Batch 2/3 because
- * SQLite has no native vector type and the candidate volume is
- * bounded by chat turns. The column moves to a dedicated table or a
- * vector engine later if ANN search becomes a real requirement.
+ * Batch 3.5: candidate rows are pure intake. Normalized text,
+ * embeddings, and duplicate aggregation live on `memory_staging`
+ * instead of being folded back here. Status moves from `pending` to
+ * one of `processed | rejected_by_rule | failed` driven by
+ * {@link MemoryStagingProcessor}. (`processing` is reserved for the
+ * Batch 4 async worker and is not yet written by inline processing.)
  *
  * Failure-mode invariants:
- *  - JSON parsing failures on read are caught per row and logged via
- *    `logger.warn`; the offending row is returned without an
- *    embedding so the commit service routes it through the
- *    "no-embedding skip" path rather than crashing the chat turn.
+ *  - JSON parsing failures on read are caught per row and logged
+ *    via `logger.warn`; the offending row is returned with the
+ *    affected list defaulted to `[]` rather than crashing the read
+ *    path.
  *  - Multi-row `appendCandidates` runs inside a single sqlite
  *    transaction so a `seq` collision (very unlikely; we own the
  *    counter externally) never leaves partial state behind.
@@ -55,12 +54,6 @@ export class SQLiteMemoryCandidateStore implements MemoryCandidateStore {
 
     async appendCandidates(input: AppendMemoryCandidatesInput): Promise<MemoryCandidateRecord[]> {
         if (input.candidates.length === 0) return [];
-        if (input.candidates.length !== input.normalizedTexts.length) {
-            throw new Error(
-                `SQLiteMemoryCandidateStore.appendCandidates: candidates.length (${input.candidates.length}) `
-                + `!= normalizedTexts.length (${input.normalizedTexts.length})`,
-            );
-        }
 
         // `seq` is monotonically increasing per (user, conversation,
         // assistantMessageId) bucket so two concurrent turns on the
@@ -78,7 +71,6 @@ export class SQLiteMemoryCandidateStore implements MemoryCandidateStore {
 
         for (let i = 0; i < input.candidates.length; i += 1) {
             const draft = input.candidates[i]!;
-            const normalized = input.normalizedTexts[i]!;
             const id = this.ids.randomId();
             const seq = baseSeq + i;
             const status: MemoryCandidateStatus = "pending";
@@ -96,12 +88,11 @@ export class SQLiteMemoryCandidateStore implements MemoryCandidateStore {
                 scope: draft.scope,
                 type: draft.type,
                 text: draft.text,
-                normalizedText: normalized,
                 relatedEntitiesJson: JSON.stringify(draft.relatedEntities ?? []),
                 tagsJson: JSON.stringify(draft.tags ?? []),
-                reason: draft.reason ?? null,
+                candidateReason: draft.reason ?? null,
                 status,
-                embeddingJson: null,
+                statusReason: null,
                 schemaVersion,
                 createdAt: now,
                 updatedAt: now,
@@ -114,10 +105,9 @@ export class SQLiteMemoryCandidateStore implements MemoryCandidateStore {
                 scope: draft.scope,
                 type: draft.type,
                 text: draft.text,
-                normalizedText: normalized,
                 relatedEntities: draft.relatedEntities ? [...draft.relatedEntities] : [],
                 tags: draft.tags ? [...draft.tags] : [],
-                reason: draft.reason,
+                candidateReason: draft.reason,
                 status,
                 schemaVersion,
                 createdAt: now,
@@ -169,34 +159,39 @@ export class SQLiteMemoryCandidateStore implements MemoryCandidateStore {
         return rows.map((row) => this.rowToRecord(row));
     }
 
+    async listPendingCandidates(input: ListPendingMemoryCandidatesInput): Promise<MemoryCandidateRecord[]> {
+        // Stable batch order so retried workers see the same rows in
+        // the same order. `created_at` then `seq` matches the
+        // composite index `idx_memory_candidates_user_character_status_created`.
+        const rows = await this.db
+            .select()
+            .from(memoryCandidates)
+            .where(and(
+                eq(memoryCandidates.userId, input.userId),
+                eq(memoryCandidates.characterId, input.characterId),
+                eq(memoryCandidates.status, "pending"),
+            ))
+            .orderBy(asc(memoryCandidates.createdAt), asc(memoryCandidates.seq))
+            .limit(input.limit);
+        return rows.map((row) => this.rowToRecord(row));
+    }
+
     async updateCandidateStatus(input: UpdateMemoryCandidateStatusInput): Promise<void> {
         const patch: Partial<MemoryCandidateRow> = {
             status: input.status,
             updatedAt: input.updatedAt,
         };
-        // `reason` is sticky: callers either set it explicitly on a
-        // failure transition or leave it untouched. We forward
+        // `statusReason` is sticky: callers either set it explicitly
+        // on a transition or leave it untouched. We forward
         // `undefined` as "no change" and an empty string as "clear",
-        // matching the in-memory fake's behaviour so commit-service
-        // tests cover both implementations identically.
-        if (input.reason !== undefined) {
-            patch.reason = input.reason || null;
+        // matching the in-memory fake's behaviour so processor tests
+        // cover both implementations identically.
+        if (input.statusReason !== undefined) {
+            patch.statusReason = input.statusReason || null;
         }
         await this.db
             .update(memoryCandidates)
             .set(patch)
-            .where(eq(memoryCandidates.id, input.candidateId));
-    }
-
-    async saveCandidateEmbedding(input: SaveCandidateEmbeddingInput): Promise<void> {
-        const embeddingJson = JSON.stringify(input.embedding);
-        await this.db
-            .update(memoryCandidates)
-            .set({
-                embeddingJson,
-                status: "embedded",
-                updatedAt: input.updatedAt,
-            })
             .where(eq(memoryCandidates.id, input.candidateId));
     }
 
@@ -222,7 +217,6 @@ export class SQLiteMemoryCandidateStore implements MemoryCandidateStore {
     private rowToRecord(row: MemoryCandidateRow): MemoryCandidateRecord {
         const relatedEntities = parseJsonArray(row.relatedEntitiesJson, this.logger, "memory_candidates.related_entities_json", row.id);
         const tags = parseJsonArray(row.tagsJson, this.logger, "memory_candidates.tags_json", row.id);
-        const embedding = parseEmbeddingJson(row.embeddingJson, this.logger, "memory_candidates.embedding_json", row.id);
         return {
             id: row.id,
             source: {
@@ -238,12 +232,11 @@ export class SQLiteMemoryCandidateStore implements MemoryCandidateStore {
             scope: row.scope as MemoryCandidateRecord["scope"],
             type: row.type as MemoryCandidateRecord["type"],
             text: row.text,
-            normalizedText: row.normalizedText,
             relatedEntities,
             tags,
-            reason: row.reason ?? undefined,
+            candidateReason: row.candidateReason ?? undefined,
             status: row.status as MemoryCandidateStatus,
-            embedding,
+            statusReason: row.statusReason ?? undefined,
             schemaVersion: row.schemaVersion,
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
@@ -255,7 +248,7 @@ export class SQLiteMemoryCandidateStore implements MemoryCandidateStore {
  * Parse a JSON array column. Returns `[]` on any failure and warns
  * via `logger` so corrupted rows surface in operations logs without
  * breaking the read path. Exported helpers (one per shape) keep all
- * three memory stores consistent.
+ * memory stores consistent.
  */
 export function parseJsonArray(
     raw: string | null,
@@ -282,10 +275,9 @@ export function parseJsonArray(
 /**
  * Parse a stored {@link MemoryEmbedding} JSON blob. Returns
  * `undefined` (not `null`) when the column is empty, malformed, or
- * missing required fields; the commit service then treats the
- * memory as having no embedding and routes it through the
- * `noEmbedding` skip branch. We deliberately accept partial blobs
- * here: a corrupt row should never throw on read.
+ * missing required fields; consumers then treat the row as having
+ * no embedding. We deliberately accept partial blobs here: a
+ * corrupt row should never throw on read.
  */
 export function parseEmbeddingJson(
     raw: string | null,

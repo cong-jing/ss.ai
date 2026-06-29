@@ -12,12 +12,11 @@ import type {
 } from "../src/index.js";
 import {
     DEFAULT_MEMORY_SETTINGS,
-    MemoryCandidateProcessor,
     MemoryCandidateRecorder,
-    MemoryDecisionRecorder,
     MemoryEmbeddingStep,
     MemoryPipelineLogger,
     MemoryPipelineService,
+    MemoryStagingProcessor,
     PersonaFlowChatTurnService,
 } from "../src/index.js";
 import { createTestFixture } from "./helpers/inMemoryStores.js";
@@ -141,11 +140,9 @@ function seedModelRuntime(fixture: ReturnType<typeof createTestFixture>, userId:
 /**
  * Bundles a {@link MemoryPipelineService} backed by in-memory fakes.
  *
- * We assemble the pipeline manually here instead of going through
- * `createMemoryPipelineService` because the factory expects a real
- * `ModelClient` for its embedding provider. Tests want to inject a
- * deterministic embedding stub directly, so they build the service
- * one stage at a time.
+ * Tests inject a deterministic embedding stub directly, so we build
+ * the staging-processor + pipeline manually instead of going through
+ * `createMemoryPipelineService` (which expects a real ModelClient).
  */
 interface MemoryBundle {
     stores: ReturnType<typeof makeInMemoryMemoryStores>;
@@ -168,24 +165,17 @@ function buildMemoryBundle(overrides: { settings?: MemorySettings } = {}): Memor
         ids,
     });
     const embeddingStep = new MemoryEmbeddingStep(embeddingProvider, pipelineLogger);
-    const decisionRecorder = new MemoryDecisionRecorder({
+    const stagingProcessor = new MemoryStagingProcessor({
         candidateStore: stores.candidateStore,
-        decisionStore: stores.decisionStore,
-        clock,
-    });
-    const candidateProcessor = new MemoryCandidateProcessor({
-        candidateStore: stores.candidateStore,
-        memoryStore: stores.memoryStore,
-        decisionStore: stores.decisionStore,
+        stagingStore: stores.stagingStore,
         embeddingStep,
-        decisionRecorder,
         clock,
         pipelineLogger,
         settings,
     });
     const pipelineService = new MemoryPipelineService({
         candidateRecorder,
-        candidateProcessor,
+        stagingProcessor,
         pipelineLogger,
         settings,
     });
@@ -213,7 +203,7 @@ function makeStructuredModelClient(candidates: MemoryWriteCandidate[], character
 // ---------------------------------------------------------------------------
 
 describe("PersonaFlowChatTurnService memory pipeline integration", () => {
-    it("records candidates and processes them when both stages are enabled", async () => {
+    it("records candidates and stages them when both stages are enabled", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -246,33 +236,29 @@ describe("PersonaFlowChatTurnService memory pipeline integration", () => {
             senderActorId: base.userActorId,
         });
 
-        // Recorder ran: candidate row exists, source backreference points at this turn.
+        // Recorder ran: candidate row exists, source backreference
+        // points at this turn, character binding is preserved.
         const candidateRows = memory.stores.candidateStore.snapshotAll();
         assert.equal(candidateRows.length, 1);
         assert.equal(candidateRows[0]!.source.assistantMessageId, result.assistantMessageId);
         assert.equal(candidateRows[0]!.source.userMessageId, result.userMessageId);
-
-        // Processor ran: one active memory created + one decision row appended.
-        const memories = memory.stores.memoryStore.snapshotAll();
-        assert.equal(memories.length, 1);
-        assert.equal(memories[0]!.text, "User said their name is Alice.");
-        // Character binding: even though the candidate uses
-        // `scope: "user"`, the memory belongs to the current
-        // character world. There is no cross-character memory in
-        // the new model.
-        assert.equal(memories[0]!.characterId, base.characterId);
-        const decisions = memory.stores.decisionStore.snapshotAll();
-        assert.equal(decisions.length, 1);
-        assert.equal(decisions[0]!.decision, "create");
-        assert.equal(decisions[0]!.characterId, base.characterId);
-        // The recorded candidate's source also carries the current character.
         assert.equal(candidateRows[0]!.source.characterId, base.characterId);
+
+        // Staging processor ran: one staging row created and a
+        // source link points back to the originating candidate.
+        const stagingRows = memory.stores.stagingStore.snapshotAll();
+        assert.equal(stagingRows.length, 1);
+        assert.equal(stagingRows[0]!.text, "User said their name is Alice.");
+        assert.equal(stagingRows[0]!.characterId, base.characterId);
+        const stagingSources = memory.stores.stagingStore.snapshotSources();
+        assert.equal(stagingSources.length, 1);
+        assert.equal(stagingSources[0]!.candidateId, candidateRows[0]!.id);
 
         // Embedding provider was invoked exactly once for the candidate.
         assert.equal(memory.embeddingProvider.calls.length, 1);
     });
 
-    it("records candidates but skips processing when candidateProcessingMode is record_only", async () => {
+    it("records candidates but skips staging when candidateProcessingMode is record_only", async () => {
         const fixture = createTestFixture();
         const base = createBaseData();
         fixture.seed.character(base.character);
@@ -310,11 +296,10 @@ describe("PersonaFlowChatTurnService memory pipeline integration", () => {
             senderActorId: base.userActorId,
         });
 
-        // Candidate persisted.
+        // Candidate persisted, but staging is deferred to an async worker.
         assert.equal(memory.stores.candidateStore.snapshotAll().length, 1);
-        // But no memories created, no decisions appended, no embedding called.
-        assert.equal(memory.stores.memoryStore.snapshotAll().length, 0);
-        assert.equal(memory.stores.decisionStore.snapshotAll().length, 0);
+        assert.equal(memory.stores.candidateStore.snapshotAll()[0]!.status, "pending");
+        assert.equal(memory.stores.stagingStore.snapshotAll().length, 0);
         assert.equal(memory.embeddingProvider.calls.length, 0);
     });
 
@@ -364,12 +349,11 @@ describe("PersonaFlowChatTurnService memory pipeline integration", () => {
             senderActorId: base.userActorId,
         });
 
-        // Nothing reached the recorder or processor.
+        // Nothing reached the recorder or staging processor.
         assert.equal(memory.stores.candidateStore.snapshotAll().length, 0);
-        assert.equal(memory.stores.memoryStore.snapshotAll().length, 0);
-        assert.equal(memory.stores.decisionStore.snapshotAll().length, 0);
-        // But candidate observability is preserved: the INFO summary line
-        // still runs so existing dashboards keep working.
+        assert.equal(memory.stores.stagingStore.snapshotAll().length, 0);
+        // But candidate observability is preserved: the INFO summary
+        // line still runs so existing dashboards keep working.
         assert.equal(
             infoLogs.filter(msg => msg === "persona-flow/memory: candidates logged").length,
             1,
@@ -417,6 +401,7 @@ describe("PersonaFlowChatTurnService memory pipeline integration", () => {
         });
 
         assert.equal(memory.stores.candidateStore.snapshotAll().length, 0);
+        assert.equal(memory.stores.stagingStore.snapshotAll().length, 0);
         assert.equal(memory.embeddingProvider.calls.length, 0);
     });
 
@@ -435,7 +420,7 @@ describe("PersonaFlowChatTurnService memory pipeline integration", () => {
             handleChatTurnCandidates: async () => {
                 throw new Error("simulated pipeline explosion");
             },
-            processCandidates: async () => ({ outcomes: [] }),
+            processPendingCandidates: async () => ({ outcomes: [] }),
         } as unknown as MemoryPipelineService;
 
         const warnings: { message: string; payload?: unknown }[] = [];
@@ -532,7 +517,8 @@ describe("PersonaFlowChatTurnService memory pipeline integration", () => {
         const candidateRows: MemoryCandidateRecord[] = memory.stores.candidateStore.snapshotAll();
         assert.equal(candidateRows.length, 1);
         assert.equal(candidateRows[0]!.source.assistantMessageId, result.assistantMessageId);
-        assert.equal(memory.stores.memoryStore.snapshotAll().length, 1);
-        assert.equal(memory.stores.decisionStore.snapshotAll()[0]!.decision, "create");
+        const stagingRows = memory.stores.stagingStore.snapshotAll();
+        assert.equal(stagingRows.length, 1);
+        assert.equal(stagingRows[0]!.text, "User mentioned a deadline next Friday.");
     });
 });

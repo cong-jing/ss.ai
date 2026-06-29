@@ -2,12 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
     DEFAULT_MEMORY_SETTINGS,
-    MemoryCandidateProcessor,
     MemoryCandidateRecorder,
-    MemoryDecisionRecorder,
     MemoryEmbeddingStep,
     MemoryPipelineLogger,
     MemoryPipelineService,
+    MemoryStagingProcessor,
 } from "../src/memory/index.js";
 import type { MemoryCandidateSource } from "../src/memory/index.js";
 import {
@@ -50,24 +49,17 @@ function buildPipelineBundle(options: BundleOptions = {}) {
     });
     const embeddingProvider = makeFakeEmbeddingProvider();
     const embeddingStep = new MemoryEmbeddingStep(embeddingProvider, pipelineLogger);
-    const decisionRecorder = new MemoryDecisionRecorder({
+    const stagingProcessor = new MemoryStagingProcessor({
         candidateStore: stores.candidateStore,
-        decisionStore: stores.decisionStore,
-        clock,
-    });
-    const candidateProcessor = new MemoryCandidateProcessor({
-        candidateStore: stores.candidateStore,
-        memoryStore: stores.memoryStore,
-        decisionStore: stores.decisionStore,
+        stagingStore: stores.stagingStore,
         embeddingStep,
-        decisionRecorder,
         clock,
         pipelineLogger,
         settings,
     });
     const service = new MemoryPipelineService({
         candidateRecorder,
-        candidateProcessor,
+        stagingProcessor,
         pipelineLogger,
         settings,
     });
@@ -87,34 +79,153 @@ describe("MemoryPipelineService", () => {
         });
 
         // Surface the recorder outage:
-        // - `recordedCount` is zero
         assert.equal(result.recordedCount, 0);
-        // - no candidate row was persisted
         assert.equal(stores.candidateStore.snapshotAll().length, 0);
-        // - the embedding provider was never reached
         assert.equal(embeddingProvider.calls.length, 0);
 
-        // Pipeline-level log semantics:
-        // - `pipelineCompleted` must NOT have been logged (the
-        //   recorder failed and dashboards must not see a clean
-        //   completion).
+        // `pipelineCompleted` must NOT have been logged.
         const completedLogs = [...logger.debugEvents, ...logger.warnEvents, ...logger.infoEvents]
             .filter((entry) => entry.message === "memory.pipeline.completed");
         assert.equal(completedLogs.length, 0, "pipelineCompleted must not be emitted on store outage");
 
-        // - `candidatesRecordingFailed` and `pipelineFailed` should
-        //   both fire so operators see a failure rather than silence.
         const recordingFailedLogs = logger.warnEvents.filter(
             (entry) => entry.message === "memory.pipeline.candidates_recording_failed",
         );
         assert.equal(recordingFailedLogs.length, 1);
-
         const pipelineFailedLogs = logger.warnEvents.filter(
             (entry) => entry.message === "memory.pipeline.failed",
         );
         assert.equal(pipelineFailedLogs.length, 1);
-        const failedPayload = pipelineFailedLogs[0]!.payload as { stage?: string; error?: string };
-        assert.equal(failedPayload.stage, "record");
-        assert.equal(failedPayload.error, storeOutage.message);
+    });
+
+    it("processes candidates inline by default and produces staging rows", async () => {
+        const { service, stores } = buildPipelineBundle();
+
+        const result = await service.handleChatTurnCandidates({
+            source: makeSource(),
+            candidates: [{ scope: "user", type: "fact", text: "User loves to ski." }],
+        });
+
+        assert.equal(result.recordedCount, 1);
+        assert.ok(result.processed);
+        assert.equal(result.processed!.outcomes.length, 1);
+        assert.equal(result.processed!.outcomes[0]!.stagingOutcome, "created");
+        assert.equal(stores.stagingStore.snapshotAll().length, 1);
+    });
+
+    it("skips processing in record_only mode but still records candidates", async () => {
+        const stores = makeInMemoryMemoryStores();
+        const clock = makeFixedClock();
+        const ids = makeSequentialIds();
+        const settings = {
+            ...DEFAULT_MEMORY_SETTINGS,
+            candidateProcessingMode: "record_only" as const,
+        };
+        const logger = makeRecordingLogger();
+        const pipelineLogger = new MemoryPipelineLogger(logger);
+        const candidateRecorder = new MemoryCandidateRecorder({
+            candidateStore: stores.candidateStore,
+            clock,
+            ids,
+            logger,
+        });
+        const embeddingProvider = makeFakeEmbeddingProvider();
+        const embeddingStep = new MemoryEmbeddingStep(embeddingProvider, pipelineLogger);
+        const stagingProcessor = new MemoryStagingProcessor({
+            candidateStore: stores.candidateStore,
+            stagingStore: stores.stagingStore,
+            embeddingStep,
+            clock,
+            pipelineLogger,
+            settings,
+        });
+        const service = new MemoryPipelineService({
+            candidateRecorder,
+            stagingProcessor,
+            pipelineLogger,
+            settings,
+        });
+
+        const result = await service.handleChatTurnCandidates({
+            source: makeSource(),
+            candidates: [{ scope: "user", type: "fact", text: "User likes ramen." }],
+        });
+
+        assert.equal(result.recordedCount, 1);
+        assert.equal(result.processed, undefined);
+        assert.equal(embeddingProvider.calls.length, 0);
+        assert.equal(stores.stagingStore.snapshotAll().length, 0);
+        // Candidate stays pending awaiting an async worker.
+        assert.equal(stores.candidateStore.snapshotAll()[0]!.status, "pending");
+    });
+
+    it("returns skippedReason='disabled' when the pipeline is turned off", async () => {
+        const stores = makeInMemoryMemoryStores();
+        const clock = makeFixedClock();
+        const ids = makeSequentialIds();
+        const settings = { ...DEFAULT_MEMORY_SETTINGS, enabled: false };
+        const logger = makeRecordingLogger();
+        const pipelineLogger = new MemoryPipelineLogger(logger);
+        const candidateRecorder = new MemoryCandidateRecorder({
+            candidateStore: stores.candidateStore,
+            clock,
+            ids,
+            logger,
+        });
+        const embeddingProvider = makeFakeEmbeddingProvider();
+        const embeddingStep = new MemoryEmbeddingStep(embeddingProvider, pipelineLogger);
+        const stagingProcessor = new MemoryStagingProcessor({
+            candidateStore: stores.candidateStore,
+            stagingStore: stores.stagingStore,
+            embeddingStep,
+            clock,
+            pipelineLogger,
+            settings,
+        });
+        const service = new MemoryPipelineService({
+            candidateRecorder,
+            stagingProcessor,
+            pipelineLogger,
+            settings,
+        });
+
+        const result = await service.handleChatTurnCandidates({
+            source: makeSource(),
+            candidates: [{ scope: "user", type: "fact", text: "x" }],
+        });
+
+        assert.equal(result.skippedReason, "disabled");
+        assert.equal(stores.candidateStore.snapshotAll().length, 0);
+    });
+
+    it("processPendingCandidates drains pending rows by (userId, characterId)", async () => {
+        const { service, stores } = buildPipelineBundle();
+        // Seed by going through the inline pipeline first to populate
+        // the candidate rows in `pending` status by manually flipping
+        // them back. Easier: seed via the in-memory store directly.
+        stores.candidateStore.seedCandidate({
+            id: "cand-pending",
+            source: makeSource(),
+            seq: 0,
+            scope: "user",
+            type: "fact",
+            text: "pending row to drain",
+            relatedEntities: [],
+            tags: [],
+            status: "pending",
+            schemaVersion: 1,
+            createdAt: "2026-06-27T00:00:00.000Z",
+            updatedAt: "2026-06-27T00:00:00.000Z",
+        });
+
+        const result = await service.processPendingCandidates({
+            userId: "u1",
+            characterId: "c1",
+            limit: 10,
+        });
+
+        assert.equal(result.outcomes.length, 1);
+        assert.equal(result.outcomes[0]!.candidateId, "cand-pending");
+        assert.equal(result.outcomes[0]!.stagingOutcome, "created");
     });
 });

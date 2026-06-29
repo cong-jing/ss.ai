@@ -1,4 +1,3 @@
-import type { MemoryEmbedding } from "../embedding/embeddingPorts.js";
 import type { MemoryCandidateSource } from "../types.js";
 import type {
     MemoryCandidateDraft,
@@ -17,12 +16,6 @@ import type {
 export interface AppendMemoryCandidatesInput {
     source: MemoryCandidateSource;
     candidates: MemoryCandidateDraft[];
-    /**
-     * Pre-normalized text per candidate, indexed the same as
-     * `candidates`. The recorder is responsible for normalization so
-     * the store does not need to know the policy.
-     */
-    normalizedTexts: string[];
 }
 
 export interface ListMemoryCandidatesInput {
@@ -35,23 +28,38 @@ export interface ListMemoryCandidatesInput {
     limit?: number;
 }
 
+/**
+ * Optional listing entrypoint for the candidate processor. Returns
+ * candidate rows in `pending` status for a given (userId,
+ * characterId) pair, ordered for stable batch processing.
+ *
+ * Kept on the same port as `listCandidates` because every
+ * implementation (SQLite, in-memory fake) already has the rows on
+ * hand; pulling pending work out into a separate port would force
+ * adapters to share connections / table layouts redundantly.
+ */
+export interface ListPendingMemoryCandidatesInput {
+    userId: string;
+    characterId: string;
+    limit: number;
+}
+
+/**
+ * Status transition. `statusReason` is a free-form processor
+ * outcome ("staging_created", "staging_duplicate_normalized_text",
+ * "low_value", "embedding_failed", 閳? and is not interpreted by
+ * the store.
+ */
 export interface UpdateMemoryCandidateStatusInput {
     candidateId: string;
     status: MemoryCandidateStatus;
-    /** Optional reason for transitions like `commit_failed`. */
-    reason?: string;
-    updatedAt: string;
-}
-
-export interface SaveCandidateEmbeddingInput {
-    candidateId: string;
-    embedding: MemoryEmbedding;
+    statusReason?: string;
     updatedAt: string;
 }
 
 export interface MemoryCandidateStore {
     appendCandidates(input: AppendMemoryCandidatesInput): Promise<MemoryCandidateRecord[]>;
     listCandidates(input: ListMemoryCandidatesInput): Promise<MemoryCandidateRecord[]>;
+    listPendingCandidates(input: ListPendingMemoryCandidatesInput): Promise<MemoryCandidateRecord[]>;
     updateCandidateStatus(input: UpdateMemoryCandidateStatusInput): Promise<void>;
-    saveCandidateEmbedding(input: SaveCandidateEmbeddingInput): Promise<void>;
 }

@@ -126,6 +126,25 @@ interface RawConfig {
     memory?: {
         enabled?: boolean;
         candidateProcessingMode?: "inline" | "record_only";
+        staging?: {
+            enabled?: boolean;
+            candidateBatchLimit?: number;
+            duplicate?: {
+                normalizedText?: boolean;
+            };
+            similaritySampling?: {
+                enabled?: boolean;
+                listLimit?: number;
+                topK?: number;
+            };
+        };
+        retained?: {
+            enabled?: boolean;
+            retrieval?: {
+                topK?: number;
+                listLimit?: number;
+            };
+        };
     };
     auth?: {
         mode?: "default-user" | "local-password";
@@ -458,6 +477,39 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
                 ?? DEFAULT_MEMORY_SETTINGS.enabled,
             candidateProcessingMode: fileConfig.memory?.candidateProcessingMode
                 ?? DEFAULT_MEMORY_SETTINGS.candidateProcessingMode,
+            staging: {
+                ...DEFAULT_MEMORY_SETTINGS.staging,
+                enabled: fileConfig.memory?.staging?.enabled
+                    ?? DEFAULT_MEMORY_SETTINGS.staging.enabled,
+                candidateBatchLimit: fileConfig.memory?.staging?.candidateBatchLimit
+                    ?? DEFAULT_MEMORY_SETTINGS.staging.candidateBatchLimit,
+                duplicate: {
+                    ...DEFAULT_MEMORY_SETTINGS.staging.duplicate,
+                    normalizedText: fileConfig.memory?.staging?.duplicate?.normalizedText
+                        ?? DEFAULT_MEMORY_SETTINGS.staging.duplicate.normalizedText,
+                },
+                similaritySampling: {
+                    ...DEFAULT_MEMORY_SETTINGS.staging.similaritySampling,
+                    enabled: fileConfig.memory?.staging?.similaritySampling?.enabled
+                        ?? DEFAULT_MEMORY_SETTINGS.staging.similaritySampling.enabled,
+                    listLimit: fileConfig.memory?.staging?.similaritySampling?.listLimit
+                        ?? DEFAULT_MEMORY_SETTINGS.staging.similaritySampling.listLimit,
+                    topK: fileConfig.memory?.staging?.similaritySampling?.topK
+                        ?? DEFAULT_MEMORY_SETTINGS.staging.similaritySampling.topK,
+                },
+            },
+            retained: {
+                ...DEFAULT_MEMORY_SETTINGS.retained,
+                enabled: fileConfig.memory?.retained?.enabled
+                    ?? DEFAULT_MEMORY_SETTINGS.retained.enabled,
+                retrieval: {
+                    ...DEFAULT_MEMORY_SETTINGS.retained.retrieval,
+                    topK: fileConfig.memory?.retained?.retrieval?.topK
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.retrieval.topK,
+                    listLimit: fileConfig.memory?.retained?.retrieval?.listLimit
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.retrieval.listLimit,
+                },
+            },
         },
         auth: {
             mode: authMode,

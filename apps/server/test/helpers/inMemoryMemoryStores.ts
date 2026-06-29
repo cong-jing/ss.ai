@@ -1,35 +1,37 @@
 import type {
-    ActiveMemoryRecord,
     AppendMemoryCandidatesInput,
-    AppendMemoryDecisionInput,
-    CreateMemoryInput,
-    FindExactActiveMemoryInput,
-    ListActiveMemoriesInput,
+    CreateMemoryStagingInput,
+    FindBySourceCandidateInput,
+    FindExactStagingInput,
+    IncrementMemoryStagingOccurrenceInput,
+    LinkStagingSourceInput,
     ListMemoryCandidatesInput,
-    ListMemoryDecisionsInput,
+    ListMemoryRetainedInput,
+    ListMemoryStagingInput,
+    ListPendingMemoryCandidatesInput,
     MemoryCandidateRecord,
     MemoryCandidateStore,
-    MemoryDecisionRecord,
-    MemoryDecisionStore,
-    MemoryStore,
-    SaveCandidateEmbeddingInput,
-    SaveMemoryEmbeddingInput,
+    MemoryRetainedRecord,
+    MemoryRetainedStore,
+    MemoryStagingRecord,
+    MemoryStagingSourceRecord,
+    MemoryStagingStore,
     UpdateMemoryCandidateStatusInput,
 } from "@ss-ai/persona-flow";
 
 /**
  * In-memory memory stores for HTTP integration tests.
  *
- * These satisfy the `AppStores` interface and keep enough state for
- * the Step 7 debug API tests (and any future server tests that need
- * to read back candidate / memory / decision rows).
+ * Satisfy the Batch 3.5 `AppStores` interface and keep enough state
+ * for the debug API tests (and any future server tests that need to
+ * read back candidate / staging / retained rows).
  *
- * They do NOT implement the commit-pipeline mutations
- * (`updateCandidateStatus`, `saveCandidateEmbedding`,
- * `findExactActiveMemory`, `saveMemoryEmbedding`) beyond what's
- * needed to keep types happy, because the chat-turn → commit
- * service path is exercised against the richer
- * `makeInMemoryMemoryStores()` fakes inside `@ss-ai/persona-flow`
+ * These stubs intentionally implement only the read paths the
+ * server actually exercises through HTTP. Write paths called by the
+ * pipeline (`appendCandidates`, `updateCandidateStatus`,
+ * `create`, `linkSource`, `incrementOccurrence`) are kept simple
+ * because the chat-turn → staging pipeline is covered end-to-end
+ * against the richer in-memory fakes inside `@ss-ai/persona-flow`
  * test helpers, not through the HTTP boundary.
  */
 
@@ -61,7 +63,6 @@ export class StubMemoryCandidateStore implements MemoryCandidateStore {
         const added: MemoryCandidateRecord[] = [];
         for (let i = 0; i < input.candidates.length; i += 1) {
             const draft = input.candidates[i]!;
-            const normalized = input.normalizedTexts[i]!;
             const record: MemoryCandidateRecord = {
                 id: makeId(),
                 source: { ...input.source },
@@ -69,10 +70,9 @@ export class StubMemoryCandidateStore implements MemoryCandidateStore {
                 scope: draft.scope,
                 type: draft.type,
                 text: draft.text,
-                normalizedText: normalized,
                 relatedEntities: draft.relatedEntities ? [...draft.relatedEntities] : [],
                 tags: draft.tags ? [...draft.tags] : [],
-                reason: draft.reason,
+                candidateReason: draft.reason,
                 status: "pending",
                 schemaVersion: 1,
                 createdAt: now,
@@ -101,15 +101,56 @@ export class StubMemoryCandidateStore implements MemoryCandidateStore {
         return applyLimit(filtered, input.limit).map((r) => ({ ...r, source: { ...r.source } }));
     }
 
-    async updateCandidateStatus(_input: UpdateMemoryCandidateStatusInput): Promise<void> { /* no-op */ }
-    async saveCandidateEmbedding(_input: SaveCandidateEmbeddingInput): Promise<void> { /* no-op */ }
+    async listPendingCandidates(input: ListPendingMemoryCandidatesInput): Promise<MemoryCandidateRecord[]> {
+        const filtered = this.rows
+            .filter((r) => r.source.userId === input.userId)
+            .filter((r) => r.source.characterId === input.characterId)
+            .filter((r) => r.status === "pending")
+            .slice()
+            .sort((a, b) => {
+                if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+                return a.seq - b.seq;
+            });
+        return filtered.slice(0, input.limit).map((r) => ({ ...r, source: { ...r.source } }));
+    }
+
+    async updateCandidateStatus(input: UpdateMemoryCandidateStatusInput): Promise<void> {
+        const row = this.rows.find((r) => r.id === input.candidateId);
+        if (!row) return;
+        row.status = input.status;
+        if (input.statusReason !== undefined) {
+            row.statusReason = input.statusReason || undefined;
+        }
+        row.updatedAt = input.updatedAt;
+    }
 }
 
-export class StubMemoryStore implements MemoryStore {
-    readonly rows: ActiveMemoryRecord[] = [];
+export class StubMemoryStagingStore implements MemoryStagingStore {
+    readonly rows: MemoryStagingRecord[] = [];
+    readonly sources: MemoryStagingSourceRecord[] = [];
 
-    async createMemory(input: CreateMemoryInput): Promise<ActiveMemoryRecord> {
-        const record: ActiveMemoryRecord = {
+    async findBySourceCandidate(input: FindBySourceCandidateInput): Promise<MemoryStagingRecord | undefined> {
+        const link = this.sources.find((s) => s.candidateId === input.candidateId);
+        if (!link) return undefined;
+        const row = this.rows.find((r) => r.id === link.memoryStagingId);
+        return row ? this.clone(row) : undefined;
+    }
+
+    async findExact(input: FindExactStagingInput): Promise<MemoryStagingRecord | undefined> {
+        const match = this.rows
+            .filter((r) =>
+                r.userId === input.userId
+                && r.characterId === input.characterId
+                && r.scope === input.scope
+                && r.type === input.type
+                && r.normalizedText === input.normalizedText,
+            )
+            .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id.localeCompare(b.id)))[0];
+        return match ? this.clone(match) : undefined;
+    }
+
+    async create(input: CreateMemoryStagingInput): Promise<MemoryStagingRecord> {
+        const record: MemoryStagingRecord = {
             id: makeId(),
             userId: input.userId,
             characterId: input.characterId,
@@ -119,28 +160,110 @@ export class StubMemoryStore implements MemoryStore {
             normalizedText: input.normalizedText,
             relatedEntities: [...input.relatedEntities],
             tags: [...input.tags],
-            sourceCandidateId: input.sourceCandidateId,
-            sourceConversationId: input.sourceConversationId,
-            sourceUserMessageId: input.sourceUserMessageId,
-            sourceAssistantMessageId: input.sourceAssistantMessageId,
-            status: "active",
-            importance: input.importance,
+            status: input.status,
+            statusReason: input.statusReason,
+            occurrenceCount: 1,
+            firstSeenAt: input.firstSeenAt,
+            lastSeenAt: input.now,
             embedding: input.embedding ? { ...input.embedding, vector: [...input.embedding.vector] } : undefined,
             schemaVersion: 1,
-            createdAt: input.createdAt,
-            updatedAt: input.updatedAt,
+            createdAt: input.now,
+            updatedAt: input.now,
         };
         this.rows.push(record);
-        return { ...record, embedding: record.embedding ? { ...record.embedding, vector: [...record.embedding.vector] } : undefined };
+        this.sources.push({
+            memoryStagingId: record.id,
+            candidateId: input.initialSource.candidateId,
+            candidateSeq: input.initialSource.candidateSeq,
+            createdAt: input.now,
+        });
+        return this.clone(record);
     }
 
-    async listActiveMemories(input: ListActiveMemoriesInput): Promise<ActiveMemoryRecord[]> {
+    async linkSource(input: LinkStagingSourceInput): Promise<MemoryStagingSourceRecord> {
+        if (this.sources.some((s) => s.candidateId === input.candidateId)) {
+            throw new Error(`UNIQUE constraint failed: memory_staging_sources.candidate_id (${input.candidateId})`);
+        }
+        const link: MemoryStagingSourceRecord = {
+            memoryStagingId: input.memoryStagingId,
+            candidateId: input.candidateId,
+            candidateSeq: input.candidateSeq,
+            createdAt: input.createdAt,
+        };
+        this.sources.push(link);
+        return { ...link };
+    }
+
+    async incrementOccurrence(input: IncrementMemoryStagingOccurrenceInput): Promise<MemoryStagingRecord> {
+        const row = this.rows.find((r) => r.id === input.memoryStagingId);
+        if (!row) {
+            throw new Error(`StubMemoryStagingStore.incrementOccurrence: staging row ${input.memoryStagingId} not found`);
+        }
+        row.occurrenceCount += 1;
+        row.lastSeenAt = input.lastSeenAt;
+        row.updatedAt = input.updatedAt;
+        return this.clone(row);
+    }
+
+    async list(input: ListMemoryStagingInput): Promise<MemoryStagingRecord[]> {
+        if (input.sourceCandidateId !== undefined) {
+            const link = this.sources.find((s) => s.candidateId === input.sourceCandidateId);
+            if (!link) return [];
+            const row = this.rows.find((r) => r.id === link.memoryStagingId);
+            if (!row) return [];
+            return [this.clone(row)].filter((record) => this.matchesFilter(record, input));
+        }
         const scopeFilter = toArray(input.scope);
         const typeFilter = toArray(input.type);
-        // Match the real SQLiteMemoryStore: no implicit default on
-        // status. Callers (including the debug route) decide whether
-        // to filter and how. The route's own "default to active"
-        // policy is applied before this stub is invoked.
+        const statusFilter = toArray(input.status);
+        const filtered = this.rows
+            .filter((r) => r.userId === input.userId)
+            .filter((r) => input.characterId === undefined || r.characterId === input.characterId)
+            .filter((r) => scopeFilter.length === 0 || scopeFilter.includes(r.scope))
+            .filter((r) => typeFilter.length === 0 || typeFilter.includes(r.type))
+            .filter((r) => statusFilter.length === 0 || statusFilter.includes(r.status))
+            .slice()
+            .sort((a, b) => {
+                if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1;
+                if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
+                return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+            });
+        return applyLimit(filtered, input.limit).map((r) => this.clone(r));
+    }
+
+    private matchesFilter(record: MemoryStagingRecord, input: ListMemoryStagingInput): boolean {
+        if (record.userId !== input.userId) return false;
+        if (input.characterId !== undefined && record.characterId !== input.characterId) return false;
+        const scopeFilter = toArray(input.scope);
+        if (scopeFilter.length > 0 && !scopeFilter.includes(record.scope)) return false;
+        const typeFilter = toArray(input.type);
+        if (typeFilter.length > 0 && !typeFilter.includes(record.type)) return false;
+        const statusFilter = toArray(input.status);
+        if (statusFilter.length > 0 && !statusFilter.includes(record.status)) return false;
+        return true;
+    }
+
+    private clone(record: MemoryStagingRecord): MemoryStagingRecord {
+        return {
+            ...record,
+            relatedEntities: [...record.relatedEntities],
+            tags: [...record.tags],
+            embedding: record.embedding ? { ...record.embedding, vector: [...record.embedding.vector] } : undefined,
+        };
+    }
+}
+
+/**
+ * Read-only retained store stub. Batch 3.5 never writes to this
+ * table; tests that need to surface a retained row can push directly
+ * into `rows`.
+ */
+export class StubMemoryRetainedStore implements MemoryRetainedStore {
+    readonly rows: MemoryRetainedRecord[] = [];
+
+    async list(input: ListMemoryRetainedInput): Promise<MemoryRetainedRecord[]> {
+        const scopeFilter = toArray(input.scope);
+        const typeFilter = toArray(input.type);
         const statusFilter = toArray(input.status);
         const filtered = this.rows
             .filter((r) => r.userId === input.userId)
@@ -156,52 +279,9 @@ export class StubMemoryStore implements MemoryStore {
             });
         return applyLimit(filtered, input.limit).map((r) => ({
             ...r,
+            relatedEntities: [...r.relatedEntities],
+            tags: [...r.tags],
             embedding: r.embedding ? { ...r.embedding, vector: [...r.embedding.vector] } : undefined,
-        }));
-    }
-
-    async findExactActiveMemory(_input: FindExactActiveMemoryInput): Promise<ActiveMemoryRecord | undefined> {
-        return undefined;
-    }
-
-    async saveMemoryEmbedding(_input: SaveMemoryEmbeddingInput): Promise<void> { /* no-op */ }
-}
-
-export class StubMemoryDecisionStore implements MemoryDecisionStore {
-    readonly rows: MemoryDecisionRecord[] = [];
-
-    async appendDecision(input: AppendMemoryDecisionInput): Promise<MemoryDecisionRecord> {
-        const record: MemoryDecisionRecord = {
-            id: makeId(),
-            candidateId: input.candidateId,
-            userId: input.userId,
-            characterId: input.characterId,
-            decision: input.decision,
-            memoryId: input.memoryId,
-            reason: input.reason,
-            similarity: input.similarity ? input.similarity.map((s) => ({ ...s })) : [],
-            policyVersion: input.policyVersion,
-            createdAt: input.createdAt,
-        };
-        this.rows.push(record);
-        return { ...record, similarity: record.similarity.map((s) => ({ ...s })) };
-    }
-
-    async listDecisions(input: ListMemoryDecisionsInput): Promise<MemoryDecisionRecord[]> {
-        const decisionFilter = toArray(input.decision);
-        const filtered = this.rows
-            .filter((r) => r.userId === input.userId)
-            .filter((r) => input.characterId === undefined || r.characterId === input.characterId)
-            .filter((r) => input.candidateId === undefined || r.candidateId === input.candidateId)
-            .filter((r) => decisionFilter.length === 0 || decisionFilter.includes(r.decision))
-            .slice()
-            .sort((a, b) => {
-                if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
-                return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-            });
-        return applyLimit(filtered, input.limit).map((r) => ({
-            ...r,
-            similarity: r.similarity.map((s) => ({ ...s })),
         }));
     }
 }

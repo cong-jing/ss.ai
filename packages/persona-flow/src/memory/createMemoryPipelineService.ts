@@ -8,13 +8,12 @@ import { MemoryPipelineLogger } from "./logging/MemoryPipelineLogger.js";
 import { MemoryPipelineService } from "./MemoryPipelineService.js";
 import type { MemorySettings } from "./settings.js";
 import { DEFAULT_MEMORY_SETTINGS } from "./settings.js";
+import { MemoryStagingProcessor } from "./staging/MemoryStagingProcessor.js";
 import type {
     MemoryClock,
     MemoryIdGenerator,
     MemoryLogger,
 } from "./types.js";
-import { MemoryDecisionRecorder } from "./decision/MemoryDecisionRecorder.js";
-import { MemoryCandidateProcessor } from "./processing/MemoryCandidateProcessor.js";
 
 /**
  * Wires every pipeline stage from a small number of shared
@@ -48,7 +47,7 @@ export interface CreateMemoryPipelineServiceInput {
      */
     overrides?: {
         embeddingProvider?: ConstructorParameters<typeof MemoryEmbeddingStep>[0];
-        candidateProcessor?: MemoryCandidateProcessor;
+        stagingProcessor?: MemoryStagingProcessor;
         candidateRecorder?: MemoryCandidateRecorder;
     };
 }
@@ -70,12 +69,6 @@ export function createMemoryPipelineService(input: CreateMemoryPipelineServiceIn
 
     const embeddingStep = new MemoryEmbeddingStep(embeddingProvider, pipelineLogger);
 
-    const decisionRecorder = new MemoryDecisionRecorder({
-        candidateStore: input.stores.memoryCandidate,
-        decisionStore: input.stores.memoryDecision,
-        clock,
-    });
-
     const candidateRecorder = input.overrides?.candidateRecorder ?? new MemoryCandidateRecorder({
         candidateStore: input.stores.memoryCandidate,
         clock,
@@ -83,12 +76,10 @@ export function createMemoryPipelineService(input: CreateMemoryPipelineServiceIn
         ...(input.logger ? { logger: input.logger } : {}),
     });
 
-    const candidateProcessor = input.overrides?.candidateProcessor ?? new MemoryCandidateProcessor({
+    const stagingProcessor = input.overrides?.stagingProcessor ?? new MemoryStagingProcessor({
         candidateStore: input.stores.memoryCandidate,
-        memoryStore: input.stores.memory,
-        decisionStore: input.stores.memoryDecision,
+        stagingStore: input.stores.memoryStaging,
         embeddingStep,
-        decisionRecorder,
         clock,
         pipelineLogger,
         settings,
@@ -96,7 +87,7 @@ export function createMemoryPipelineService(input: CreateMemoryPipelineServiceIn
 
     return new MemoryPipelineService({
         candidateRecorder,
-        candidateProcessor,
+        stagingProcessor,
         pipelineLogger,
         settings,
     });

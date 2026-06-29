@@ -7,8 +7,8 @@ import type { ConversationStore } from "./character/conversationStore.js";
 import type { ConversationActorStore } from "./character/conversationActorStore.js";
 import type {
     MemoryCandidateStore,
-    MemoryDecisionStore,
-    MemoryStore,
+    MemoryRetainedStore,
+    MemoryStagingStore,
 } from "../memory/index.js";
 
 /**
@@ -28,6 +28,7 @@ export interface AppStores {
     chat: ChatStore;
     providerCredential: UserProviderCredentialStore;
     memoryCandidate: MemoryCandidateStore;
-    memory: MemoryStore;
-    memoryDecision: MemoryDecisionStore;
+    memoryStaging: MemoryStagingStore;
+    memoryRetained: MemoryRetainedStore;
 }
+

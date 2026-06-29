@@ -3,11 +3,13 @@ import type { MemoryCandidateRecorder } from "./candidate/MemoryCandidateRecorde
 import type { MemoryPipelineLogger } from "./logging/MemoryPipelineLogger.js";
 import type { MemorySettings } from "./settings.js";
 import type { MemoryCandidateSource } from "./types.js";
-import type { MemoryCandidateProcessor } from "./processing/MemoryCandidateProcessor.js";
 import type {
-    MemoryCandidateProcessingOutcome,
-    ProcessMemoryCandidatesResult,
-} from "./processing/processingTypes.js";
+    MemoryStagingProcessor,
+    MemoryStagingProcessingOutcome,
+    ProcessCandidatesResult,
+    ProcessPendingCandidatesInput,
+    ProcessPendingCandidatesResult,
+} from "./staging/MemoryStagingProcessor.js";
 
 /**
  * Top-level entry point for the memory pipeline.
@@ -17,14 +19,14 @@ import type {
  *    immediately. The chat turn service never has to ask "is the
  *    feature on?"; it just calls the service.
  *  - `settings.candidateProcessingMode`: `"inline"` runs the
- *    processor synchronously after recording. `"record_only"` stops
- *    after the recorder, leaving candidates in `pending` for a
- *    later worker. The processor itself does not know about
+ *    staging processor synchronously after intake. `"record_only"`
+ *    stops after the recorder, leaving candidates in `pending` for
+ *    a later worker. The processor itself does not know about
  *    this; the service mediates.
  *
- * Designed so a future async worker can call `processCandidates()`
- * against the same processor instance without touching the chat
- * turn service.
+ * Designed so a future async worker can call
+ * `processPendingCandidates()` against the same processor instance
+ * without touching the chat turn service.
  */
 export interface HandleChatTurnCandidatesInput {
     source: MemoryCandidateSource;
@@ -33,14 +35,14 @@ export interface HandleChatTurnCandidatesInput {
 
 export interface HandleChatTurnCandidatesResult {
     recordedCount: number;
-    processed?: ProcessMemoryCandidatesResult;
+    processed?: ProcessCandidatesResult;
     /** Reason the pipeline did not run any work for this turn. */
     skippedReason?: "disabled" | "no_candidates";
 }
 
 export interface MemoryPipelineServiceDeps {
     candidateRecorder: MemoryCandidateRecorder;
-    candidateProcessor: MemoryCandidateProcessor;
+    stagingProcessor: MemoryStagingProcessor;
     pipelineLogger: MemoryPipelineLogger;
     settings: MemorySettings;
 }
@@ -116,16 +118,13 @@ export class MemoryPipelineService {
                 rejectedCount: recordResult.rejectedCount,
             });
 
-            if (settings.candidateProcessingMode === "record_only") {
-                logger.pipelineCompleted({
-                    ...baseFields,
-                    recordedCount,
-                    processedCount: 0,
-                    candidateProcessingMode: settings.candidateProcessingMode,
-                });
-                return { recordedCount };
-            }
-            if (recordResult.accepted.length === 0) {
+            // Record-only mode and "no surviving candidates" branches
+            // both end the pipeline early with the same shape.
+            if (
+                settings.candidateProcessingMode === "record_only"
+                || !settings.staging.enabled
+                || recordResult.accepted.length === 0
+            ) {
                 logger.pipelineCompleted({
                     ...baseFields,
                     recordedCount,
@@ -135,7 +134,7 @@ export class MemoryPipelineService {
                 return { recordedCount };
             }
 
-            const processed = await this.deps.candidateProcessor.processCandidates({
+            const processed = await this.deps.stagingProcessor.processCandidates({
                 candidates: recordResult.accepted,
             });
             logger.pipelineCompleted({
@@ -162,20 +161,19 @@ export class MemoryPipelineService {
     }
 
     /**
-     * Process already-recorded candidates. Used by the inline
-     * pipeline and by future async workers. Returns the
-     * outcomes verbatim from {@link MemoryCandidateProcessor}.
+     * Process up to `limit` pending candidates for the given user +
+     * character. Used by async workers and by future debug routes
+     * that want to drain pending intake. Inline mode normally goes
+     * through {@link handleChatTurnCandidates} instead.
      */
-    async processCandidates(input: {
-        candidates: Parameters<MemoryCandidateProcessor["processCandidates"]>[0]["candidates"];
-    }): Promise<ProcessMemoryCandidatesResult> {
-        if (!this.deps.settings.enabled) {
+    async processPendingCandidates(input: ProcessPendingCandidatesInput): Promise<ProcessPendingCandidatesResult> {
+        if (!this.deps.settings.enabled || !this.deps.settings.staging.enabled) {
             return { outcomes: [] };
         }
-        return await this.deps.candidateProcessor.processCandidates({ candidates: input.candidates });
+        return await this.deps.stagingProcessor.processPendingCandidates(input);
     }
 }
 
 // Re-export the per-candidate outcome so consumers that only depend
-// on the service file don't have to chase the processing/ folder.
-export type { MemoryCandidateProcessingOutcome };
+// on the service file don't have to chase the staging/ folder.
+export type { MemoryStagingProcessingOutcome };

@@ -1,7 +1,6 @@
 import type { MemoryCandidateDraft } from "../candidate/candidateTypes.js";
 import { normalizeMemoryText } from "../candidate/textNormalization.js";
-import type { RankedMemory } from "../ranking/rankSimilarMemories.js";
-import type { MemoryDecisionKind } from "./decisionPorts.js";
+import type { RankableMemory, RankedMemory } from "../ranking/rankSimilarMemories.js";
 
 /**
  * Pure decision rules.
@@ -9,10 +8,23 @@ import type { MemoryDecisionKind } from "./decisionPorts.js";
  * Inputs: ranked similar memories + thresholds.
  * Outputs: a decision kind and an explanation.
  *
- * The processor wires these into the candidate / memory / decision
- * stores. This module does no I/O so thresholds can be tuned with
- * a script in seconds.
+ * Batch 3.5 detached the per-decision storage (the
+ * `memory_decisions` table) from this module: stage code now uses
+ * {@link isLowValueCandidate} during staging-intake and Batch 4 will
+ * re-introduce a consolidation decision recorder that consumes
+ * {@link decideBySimilarity}. The helpers themselves do no I/O so
+ * thresholds can be tuned with a script in seconds.
  */
+
+/**
+ * Decision kind produced by {@link decideBySimilarity}. Limited to
+ * the two outcomes the pure helper can derive from a top-K
+ * similarity scan. Other historical kinds (`ignore_low_value`,
+ * `ignore_duplicate`, `embedding_failed`, `error`) belonged to the
+ * recorded decision row that no longer exists; callers now record
+ * those outcomes on the candidate / staging rows directly.
+ */
+export type SimilarityDecisionKind = "create" | "needs_judge";
 
 export interface MemoryDecisionPolicy {
     /**
@@ -49,7 +61,7 @@ export const defaultMemoryDecisionPolicy: MemoryDecisionPolicy = {
 };
 
 export interface SimilarityDecision {
-    kind: Extract<MemoryDecisionKind, "create" | "needs_judge">;
+    kind: SimilarityDecisionKind;
     reason: string;
     topSimilarity?: number;
 }
@@ -64,12 +76,10 @@ export interface SimilarityDecision {
  * do not auto-drop embedding near-duplicates so we can observe
  * provider behavior first.
  *
- * Never returns `ignore_low_value` or `ignore_duplicate`; those are
- * the caller's responsibility (`isLowValueCandidate` for the former,
- * exact normalized-text lookup for the latter).
+ * Pure helper: never persists, never logs.
  */
-export function decideBySimilarity(
-    ranked: readonly RankedMemory[],
+export function decideBySimilarity<R extends RankableMemory>(
+    ranked: ReadonlyArray<RankedMemory<R>>,
     policy: MemoryDecisionPolicy,
 ): SimilarityDecision {
     if (ranked.length === 0) {

@@ -13,6 +13,7 @@ export type {
     HandleChatTurnCandidatesInput,
     HandleChatTurnCandidatesResult,
     MemoryPipelineServiceDeps,
+    MemoryStagingProcessingOutcome,
 } from "./MemoryPipelineService.js";
 export { createMemoryPipelineService } from "./createMemoryPipelineService.js";
 export type { CreateMemoryPipelineServiceInput } from "./createMemoryPipelineService.js";
@@ -21,6 +22,8 @@ export type { CreateMemoryPipelineServiceInput } from "./createMemoryPipelineSer
 export {
     DEFAULT_MEMORY_SETTINGS,
     type MemorySettings,
+    type MemoryStagingSettings,
+    type MemoryRetainedSettings,
 } from "./settings.js";
 export {
     MEMORY_SCHEMA_VERSION,
@@ -54,8 +57,8 @@ export {
 export type {
     AppendMemoryCandidatesInput,
     ListMemoryCandidatesInput,
+    ListPendingMemoryCandidatesInput,
     MemoryCandidateStore,
-    SaveCandidateEmbeddingInput,
     UpdateMemoryCandidateStatusInput,
 } from "./candidate/candidatePorts.js";
 
@@ -76,20 +79,39 @@ export type {
     MemoryEmbeddingProvider,
 } from "./embedding/embeddingPorts.js";
 
-// ---------- Stores ----------
+// ---------- Staging stage ----------
 export {
-    MEMORY_STATUSES,
-    type ActiveMemoryRecord,
-    type CreateMemoryInput,
-    type FindExactActiveMemoryInput,
-    type ListActiveMemoriesInput,
-    type MemoryStatus,
-    type MemoryStore,
-    type SaveMemoryEmbeddingInput,
-} from "./stores/activeMemoryStorePort.js";
+    MEMORY_STAGING_STATUSES,
+    type MemoryStagingRecord,
+    type MemoryStagingSourceRecord,
+    type MemoryStagingStatus,
+} from "./staging/memoryStagingTypes.js";
+export type {
+    CreateMemoryStagingInput,
+    FindBySourceCandidateInput,
+    FindExactStagingInput,
+    IncrementMemoryStagingOccurrenceInput,
+    LinkStagingSourceInput,
+    ListMemoryStagingInput,
+    MemoryStagingStore,
+} from "./staging/memoryStagingPorts.js";
+export { MemoryStagingProcessor } from "./staging/MemoryStagingProcessor.js";
+export type {
+    MemoryStagingProcessorDeps,
+    ProcessCandidatesInput,
+    ProcessCandidatesResult,
+    ProcessPendingCandidatesInput,
+    ProcessPendingCandidatesResult,
+} from "./staging/MemoryStagingProcessor.js";
 
-// ---------- Duplicate stage ----------
-export { checkExactDuplicate } from "./duplicate/exactDuplicateStep.js";
+// ---------- Retained store (Batch 4 placeholder) ----------
+export {
+    MEMORY_RETAINED_STATUSES,
+    type ListMemoryRetainedInput,
+    type MemoryRetainedRecord,
+    type MemoryRetainedStatus,
+    type MemoryRetainedStore,
+} from "./stores/memoryRetainedStorePort.js";
 
 // ---------- Ranking stage ----------
 export {
@@ -104,19 +126,11 @@ export {
     rankSimilarMemories,
     type RankSimilarMemoriesOptions,
     type RankSimilarMemoriesResult,
+    type RankableMemory,
     type RankedMemory,
 } from "./ranking/rankSimilarMemories.js";
 
-// ---------- Decision stage ----------
-export {
-    MEMORY_DECISION_KINDS,
-    type AppendMemoryDecisionInput,
-    type ListMemoryDecisionsInput,
-    type MemoryDecisionKind,
-    type MemoryDecisionRecord,
-    type MemoryDecisionStore,
-    type MemorySimilaritySummaryEntry,
-} from "./decision/decisionPorts.js";
+// ---------- Decision helpers (pure) ----------
 export {
     decideBySimilarity,
     defaultMemoryDecisionPolicy,
@@ -124,18 +138,5 @@ export {
     type LowValueAssessment,
     type MemoryDecisionPolicy,
     type SimilarityDecision,
+    type SimilarityDecisionKind,
 } from "./decision/decisionPolicy.js";
-export { MemoryDecisionRecorder } from "./decision/MemoryDecisionRecorder.js";
-export type {
-    MemoryDecisionRecorderDeps,
-    RecordDecisionInput,
-} from "./decision/MemoryDecisionRecorder.js";
-
-// ---------- Processing stage ----------
-export { MemoryCandidateProcessor } from "./processing/MemoryCandidateProcessor.js";
-export type { MemoryCandidateProcessorDeps } from "./processing/MemoryCandidateProcessor.js";
-export type {
-    MemoryCandidateProcessingOutcome,
-    ProcessMemoryCandidatesInput,
-    ProcessMemoryCandidatesResult,
-} from "./processing/processingTypes.js";

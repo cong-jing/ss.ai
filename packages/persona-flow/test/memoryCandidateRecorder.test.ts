@@ -65,7 +65,7 @@ describe("MemoryCandidateRecorder", () => {
         assert.equal(result.accepted[0]!.text, "User likes hiking.");
     });
 
-    it("persists every accepted candidate with source/seq/normalizedText filled in", async () => {
+    it("persists every accepted candidate with source/seq filled in", async () => {
         const stores = makeInMemoryMemoryStores();
         const recorder = new MemoryCandidateRecorder({
             candidateStore: stores.candidateStore,
@@ -93,10 +93,11 @@ describe("MemoryCandidateRecorder", () => {
         }
         // seq is per-turn and monotonically increasing
         assert.deepEqual(result.accepted.map((r) => r.seq), [0, 1, 2]);
-        // normalizedText is lowercase + whitespace-collapsed
-        assert.equal(result.accepted[1]!.normalizedText, "hello world!");
-        // the CJK text survives normalize without becoming empty
-        assert.equal(result.accepted[0]!.normalizedText.length > 0, true);
+        // Recorder stores the trimmed text verbatim; normalization
+        // moved to the staging processor in Batch 3.5.
+        assert.equal(result.accepted[1]!.text, "Hello World!");
+        // CJK text survives trim intact.
+        assert.equal(result.accepted[0]!.text, "用户喜欢玩游戏");
     });
 
     it("isolates seq counters per assistant turn so concurrent turns don't collide", async () => {

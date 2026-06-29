@@ -14,8 +14,8 @@ import { InMemoryChatStore } from "./inMemoryChatStore.js";
 import { InMemoryConversationActorStore } from "./inMemoryConversationActorStore.js";
 import {
     StubMemoryCandidateStore,
-    StubMemoryDecisionStore,
-    StubMemoryStore,
+    StubMemoryRetainedStore,
+    StubMemoryStagingStore,
 } from "./inMemoryMemoryStores.js";
 import type { AppStores } from "@ss-ai/persona-flow";
 import { DEFAULT_MEMORY_SETTINGS } from "@ss-ai/persona-flow";
@@ -95,8 +95,8 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}, op
         chat: new InMemoryChatStore(),
         providerCredential: new InMemoryUserProviderCredentialStore(),
         memoryCandidate: new StubMemoryCandidateStore(),
-        memory: new StubMemoryStore(),
-        memoryDecision: new StubMemoryDecisionStore(),
+        memoryStaging: new StubMemoryStagingStore(),
+        memoryRetained: new StubMemoryRetainedStore(),
     };
 
     const app = createHttpServer(config, { stores }) as typeof createHttpServer extends (...args: any[]) => infer T ? T & { closeDatabase?: () => void } : never;

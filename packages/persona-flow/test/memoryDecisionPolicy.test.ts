@@ -6,9 +6,9 @@ import {
     isLowValueCandidate,
 } from "../src/memory/index.js";
 import type { RankedMemory } from "../src/memory/index.js";
-import type { ActiveMemoryRecord } from "../src/memory/index.js";
+import type { MemoryRetainedRecord } from "../src/memory/index.js";
 
-function mem(id: string): ActiveMemoryRecord {
+function mem(id: string): MemoryRetainedRecord {
     return {
         id,
         userId: "u1",
