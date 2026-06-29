@@ -18,7 +18,7 @@
 - 基于 SSE 的流式聊天
 - prompt 组合与模板管理
 - 以 structured output 为主、并保留 provider-neutral tool-call 抽象供未来 agent 工具复用的 turn event 设计
-- 长期记忆写入原型，包括 candidate extraction、embedding、相似度排序和保守提交策略
+- 长期记忆写入原型，包括 candidate intake、memory staging、embedding、轻量去重、memory retained 预留表和 debug API
 - 用 SQLite 持久化对话与角色数据
 - 角色对话与 TRPG 风格交互设计
 - LLM provider abstraction
@@ -171,7 +171,7 @@ flowchart LR
 - 通过 `ModelRuntime` 解析模型运行时并调用注入的 `ModelClient`
 - 在 `src/llm/modelClient.ts` 中定义 LLM client interfaces，包括 provider-neutral tool definitions、tool choice 和可选 embedding 调用
 - 定义 `submit_turn_events` 事件 schema，并解析模型返回的 turn events
-- 在 `src/memory/**` 下定义长期记忆 pipeline：candidate records、active memory records、decision records、ports、normalization、cosine similarity、保守 decision policy、`MemoryCandidateRecorder`、`MemoryCandidateProcessor` 以及 `MemoryPipelineService`
+- 在 `src/memory/**` 下定义长期记忆 pipeline：raw candidate records、memory staging records、memory retained records、ports、normalization、embedding、cosine similarity sampling、`MemoryCandidateRecorder`、`MemoryStagingProcessor` 以及 `MemoryPipelineService`
 - 在 `src/memory/embedding/**` 下定义 `ModelClientMemoryEmbeddingProvider`，把 memory pipeline 的 embedding port 接到注入的 `ModelClient`，让 provider/runtime 依赖只出现在该 adapter 文件中而不会污染 stage 代码
 
 层级关系需要特别注意：`PersonaFlowChatTurnService` 负责 turn 编排和持久化，但不直接解析 provider tool calls 或 structured output。已注册的 `ModelCall<TParsedOutput>` 负责本 purpose 的 prompt 组装、要求的输出格式（`structuredOutputSchema` 和/或 `tools`）、以及业务级解析。`ModelRuntime` 只负责 provider/model/API key 解析和调用 `ModelClient`，返回 provider-neutral 的原始 `llmResponse`（`output` / `structuredOutput` / `toolCalls`）。随后 model call 把响应转换为 `parsedOutput`；可选的 `parsedToolCalls` 只用于调用方确实需要检查的中间工具结果。对当前 `single_character_chat` 来说，最终可见回复使用 `response_format: json_schema` 生成，并折叠进 `parsedOutput` 的 `{ displayText, events }`。Memory write candidates 是同一个 structured output 中的顶层可选字段，会折叠进 `parsedOutput.memoryWriteCandidates` 供内部处理。
@@ -183,7 +183,7 @@ flowchart LR
 3. `resolveModelCall()` 根据请求的 purpose 和 interaction mode 选择已注册 handler。目前实际使用的是 `chat.main:single_character_chat`。
 4. handler 组装 LLM messages，并通过 `structuredOutputSchema`（基于 `submit_turn_events` 事件 schema 加上可选 `memoryWriteCandidates` 字段）要求模型以结构化 JSON 形式提交本回合事件。`ModelRuntime.chat()` 根据 `userPreferences.modelAssignments[modelCallPurpose]` 解析 provider / model，根据 provider credential 或默认 API key 解析密钥，然后调用 `ModelClient`。
 5. model call 把返回的 `llmResponse.structuredOutput` 解析为 `SubmitTurnEventsArgs`，并返回 chat 专用的 `parsedOutput`：归一化后的展示文本和有序 `TurnEvent[]`。
-6. model call 还会从 structured output 中提取 `memoryWriteCandidates`。assistant turn 持久化后，`PersonaFlowChatTurnService` 通过 `MemoryPipelineService.handleChatTurnCandidates()` 处理这些 candidates：service 内部按 `memory.enabled` 决定是否运行，然后顺序调用 `MemoryCandidateRecorder` 记录候选；当 `memory.candidateProcessingMode === "inline"` 时再触发 `MemoryCandidateProcessor` 完成 embedding、去重、active memory 相似度比较、memory row 创建和 decision row 写入。
+6. model call 还会从 structured output 中提取 `memoryWriteCandidates`。assistant turn 持久化后，`PersonaFlowChatTurnService` 通过 `MemoryPipelineService.handleChatTurnCandidates()` 处理这些 candidates：service 内部按 `memory.enabled` 决定是否运行，然后顺序调用 `MemoryCandidateRecorder` 记录原始候选；当 `memory.candidateProcessingMode === "inline"` 且 `memory.staging.enabled` 时，再触发 `MemoryStagingProcessor` 完成规则过滤、normalization、embedding、memory staging 精确重复聚合和 candidate 状态更新。
 7. `PersonaFlowChatTurnService` 只消费这个 parsed result，不需要知道底层输出格式。完整有序的 turn event 列表会随 assistant turn 一起持久化。
 8. Assistant turn 会作为 conversation 的 self actor 写入 chat store，`appendAssistantTurn()` 同时写 timeline message 和结构化 `turn_events`。
 
@@ -191,7 +191,7 @@ flowchart LR
 
 Memory candidate collection 不影响 streaming preview。流式文本和 `turnEventPreview` 事件仍然只来自 structured-output JSON 文本通道；memory candidates 只在模型 stream 完成后的最终 parsed structured output 中被消费。
 
-Memory 写入链路当前只完成写入侧：structured output 可以提交 `memoryWriteCandidates`，服务端会记录候选、生成 embedding、按相似度扫描 active memories，并写入 candidate / memory / decision 表。只读 debug API 已可查询 candidates、active memories 和 decisions；active memories 尚未回读进 prompt，因此还不是完整 RAG 闭环。详细边界、端口、决策策略和未完成项见 [Project Map - Memory 子系统](project-map-memory.zh-CN.md)。
+Memory 写入链路当前只完成 candidate -> memory staging：structured output 可以提交 `memoryWriteCandidates`，服务端会记录候选、生成 embedding、聚合 normalized text 完全相同的 staging evidence，并写入 `memory_candidates`、`memory_staging`、`memory_staging_sources`。`memory_retained` 表和只读 debug API 已预留，但 Batch 3.5 不会写入 retained memory；memory staging / retained memory 也尚未回读进 prompt，因此还不是完整 RAG 闭环。详细边界、端口、数据表、配置和未完成项见 [Project Map - Memory 子系统](project-map-memory.zh-CN.md)。
 
 interaction modes 定义在 `@ss-ai/contracts` 中，整体架构也预期后续支持多个 mode。当前真正落地到运行时的只有 `single_character_chat`；其他 mode 虽然已经在 contracts 和 UI 中存在，作为后续规划的占位，但还没有接入 prompt 和 model-call dispatch。
 
@@ -212,7 +212,7 @@ interaction modes 定义在 `@ss-ai/contracts` 中，整体架构也预期后续
 
 Turn event 的纯类型与字面量常量位于 `packages/contracts/src/turnEvents.ts`；需要运行时校验的 Zod schema 位于 `packages/contracts/src/turnEvents.schema.ts`，通过 `@ss-ai/contracts/turnEvents.schema` 子入口使用。这样 web 可以引用纯 contracts 而不把 Zod 运行时代码打进主 bundle。
 
-Memory candidate 的纯类型位于 `packages/contracts/src/memoryCandidates.ts`；运行时 Zod schema 位于 `packages/contracts/src/memoryCandidates.schema.ts`，通过 `@ss-ai/contracts/memoryCandidates.schema` 子入口使用。`SubmitTurnEventsArgs` 可以包含顶层 `memoryWriteCandidates`；当前 chat-turn wiring 会记录它们，按配置立即提交，并提供 candidates、active memories、decisions 的只读 debug API。
+Memory candidate 的纯类型位于 `packages/contracts/src/memoryCandidates.ts`；运行时 Zod schema 位于 `packages/contracts/src/memoryCandidates.schema.ts`，通过 `@ss-ai/contracts/memoryCandidates.schema` 子入口使用。`SubmitTurnEventsArgs` 可以包含顶层 `memoryWriteCandidates`；当前 chat-turn wiring 会记录它们，按配置处理到 memory staging，并提供 candidates、memory staging、memory retained 的只读 debug API。
 
 ### `packages/persona-flow-sqlite`
 
@@ -223,7 +223,7 @@ Memory candidate 的纯类型位于 `packages/contracts/src/memoryCandidates.ts`
 - 用 Drizzle 打开 `better-sqlite3` 数据库
 - 在 `src/db/schema.ts` 中定义 schema
 - 实现角色、会话、actors、messages、用户资料、偏好和 provider credentials 等 stores
-- 实现 memory candidates、active memories 和 memory decisions 的 SQLite stores
+- 实现 memory candidates、memory staging、memory staging sources 和 memory retained 的 SQLite stores
 - 通过 `createSqliteStores()` 创建完整的 `AppStores`
 
 重要数据表：
@@ -238,8 +238,9 @@ Memory candidate 的纯类型位于 `packages/contracts/src/memoryCandidates.ts`
 - `user_character_states`
 - `user_provider_credentials`
 - `memory_candidates`
-- `memories`
-- `memory_decisions`
+- `memory_staging`
+- `memory_staging_sources`
+- `memory_retained`
 
 `user_preferences.model_assignments_json` 用于保存从 model-call purpose 到 `{ provider, model }` 的映射。
 
@@ -377,7 +378,7 @@ QQ bot 集成。
 - `runtimeFiles`：临时目录和用户数据目录
 - `agent`：模型客户端的超时和重试设置
 - `promptLog`：prompt logging 是否启用以及输出路径
-- `memory`：长期记忆写入链路开关和候选处理模式；当前暴露 `enabled` 与 `candidateProcessingMode`，memory 诊断日志复用全局 `logger.level`，详细说明见 [Project Map - Memory 子系统](project-map-memory.zh-CN.md)
+- `memory`：长期记忆写入链路开关、候选处理模式，以及 `memory.staging` / `memory.retained` 的运行时参数；memory 诊断日志复用全局 `logger.level`，详细说明见 [Project Map - Memory 子系统](project-map-memory.zh-CN.md)
 - `models`：provider 配置、API URL、可选默认 API key、默认 model，以及可选静态 `availableModels`
 - `defaultModelAssignments`：按 `ModelCallPurpose` 配置的默认 provider 和 model 映射
 - `auth`：认证模式、默认用户 id、是否允许注册、session 生命周期和 cookie 设置
@@ -454,15 +455,15 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 - `packages/persona-flow/src/memory/candidate/MemoryCandidateRecorder.ts`
 - `packages/persona-flow/src/memory/candidate/candidatePorts.ts`
 - `packages/persona-flow/src/memory/candidate/textNormalization.ts`
-- `packages/persona-flow/src/memory/processing/MemoryCandidateProcessor.ts`
 - `packages/persona-flow/src/memory/embedding/ModelClientMemoryEmbeddingProvider.ts`
 - `packages/persona-flow/src/memory/embedding/MemoryEmbeddingStep.ts`
 - `packages/persona-flow/src/memory/ranking/similarity.ts`
 - `packages/persona-flow/src/memory/ranking/rankSimilarMemories.ts`
 - `packages/persona-flow/src/memory/decision/decisionPolicy.ts`
-- `packages/persona-flow/src/memory/decision/decisionPorts.ts`
-- `packages/persona-flow/src/memory/decision/MemoryDecisionRecorder.ts`
-- `packages/persona-flow/src/memory/duplicate/exactDuplicateStep.ts`
+- `packages/persona-flow/src/memory/staging/MemoryStagingProcessor.ts`
+- `packages/persona-flow/src/memory/staging/memoryStagingPorts.ts`
+- `packages/persona-flow/src/memory/staging/memoryStagingTypes.ts`
+- `packages/persona-flow/src/memory/stores/memoryRetainedStorePort.ts`
 - `packages/persona-flow/src/llm/tools/modelTool.ts`
 - `packages/persona-flow/src/llm/tools/submitTurnEventsTool.ts`
 - `packages/persona-flow/src/modelCall/modelRuntime.ts`
@@ -494,8 +495,8 @@ API key 的解析顺序同样是“用户优先，配置兜底”：
 - SQLite 中模型分配对应的列是 `model_assignments_json`，旧的 model-assignment 存储兼容逻辑已经移除
 - 当前 single-character chat 模型输出路径使用 `response_format: json_schema` 结构化输出，负责 visible turn events 和可选 `memoryWriteCandidates`（事件 schema 来源仍是 `submitTurnEventsTool.argsSchema`）。这条路径不注册 memory candidate tool
 - Chat-turn memory write 已经是持久化链路：candidates 从 structured output 中解析，assistant turn 持久化后通过 `MemoryPipelineService` 处理；服务端 runtime config 中的 `memory.enabled` 和 `memory.candidateProcessingMode` 控制 pipeline 是否运行以及是否 inline 处理
-- Memory pipeline 内部包含 candidate recording、embedding-port driven processor、text normalization、cosine similarity ranking、conservative decision policy、SQLite-backed `memory_candidates` / `memories` / `memory_decisions` stores，以及 chat-turn integration
-- Memory write path TODO：让 `createMemory + candidate status + decision` 具备 transaction-safe 一致性，然后补 debug events 和 prompt memory read-back
+- Memory pipeline 内部包含 candidate recording、candidate -> memory staging processor、text normalization、embedding、normalized duplicate 聚合、similarity sampling 日志、SQLite-backed `memory_candidates` / `memory_staging` / `memory_staging_sources` / `memory_retained` stores，以及 chat-turn integration
+- Memory write path TODO：实现 Batch 4 的 memory staging -> memory retained LLM consolidation judge，然后补 retained memory prompt read-back
 - 依赖 similarity thresholds 前 TODO：收集更多真实 `mistral-embed` 样本。当前 probe 返回 1024 维向量，并显示短中文用户事实可能有较高 baseline cosine similarity
 - chatTurn/modelCall 的层级边界是刻意拆开的：chat service 消费 model call 的 `parsedOutput`，每个 model call 自己负责解析 provider response（structured output 或 tool arguments）。这样未来 interaction mode 即使用不同输出格式，也不需要改 chat-turn 持久化代码
 - `messages` 现在是 timeline/display 表，结构化 assistant 事实存储在 `turn_events` 中
