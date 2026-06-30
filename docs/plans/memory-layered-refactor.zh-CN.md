@@ -386,7 +386,7 @@ Batch 4 不再把 LLM judge 接在 candidate similarity decision 后面，而是
 - occurrence count 如何影响 importance 或保留优先级。
 - processed / archived / forgotten 的精确状态机。
 
-旧文档 [memory-write-batch4-llm-judge.zh-CN.md](memory-write-batch4-llm-judge.zh-CN.md) 描述的是“candidate 后立即 judge”的方案。该方案被本文档的新路线取代，仅作为历史参考。
+Batch 4 新版设计见 [memory-write-batch4-llm-judge.zh-CN.md](memory-write-batch4-llm-judge.zh-CN.md)，方向是由独立 retained consolidation processor 处理 `memory_staging` 到 `memory_retained` 的沉淀，而不是恢复旧的 candidate 后立即 judge 路径。
 
 ## 8. Batch 5：Memory Read Injection
 

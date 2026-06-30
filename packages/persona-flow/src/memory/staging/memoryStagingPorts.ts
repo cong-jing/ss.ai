@@ -95,6 +95,30 @@ export interface ListMemoryStagingInput {
 }
 
 /**
+ * Pull pending staging rows for the retained-consolidation pass.
+ * Batch 4 keeps this deliberately simple: no claim/lock, ordered
+ * oldest-first so retries process the same rows in the same order.
+ */
+export interface ListPendingMemoryStagingInput {
+    userId: string;
+    characterId: string;
+    status?: "pending";
+    limit: number;
+}
+
+/**
+ * Status transition for a staging row, used by the consolidation
+ * processor to mark a row `processed` / `archived` / `failed` after
+ * the judge decision is applied.
+ */
+export interface UpdateMemoryStagingStatusInput {
+    memoryStagingId: string;
+    status: MemoryStagingStatus;
+    statusReason?: string;
+    updatedAt: string;
+}
+
+/**
  * Storage port.
  *
  * Each method runs as one logical unit. The `create` and `linkSource`
@@ -140,4 +164,14 @@ export interface MemoryStagingStore {
 
     /** Read-only listing for the debug API. */
     list(input: ListMemoryStagingInput): Promise<MemoryStagingRecord[]>;
+
+    /**
+     * Pull pending staging rows for the retained-consolidation pass.
+     * Ordered oldest-first by `lastSeenAt` then `id` for stable
+     * batching across retries.
+     */
+    listPending(input: ListPendingMemoryStagingInput): Promise<MemoryStagingRecord[]>;
+
+    /** Move a staging row to a terminal/working status. */
+    updateStatus(input: UpdateMemoryStagingStatusInput): Promise<void>;
 }

@@ -140,9 +140,23 @@ interface RawConfig {
         };
         retained?: {
             enabled?: boolean;
+            processingMode?: "manual" | "inline" | "worker";
+            batchLimit?: number;
             retrieval?: {
                 topK?: number;
                 listLimit?: number;
+                minSimilarityForJudgeContext?: number;
+            };
+            judge?: {
+                enabled?: boolean;
+                maxSourceCandidates?: number;
+                maxRetainedForPrompt?: number;
+                maxTextChars?: number;
+            };
+            importance?: {
+                min?: number;
+                max?: number;
+                default?: number;
             };
         };
     };
@@ -502,12 +516,38 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
                 ...DEFAULT_MEMORY_SETTINGS.retained,
                 enabled: fileConfig.memory?.retained?.enabled
                     ?? DEFAULT_MEMORY_SETTINGS.retained.enabled,
+                processingMode: fileConfig.memory?.retained?.processingMode
+                    ?? DEFAULT_MEMORY_SETTINGS.retained.processingMode,
+                batchLimit: fileConfig.memory?.retained?.batchLimit
+                    ?? DEFAULT_MEMORY_SETTINGS.retained.batchLimit,
                 retrieval: {
                     ...DEFAULT_MEMORY_SETTINGS.retained.retrieval,
                     topK: fileConfig.memory?.retained?.retrieval?.topK
                         ?? DEFAULT_MEMORY_SETTINGS.retained.retrieval.topK,
                     listLimit: fileConfig.memory?.retained?.retrieval?.listLimit
                         ?? DEFAULT_MEMORY_SETTINGS.retained.retrieval.listLimit,
+                    minSimilarityForJudgeContext: fileConfig.memory?.retained?.retrieval?.minSimilarityForJudgeContext
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.retrieval.minSimilarityForJudgeContext,
+                },
+                judge: {
+                    ...DEFAULT_MEMORY_SETTINGS.retained.judge,
+                    enabled: fileConfig.memory?.retained?.judge?.enabled
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.judge.enabled,
+                    maxSourceCandidates: fileConfig.memory?.retained?.judge?.maxSourceCandidates
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.judge.maxSourceCandidates,
+                    maxRetainedForPrompt: fileConfig.memory?.retained?.judge?.maxRetainedForPrompt
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.judge.maxRetainedForPrompt,
+                    maxTextChars: fileConfig.memory?.retained?.judge?.maxTextChars
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.judge.maxTextChars,
+                },
+                importance: {
+                    ...DEFAULT_MEMORY_SETTINGS.retained.importance,
+                    min: fileConfig.memory?.retained?.importance?.min
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.importance.min,
+                    max: fileConfig.memory?.retained?.importance?.max
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.importance.max,
+                    default: fileConfig.memory?.retained?.importance?.default
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.importance.default,
                 },
             },
         },

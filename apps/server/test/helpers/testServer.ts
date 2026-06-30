@@ -14,6 +14,7 @@ import { InMemoryChatStore } from "./inMemoryChatStore.js";
 import { InMemoryConversationActorStore } from "./inMemoryConversationActorStore.js";
 import {
     StubMemoryCandidateStore,
+    StubMemoryConsolidationDecisionStore,
     StubMemoryRetainedStore,
     StubMemoryStagingStore,
 } from "./inMemoryMemoryStores.js";
@@ -97,6 +98,7 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}, op
         memoryCandidate: new StubMemoryCandidateStore(),
         memoryStaging: new StubMemoryStagingStore(),
         memoryRetained: new StubMemoryRetainedStore(),
+        memoryConsolidationDecision: new StubMemoryConsolidationDecisionStore(),
     };
 
     const app = createHttpServer(config, { stores }) as typeof createHttpServer extends (...args: any[]) => infer T ? T & { closeDatabase?: () => void } : never;

@@ -360,6 +360,7 @@ export function createTestFixture(): PersonaFlowTestFixture {
         memoryCandidate: memoryStores.candidateStore,
         memoryStaging: memoryStores.stagingStore,
         memoryRetained: memoryStores.retainedStore,
+        memoryConsolidationDecision: memoryStores.consolidationDecisionStore,
     };
 
     return {

@@ -49,9 +49,9 @@ High-level direction:
 
 ## Batch 4: Memory Staging-to-Memory Retained LLM Consolidation Judge
 
-The previous candidate-level LLM judge plan is superseded by Batch 3.5's layered memory design. The old draft remains as historical reference: [memory-write-batch4-llm-judge.zh-CN.md](memory-write-batch4-llm-judge.zh-CN.md).
+Detailed architecture and functional design: [memory-write-batch4-llm-judge.zh-CN.md](memory-write-batch4-llm-judge.zh-CN.md).
 
-Batch 4 should be rewritten after Batch 3.5 is implemented and real memory staging data has been observed.
+The previous candidate-level LLM judge plan is superseded by Batch 3.5's layered memory design. Batch 4 now focuses on a memory-staging-to-memory-retained consolidation processor. The processor owns the system workflow, while the LLM judge should be implemented as a purpose-centered `memory.consolidate` model call and injected through a memory-owned port. Do the minimum model-call boundary adjustment needed for Batch 4 first; defer a full `persona-flow` public API / `ModelCall` redesign until both `chat.main` and `memory.consolidate` provide concrete samples.
 
 High-level direction:
 

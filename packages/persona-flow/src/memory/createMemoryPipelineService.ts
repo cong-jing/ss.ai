@@ -9,6 +9,7 @@ import { MemoryPipelineService } from "./MemoryPipelineService.js";
 import type { MemorySettings } from "./settings.js";
 import { DEFAULT_MEMORY_SETTINGS } from "./settings.js";
 import { MemoryStagingProcessor } from "./staging/MemoryStagingProcessor.js";
+import type { MemoryRetainedConsolidationProcessor } from "./consolidation/MemoryRetainedConsolidationProcessor.js";
 import type {
     MemoryClock,
     MemoryIdGenerator,
@@ -49,6 +50,7 @@ export interface CreateMemoryPipelineServiceInput {
         embeddingProvider?: ConstructorParameters<typeof MemoryEmbeddingStep>[0];
         stagingProcessor?: MemoryStagingProcessor;
         candidateRecorder?: MemoryCandidateRecorder;
+        consolidationProcessor?: MemoryRetainedConsolidationProcessor;
     };
 }
 
@@ -90,5 +92,6 @@ export function createMemoryPipelineService(input: CreateMemoryPipelineServiceIn
         stagingProcessor,
         pipelineLogger,
         settings,
+        ...(input.overrides?.consolidationProcessor ? { consolidationProcessor: input.overrides.consolidationProcessor } : {}),
     });
 }

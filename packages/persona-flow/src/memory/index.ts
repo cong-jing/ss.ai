@@ -93,7 +93,9 @@ export type {
     IncrementMemoryStagingOccurrenceInput,
     LinkStagingSourceInput,
     ListMemoryStagingInput,
+    ListPendingMemoryStagingInput,
     MemoryStagingStore,
+    UpdateMemoryStagingStatusInput,
 } from "./staging/memoryStagingPorts.js";
 export { MemoryStagingProcessor } from "./staging/MemoryStagingProcessor.js";
 export type {
@@ -107,11 +109,44 @@ export type {
 // ---------- Retained store (Batch 4 placeholder) ----------
 export {
     MEMORY_RETAINED_STATUSES,
+    type ArchiveMemoryRetainedInput,
+    type CreateMemoryRetainedInput,
     type ListMemoryRetainedInput,
     type MemoryRetainedRecord,
     type MemoryRetainedStatus,
     type MemoryRetainedStore,
+    type UpdateMemoryRetainedInput,
 } from "./stores/memoryRetainedStorePort.js";
+
+// ---------- Consolidation stage (Batch 4) ----------
+export {
+    JUDGE_ACTIONS,
+    type JudgeAction,
+    type JudgeRetainedCandidate,
+    type JudgeSourceCandidate,
+    type MemoryConsolidationJudgeInput,
+    type MemoryConsolidationJudgeResult,
+    type MemoryRetainedConsolidationOutcome,
+    type ValidatedConsolidationAction,
+} from "./consolidation/consolidationTypes.js";
+export type {
+    ConsolidationDecisionRecord,
+    CreateConsolidationDecisionInput,
+    FindAppliedDecisionInput,
+    ListConsolidationDecisionsInput,
+    MemoryConsolidationDecisionStore,
+    MemoryConsolidationJudgeProvider,
+} from "./consolidation/consolidationPorts.js";
+export { MemoryRetainedConsolidationProcessor } from "./consolidation/MemoryRetainedConsolidationProcessor.js";
+export type {
+    ConsolidationCandidateLookup,
+    ConsolidationCharacterContextProvider,
+    MemoryRetainedConsolidationProcessorDeps,
+    ProcessPendingMemoryStagingInput,
+    ProcessPendingMemoryStagingResult,
+} from "./consolidation/MemoryRetainedConsolidationProcessor.js";
+export { validateJudgeResult } from "./consolidation/consolidationValidation.js";
+export type { JudgeValidation, ValidateJudgeResultInput } from "./consolidation/consolidationValidation.js";
 
 // ---------- Ranking stage ----------
 export {

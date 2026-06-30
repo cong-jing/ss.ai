@@ -1,22 +1,32 @@
 import type {
     AppendMemoryCandidatesInput,
+    ArchiveMemoryRetainedInput,
+    ConsolidationDecisionRecord,
+    CreateConsolidationDecisionInput,
+    CreateMemoryRetainedInput,
     CreateMemoryStagingInput,
+    FindAppliedDecisionInput,
     FindBySourceCandidateInput,
     FindExactStagingInput,
     IncrementMemoryStagingOccurrenceInput,
     LinkStagingSourceInput,
+    ListConsolidationDecisionsInput,
     ListMemoryCandidatesInput,
     ListMemoryRetainedInput,
     ListMemoryStagingInput,
     ListPendingMemoryCandidatesInput,
+    ListPendingMemoryStagingInput,
     MemoryCandidateRecord,
     MemoryCandidateStore,
+    MemoryConsolidationDecisionStore,
     MemoryRetainedRecord,
     MemoryRetainedStore,
     MemoryStagingRecord,
     MemoryStagingSourceRecord,
     MemoryStagingStore,
     UpdateMemoryCandidateStatusInput,
+    UpdateMemoryRetainedInput,
+    UpdateMemoryStagingStatusInput,
 } from "@ss-ai/persona-flow";
 
 /**
@@ -231,6 +241,27 @@ export class StubMemoryStagingStore implements MemoryStagingStore {
         return applyLimit(filtered, input.limit).map((r) => this.clone(r));
     }
 
+    async listPending(input: ListPendingMemoryStagingInput): Promise<MemoryStagingRecord[]> {
+        const filtered = this.rows
+            .filter((r) => r.userId === input.userId)
+            .filter((r) => r.characterId === input.characterId)
+            .filter((r) => r.status === (input.status ?? "pending"))
+            .slice()
+            .sort((a, b) => {
+                if (a.lastSeenAt !== b.lastSeenAt) return a.lastSeenAt < b.lastSeenAt ? -1 : 1;
+                return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+            });
+        return filtered.slice(0, input.limit).map((r) => this.clone(r));
+    }
+
+    async updateStatus(input: UpdateMemoryStagingStatusInput): Promise<void> {
+        const row = this.rows.find((r) => r.id === input.memoryStagingId);
+        if (!row) return;
+        row.status = input.status;
+        row.statusReason = input.statusReason || undefined;
+        row.updatedAt = input.updatedAt;
+    }
+
     private matchesFilter(record: MemoryStagingRecord, input: ListMemoryStagingInput): boolean {
         if (record.userId !== input.userId) return false;
         if (input.characterId !== undefined && record.characterId !== input.characterId) return false;
@@ -283,5 +314,87 @@ export class StubMemoryRetainedStore implements MemoryRetainedStore {
             tags: [...r.tags],
             embedding: r.embedding ? { ...r.embedding, vector: [...r.embedding.vector] } : undefined,
         }));
+    }
+
+    async create(input: CreateMemoryRetainedInput): Promise<MemoryRetainedRecord> {
+        const record: MemoryRetainedRecord = {
+            id: input.id,
+            userId: input.userId,
+            characterId: input.characterId,
+            scope: input.scope,
+            type: input.type,
+            text: input.text,
+            normalizedText: input.normalizedText,
+            relatedEntities: [...input.relatedEntities],
+            tags: [...input.tags],
+            sourceStagingId: input.sourceStagingId,
+            status: input.status,
+            importance: input.importance,
+            occurrenceCount: input.occurrenceCount,
+            firstSeenAt: input.firstSeenAt,
+            lastSeenAt: input.lastSeenAt,
+            embedding: input.embedding ? { ...input.embedding, vector: [...input.embedding.vector] } : undefined,
+            schemaVersion: 1,
+            createdAt: input.now,
+            updatedAt: input.now,
+        };
+        this.rows.push(record);
+        return { ...record };
+    }
+
+    async update(input: UpdateMemoryRetainedInput): Promise<MemoryRetainedRecord> {
+        const row = this.rows.find((r) => r.id === input.memoryRetainedId);
+        if (!row) throw new Error(`StubMemoryRetainedStore.update: ${input.memoryRetainedId} not found`);
+        if (input.text !== undefined) row.text = input.text;
+        if (input.normalizedText !== undefined) row.normalizedText = input.normalizedText;
+        if (input.relatedEntities !== undefined) row.relatedEntities = [...input.relatedEntities];
+        if (input.tags !== undefined) row.tags = [...input.tags];
+        if (input.sourceStagingId !== undefined) row.sourceStagingId = input.sourceStagingId;
+        if (input.importance !== undefined) row.importance = input.importance;
+        if (input.lastSeenAt !== undefined) row.lastSeenAt = input.lastSeenAt;
+        if (input.embedding !== undefined) row.embedding = { ...input.embedding, vector: [...input.embedding.vector] };
+        if (input.occurrenceDelta) row.occurrenceCount += input.occurrenceDelta;
+        row.updatedAt = input.updatedAt;
+        return { ...row };
+    }
+
+    async archive(input: ArchiveMemoryRetainedInput): Promise<void> {
+        const row = this.rows.find((r) => r.id === input.memoryRetainedId);
+        if (!row) return;
+        row.status = "archived";
+        row.updatedAt = input.updatedAt;
+    }
+}
+
+/**
+ * Stub consolidation decision store for HTTP integration tests.
+ */
+export class StubMemoryConsolidationDecisionStore implements MemoryConsolidationDecisionStore {
+    readonly rows: ConsolidationDecisionRecord[] = [];
+
+    async create(input: CreateConsolidationDecisionInput): Promise<ConsolidationDecisionRecord> {
+        const record: ConsolidationDecisionRecord = {
+            ...input,
+            archivedRetainedMemoryIds: [...input.archivedRetainedMemoryIds],
+        };
+        this.rows.push(record);
+        return { ...record, archivedRetainedMemoryIds: [...record.archivedRetainedMemoryIds] };
+    }
+
+    async findApplied(input: FindAppliedDecisionInput): Promise<ConsolidationDecisionRecord | undefined> {
+        const found = this.rows.find((r) => r.memoryStagingId === input.memoryStagingId && r.status === "applied");
+        return found ? { ...found, archivedRetainedMemoryIds: [...found.archivedRetainedMemoryIds] } : undefined;
+    }
+
+    async list(input: ListConsolidationDecisionsInput): Promise<ConsolidationDecisionRecord[]> {
+        const actionFilter = toArray(input.action);
+        const statusFilter = toArray(input.status);
+        const filtered = this.rows
+            .filter((r) => r.userId === input.userId)
+            .filter((r) => input.characterId === undefined || r.characterId === input.characterId)
+            .filter((r) => input.memoryStagingId === undefined || r.memoryStagingId === input.memoryStagingId)
+            .filter((r) => actionFilter.length === 0 || actionFilter.includes(r.action))
+            .filter((r) => statusFilter.length === 0 || statusFilter.includes(r.status));
+        return applyLimit(filtered, input.limit).map((r) => ({ ...r, archivedRetainedMemoryIds: [...r.archivedRetainedMemoryIds] }));
     }
 }

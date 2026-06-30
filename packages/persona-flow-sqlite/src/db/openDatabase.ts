@@ -460,6 +460,9 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
             source_staging_id     TEXT,
             status                TEXT NOT NULL,
             importance            REAL NOT NULL,
+            occurrence_count      INTEGER NOT NULL DEFAULT 1,
+            first_seen_at         TEXT NOT NULL,
+            last_seen_at          TEXT NOT NULL,
             embedding_json        TEXT,
             schema_version        INTEGER NOT NULL,
             created_at            TEXT NOT NULL,
@@ -468,7 +471,43 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
 
         CREATE INDEX IF NOT EXISTS idx_memory_retained_user_character_scope_type_status
             ON memory_retained(user_id, character_id, scope, type, status);
+
+        CREATE TABLE IF NOT EXISTS memory_consolidation_decisions (
+            id                              TEXT PRIMARY KEY,
+            user_id                         TEXT NOT NULL,
+            character_id                    TEXT NOT NULL,
+            memory_staging_id               TEXT NOT NULL,
+            action                          TEXT NOT NULL,
+            target_retained_memory_id       TEXT,
+            created_retained_memory_id      TEXT,
+            archived_retained_memory_ids_json TEXT NOT NULL DEFAULT '[]',
+            judge_request_json              TEXT,
+            judge_response_json             TEXT,
+            validated_action_json           TEXT,
+            status                          TEXT NOT NULL,
+            status_reason                   TEXT,
+            model_call_purpose              TEXT NOT NULL,
+            model                           TEXT,
+            request_id                      TEXT,
+            created_at                      TEXT NOT NULL
+        );
+
+        -- Idempotency: at most one applied decision per staging row.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_consolidation_applied_unique
+            ON memory_consolidation_decisions(memory_staging_id)
+            WHERE status = 'applied';
+
+        -- Audit listing by user + character.
+        CREATE INDEX IF NOT EXISTS idx_memory_consolidation_user_character_created
+            ON memory_consolidation_decisions(user_id, character_id, created_at);
     `);
+
+    // memory_retained gained occurrence accounting in Batch 4. Older 3.5 DBs
+    // had the table created without these columns; backfill them.
+    try { sqlite.exec(`ALTER TABLE memory_retained ADD COLUMN occurrence_count INTEGER NOT NULL DEFAULT 1`); } catch { /* already exists */ }
+    try { sqlite.exec(`ALTER TABLE memory_retained ADD COLUMN first_seen_at TEXT NOT NULL DEFAULT ''`); } catch { /* already exists */ }
+    try { sqlite.exec(`ALTER TABLE memory_retained ADD COLUMN last_seen_at TEXT NOT NULL DEFAULT ''`); } catch { /* already exists */ }
+
 
     // Obsolete pre-3.5 indexes — names changed; drop the old ones
     // so PRAGMA index_list doesn't list zombies.

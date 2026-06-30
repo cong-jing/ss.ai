@@ -10,6 +10,11 @@ import type {
     ProcessPendingCandidatesInput,
     ProcessPendingCandidatesResult,
 } from "./staging/MemoryStagingProcessor.js";
+import type {
+    MemoryRetainedConsolidationProcessor,
+    ProcessPendingMemoryStagingInput,
+    ProcessPendingMemoryStagingResult,
+} from "./consolidation/MemoryRetainedConsolidationProcessor.js";
 
 /**
  * Top-level entry point for the memory pipeline.
@@ -45,6 +50,12 @@ export interface MemoryPipelineServiceDeps {
     stagingProcessor: MemoryStagingProcessor;
     pipelineLogger: MemoryPipelineLogger;
     settings: MemorySettings;
+    /**
+     * Batch 4 consolidation processor. Optional so deployments that
+     * have not configured a judge (no `memory.consolidate` model
+     * assignment) can run candidate + staging without it.
+     */
+    consolidationProcessor?: MemoryRetainedConsolidationProcessor;
 }
 
 export class MemoryPipelineService {
@@ -171,6 +182,18 @@ export class MemoryPipelineService {
             return { outcomes: [] };
         }
         return await this.deps.stagingProcessor.processPendingCandidates(input);
+    }
+
+    /**
+     * Process up to `limit` pending staging rows into retained memory
+     * via the consolidation judge. No-op when the feature is off or
+     * no judge processor is configured.
+     */
+    async processPendingMemoryStaging(input: ProcessPendingMemoryStagingInput): Promise<ProcessPendingMemoryStagingResult> {
+        if (!this.deps.settings.enabled || !this.deps.consolidationProcessor) {
+            return { outcomes: [] };
+        }
+        return await this.deps.consolidationProcessor.processPending(input);
     }
 }
 

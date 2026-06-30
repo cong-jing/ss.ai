@@ -2,6 +2,7 @@ import "./chatTurnPreparation.test.js";
 import "./memoryCandidateRecorder.test.js";
 import "./memoryCandidatesSchema.test.js";
 import "./memoryStagingProcessor.test.js";
+import "./memoryRetainedConsolidationProcessor.test.js";
 import "./memoryDecisionPolicy.test.js";
 import "./memoryPipelineService.test.js";
 import "./memorySimilarity.test.js";

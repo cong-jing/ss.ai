@@ -89,15 +89,48 @@ export interface MemoryRetainedSettings {
      */
     enabled: boolean;
     /**
-     * Tuning constants for the future retrieval / consolidation
-     * pipeline. Kept here so a Batch 4 patch can ship without a
-     * config schema change.
+     * How retained consolidation is triggered.
+     *  - `"manual"`: only an explicit `processPendingMemoryStaging`
+     *    call (debug route / script / future worker) runs the judge.
+     *  - `"inline"`: dev-only; run after the chat turn. The
+     *    processor stays decoupled from the chat turn either way.
+     *  - `"worker"`: placeholder for a future async worker.
+     */
+    processingMode: "manual" | "inline" | "worker";
+    /**
+     * Default batch size for `processPendingMemoryStaging` when no
+     * explicit limit is passed.
+     */
+    batchLimit: number;
+    /**
+     * Tuning constants for the retained retrieval that feeds the
+     * judge's candidate context.
      */
     retrieval: {
-        /** Top-K nearest retained memories to surface to the prompt. */
+        /** Top-K nearest retained memories to surface to the judge. */
         topK: number;
-        /** Hard cap on retained rows scanned per retrieval. */
+        /** Hard cap on retained rows scanned per staging row. */
         listLimit: number;
+        /** Optional cosine floor; rows below it are dropped from judge context. */
+        minSimilarityForJudgeContext?: number;
+    };
+    /**
+     * Bounds for the judge call: enable switch and prompt-size caps.
+     */
+    judge: {
+        enabled: boolean;
+        maxSourceCandidates: number;
+        maxRetainedForPrompt: number;
+        maxTextChars: number;
+    };
+    /**
+     * Allowed importance scale for retained memories (1..5 integer).
+     * Judge output is clamped/validated against this.
+     */
+    importance: {
+        min: number;
+        max: number;
+        default: number;
     };
 }
 
@@ -121,9 +154,22 @@ export const DEFAULT_MEMORY_SETTINGS: MemorySettings = {
     },
     retained: {
         enabled: false,
+        processingMode: "manual",
+        batchLimit: 20,
         retrieval: {
             topK: 10,
             listLimit: 500,
+        },
+        judge: {
+            enabled: true,
+            maxSourceCandidates: 20,
+            maxRetainedForPrompt: 10,
+            maxTextChars: 600,
+        },
+        importance: {
+            min: 1,
+            max: 5,
+            default: 3,
         },
     },
 };

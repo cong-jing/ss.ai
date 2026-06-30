@@ -263,6 +263,9 @@ export const memoryRetained = sqliteTable("memory_retained", {
     sourceStagingId: text("source_staging_id"),
     status: text("status").notNull(),
     importance: real("importance").notNull(),
+    occurrenceCount: integer("occurrence_count").notNull().default(1),
+    firstSeenAt: text("first_seen_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
     embeddingJson: text("embedding_json"),
     schemaVersion: integer("schema_version").notNull(),
     createdAt: text("created_at").notNull(),
@@ -271,3 +274,31 @@ export const memoryRetained = sqliteTable("memory_retained", {
 
 export type MemoryRetainedRow = typeof memoryRetained.$inferSelect;
 export type NewMemoryRetainedRow = typeof memoryRetained.$inferInsert;
+
+// ── memory_consolidation_decisions ─────────────────────────────────────────────
+// Audit log for the Batch 4 consolidation judge. One row per staging
+// row processed, capturing the judge request/response, the validated
+// action, and the applied outcome. `find applied` enforces at most
+// one `applied` decision per staging row (idempotency).
+export const memoryConsolidationDecisions = sqliteTable("memory_consolidation_decisions", {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    characterId: text("character_id").notNull(),
+    memoryStagingId: text("memory_staging_id").notNull(),
+    action: text("action").notNull(),
+    targetRetainedMemoryId: text("target_retained_memory_id"),
+    createdRetainedMemoryId: text("created_retained_memory_id"),
+    archivedRetainedMemoryIdsJson: text("archived_retained_memory_ids_json").notNull().default("[]"),
+    judgeRequestJson: text("judge_request_json"),
+    judgeResponseJson: text("judge_response_json"),
+    validatedActionJson: text("validated_action_json"),
+    status: text("status").notNull(),
+    statusReason: text("status_reason"),
+    modelCallPurpose: text("model_call_purpose").notNull(),
+    model: text("model"),
+    requestId: text("request_id"),
+    createdAt: text("created_at").notNull(),
+});
+
+export type MemoryConsolidationDecisionRow = typeof memoryConsolidationDecisions.$inferSelect;
+export type NewMemoryConsolidationDecisionRow = typeof memoryConsolidationDecisions.$inferInsert;

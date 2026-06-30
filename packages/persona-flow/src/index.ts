@@ -23,6 +23,8 @@ export * from "./modelCall/modelCallRegistry.js";
 export * from "./modelCall/chat.main/singleCharacterChat/promptViewModel.js";
 export * from "./modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.js";
 export * from "./modelCall/modelRuntime.js";
+export * from "./modelCall/memory.consolidate/memoryConsolidateCall.js";
+export * from "./modelCall/memory.consolidate/MemoryConsolidationJudgeProviderAdapter.js";
 export * from "./llm/modelClient.js";
 export * from "./llm/tools/modelTool.js";
 export * from "./llm/tools/submitTurnEventsTool.js";

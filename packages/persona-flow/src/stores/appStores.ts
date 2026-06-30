@@ -7,6 +7,7 @@ import type { ConversationStore } from "./character/conversationStore.js";
 import type { ConversationActorStore } from "./character/conversationActorStore.js";
 import type {
     MemoryCandidateStore,
+    MemoryConsolidationDecisionStore,
     MemoryRetainedStore,
     MemoryStagingStore,
 } from "../memory/index.js";
@@ -30,5 +31,6 @@ export interface AppStores {
     memoryCandidate: MemoryCandidateStore;
     memoryStaging: MemoryStagingStore;
     memoryRetained: MemoryRetainedStore;
+    memoryConsolidationDecision: MemoryConsolidationDecisionStore;
 }
 

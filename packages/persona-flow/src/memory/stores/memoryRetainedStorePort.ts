@@ -45,6 +45,16 @@ export interface MemoryRetainedRecord {
     sourceStagingId?: string;
     status: MemoryRetainedStatus;
     importance: number;
+    /**
+     * How many distinct staging rows have been consolidated into
+     * this retained memory. Starts at 1 on create; merge/update
+     * accumulate so a debug view can show "this fact keeps coming up".
+     */
+    occurrenceCount: number;
+    /** First time evidence for this memory was seen. */
+    firstSeenAt: string;
+    /** Most recent time evidence for this memory was reinforced. */
+    lastSeenAt: string;
     embedding?: MemoryEmbedding;
     schemaVersion: number;
     createdAt: string;
@@ -68,4 +78,58 @@ export interface ListMemoryRetainedInput {
  */
 export interface MemoryRetainedStore {
     list(input: ListMemoryRetainedInput): Promise<MemoryRetainedRecord[]>;
+    create(input: CreateMemoryRetainedInput): Promise<MemoryRetainedRecord>;
+    update(input: UpdateMemoryRetainedInput): Promise<MemoryRetainedRecord>;
+    archive(input: ArchiveMemoryRetainedInput): Promise<void>;
+}
+
+/**
+ * Create a brand-new retained memory. Batch 4 only creates `active`
+ * rows. `occurrenceCount` seeds the frequency signal (usually the
+ * source staging's occurrence) and `firstSeenAt` / `lastSeenAt`
+ * bracket the evidence window.
+ */
+export interface CreateMemoryRetainedInput {
+    id: string;
+    userId: string;
+    characterId: string;
+    scope: MemoryScope;
+    type: MemoryCandidateType;
+    text: string;
+    normalizedText: string;
+    relatedEntities: string[];
+    tags: string[];
+    sourceStagingId?: string;
+    status: "active";
+    importance: number;
+    occurrenceCount: number;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    embedding?: MemoryEmbedding;
+    now: string;
+}
+
+/**
+ * Apply a judge-driven update/merge. Only the provided fields are
+ * overwritten. `occurrenceDelta` accumulates the frequency signal;
+ * `lastSeenAt` advances to the merged evidence's latest sighting.
+ */
+export interface UpdateMemoryRetainedInput {
+    memoryRetainedId: string;
+    text?: string;
+    normalizedText?: string;
+    relatedEntities?: string[];
+    tags?: string[];
+    sourceStagingId?: string;
+    importance?: number;
+    occurrenceDelta?: number;
+    lastSeenAt?: string;
+    embedding?: MemoryEmbedding;
+    updatedAt: string;
+}
+
+export interface ArchiveMemoryRetainedInput {
+    memoryRetainedId: string;
+    statusReason?: string;
+    updatedAt: string;
 }

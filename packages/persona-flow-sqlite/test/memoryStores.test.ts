@@ -20,6 +20,7 @@ import {
     createSqliteStores,
     openDatabase,
     SQLiteMemoryCandidateStore,
+    SQLiteMemoryConsolidationDecisionStore,
     SQLiteMemoryRetainedStore,
     SQLiteMemoryStagingStore,
 } from "../src/index.js";
@@ -690,6 +691,151 @@ describe("SQLiteMemoryRetainedStore", () => {
         const rows = await retainedStore.list({ userId: "user-A", characterId: "char-A" });
         assert.deepEqual(rows, []);
     });
+
+    it("create round-trips a retained memory with occurrence accounting", async () => {
+        const { retainedStore } = freshStores();
+        const created = await retainedStore.create({
+            id: "ret-1",
+            userId: "user-A",
+            characterId: "char-A",
+            scope: "user",
+            type: "fact",
+            text: "User lives in Tokyo.",
+            normalizedText: "user lives in tokyo",
+            relatedEntities: ["Tokyo"],
+            tags: ["location"],
+            sourceStagingId: "staging-1",
+            status: "active",
+            importance: 4,
+            occurrenceCount: 2,
+            firstSeenAt: "2026-01-01T00:00:00.000Z",
+            lastSeenAt: "2026-02-01T00:00:00.000Z",
+            embedding: makeEmbedding([0.1, 0.2, 0.3, 0.4]),
+            now: "2026-02-01T00:00:00.000Z",
+        });
+        assert.equal(created.occurrenceCount, 2);
+        assert.equal(created.sourceStagingId, "staging-1");
+
+        const [row] = await retainedStore.list({ userId: "user-A", characterId: "char-A" });
+        assert.equal(row!.text, "User lives in Tokyo.");
+        assert.deepEqual(row!.relatedEntities, ["Tokyo"]);
+        assert.equal(row!.importance, 4);
+        assert.equal(row!.occurrenceCount, 2);
+        assert.equal(row!.firstSeenAt, "2026-01-01T00:00:00.000Z");
+        assert.deepEqual(row!.embedding!.vector, [0.1, 0.2, 0.3, 0.4]);
+    });
+
+    it("update accumulates occurrence and overwrites provided fields only", async () => {
+        const { retainedStore } = freshStores();
+        await retainedStore.create({
+            id: "ret-1", userId: "user-A", characterId: "char-A", scope: "user", type: "fact",
+            text: "User lives in Japan.", normalizedText: "user lives in japan",
+            relatedEntities: [], tags: [], status: "active", importance: 3,
+            occurrenceCount: 1, firstSeenAt: "2026-01-01T00:00:00.000Z", lastSeenAt: "2026-01-01T00:00:00.000Z",
+            embedding: makeEmbedding([1, 0, 0, 0]), now: "2026-01-01T00:00:00.000Z",
+        });
+        const updated = await retainedStore.update({
+            memoryRetainedId: "ret-1",
+            text: "User lives in Tokyo, Japan.",
+            normalizedText: "user lives in tokyo, japan",
+            importance: 5,
+            occurrenceDelta: 2,
+            lastSeenAt: "2026-03-01T00:00:00.000Z",
+            embedding: makeEmbedding([0, 1, 0, 0]),
+            updatedAt: "2026-03-01T00:00:00.000Z",
+        });
+        assert.equal(updated.text, "User lives in Tokyo, Japan.");
+        assert.equal(updated.importance, 5);
+        assert.equal(updated.occurrenceCount, 3);
+        assert.equal(updated.lastSeenAt, "2026-03-01T00:00:00.000Z");
+        assert.deepEqual(updated.embedding!.vector, [0, 1, 0, 0]);
+    });
+
+    it("archive flips status to archived", async () => {
+        const { retainedStore } = freshStores();
+        await retainedStore.create({
+            id: "ret-1", userId: "user-A", characterId: "char-A", scope: "user", type: "fact",
+            text: "x", normalizedText: "x", relatedEntities: [], tags: [], status: "active",
+            importance: 3, occurrenceCount: 1, firstSeenAt: "2026-01-01T00:00:00.000Z",
+            lastSeenAt: "2026-01-01T00:00:00.000Z", now: "2026-01-01T00:00:00.000Z",
+        });
+        await retainedStore.archive({ memoryRetainedId: "ret-1", statusReason: "stale", updatedAt: "2026-04-01T00:00:00.000Z" });
+        const active = await retainedStore.list({ userId: "user-A", characterId: "char-A", status: "active" });
+        assert.equal(active.length, 0);
+        const archived = await retainedStore.list({ userId: "user-A", characterId: "char-A", status: "archived" });
+        assert.equal(archived.length, 1);
+    });
+});
+
+// ============================================================================
+// consolidation decision store (Batch 4)
+// ============================================================================
+
+describe("SQLiteMemoryConsolidationDecisionStore", () => {
+    function makeDecisionInput(overrides: Record<string, unknown> = {}) {
+        return {
+            id: "dec-1",
+            userId: "user-A",
+            characterId: "char-A",
+            memoryStagingId: "staging-1",
+            action: "create" as const,
+            archivedRetainedMemoryIds: [],
+            judgeRequest: { messages: ["x"] },
+            judgeResponse: { action: "create" },
+            validatedAction: { action: "create", archiveRetainedMemoryIds: [] },
+            status: "applied" as const,
+            modelCallPurpose: "memory.consolidate",
+            model: "fake-model",
+            requestId: "req-1",
+            createdAt: "2026-02-01T00:00:00.000Z",
+            ...overrides,
+        };
+    }
+
+    it("create round-trips a decision and parses JSON columns", async () => {
+        const { db, logger } = freshStores();
+        const store = new SQLiteMemoryConsolidationDecisionStore({ db, logger });
+        const created = await store.create(makeDecisionInput({
+            createdRetainedMemoryId: "ret-1",
+            archivedRetainedMemoryIds: ["a", "b"],
+        }));
+        assert.equal(created.action, "create");
+        assert.equal(created.createdRetainedMemoryId, "ret-1");
+        assert.deepEqual(created.archivedRetainedMemoryIds, ["a", "b"]);
+        assert.deepEqual(created.judgeRequest, { messages: ["x"] });
+        assert.deepEqual(created.validatedAction, { action: "create", archiveRetainedMemoryIds: [] });
+    });
+
+    it("findApplied returns the applied decision and ignores rejected ones", async () => {
+        const { db, logger } = freshStores();
+        const store = new SQLiteMemoryConsolidationDecisionStore({ db, logger });
+        await store.create(makeDecisionInput({ id: "dec-rej", memoryStagingId: "staging-9", status: "rejected" }));
+        const none = await store.findApplied({ memoryStagingId: "staging-9" });
+        assert.equal(none, undefined);
+
+        await store.create(makeDecisionInput({ id: "dec-ok", memoryStagingId: "staging-9", status: "applied" }));
+        const found = await store.findApplied({ memoryStagingId: "staging-9" });
+        assert.equal(found!.id, "dec-ok");
+    });
+
+    it("enforces at most one applied decision per staging row", async () => {
+        const { db, logger } = freshStores();
+        const store = new SQLiteMemoryConsolidationDecisionStore({ db, logger });
+        await store.create(makeDecisionInput({ id: "dec-1", status: "applied" }));
+        await assert.rejects(
+            store.create(makeDecisionInput({ id: "dec-2", status: "applied" })),
+        );
+    });
+
+    it("list filters by action and status", async () => {
+        const { db, logger } = freshStores();
+        const store = new SQLiteMemoryConsolidationDecisionStore({ db, logger });
+        await store.create(makeDecisionInput({ id: "d1", memoryStagingId: "s1", action: "create", status: "applied" }));
+        await store.create(makeDecisionInput({ id: "d2", memoryStagingId: "s2", action: "ignore", status: "applied" }));
+        const onlyCreate = await store.list({ userId: "user-A", action: "create" });
+        assert.equal(onlyCreate.length, 1);
+        assert.equal(onlyCreate[0]!.id, "d1");
+    });
 });
 
 // ============================================================================
@@ -706,5 +852,6 @@ describe("createSqliteStores", () => {
         assert.ok(stores.memoryCandidate);
         assert.ok(stores.memoryStaging);
         assert.ok(stores.memoryRetained);
+        assert.ok(stores.memoryConsolidationDecision);
     });
 });

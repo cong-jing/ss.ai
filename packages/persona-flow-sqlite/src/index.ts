@@ -14,3 +14,4 @@ export { SQLiteUserProviderCredentialStore } from "./db/SQLiteUserProviderCreden
 export { SQLiteMemoryCandidateStore } from "./db/SQLiteMemoryCandidateStore.js";
 export { SQLiteMemoryStagingStore } from "./db/SQLiteMemoryStagingStore.js";
 export { SQLiteMemoryRetainedStore } from "./db/SQLiteMemoryRetainedStore.js";
+export { SQLiteMemoryConsolidationDecisionStore } from "./db/SQLiteMemoryConsolidationDecisionStore.js";

@@ -1,5 +1,7 @@
 import type {
     AppendMemoryCandidatesInput,
+    ArchiveMemoryRetainedInput,
+    CreateMemoryRetainedInput,
     CreateMemoryStagingInput,
     FindBySourceCandidateInput,
     FindExactStagingInput,
@@ -9,9 +11,15 @@ import type {
     ListMemoryRetainedInput,
     ListMemoryStagingInput,
     ListPendingMemoryCandidatesInput,
+    ListPendingMemoryStagingInput,
     MemoryCandidateRecord,
     MemoryCandidateStore,
     MemoryClock,
+    MemoryConsolidationDecisionStore,
+    ConsolidationDecisionRecord,
+    CreateConsolidationDecisionInput,
+    FindAppliedDecisionInput,
+    ListConsolidationDecisionsInput,
     MemoryEmbedInput,
     MemoryEmbedResult,
     MemoryEmbeddingProvider,
@@ -23,6 +31,8 @@ import type {
     MemoryStagingSourceRecord,
     MemoryStagingStore,
     UpdateMemoryCandidateStatusInput,
+    UpdateMemoryRetainedInput,
+    UpdateMemoryStagingStatusInput,
 } from "../../src/memory/index.js";
 import { MEMORY_SCHEMA_VERSION } from "../../src/memory/index.js";
 
@@ -300,6 +310,28 @@ class InMemoryMemoryStagingStore implements MemoryStagingStore {
             .slice(0, input.limit ?? Number.POSITIVE_INFINITY)
             .map((r) => cloneStaging(r));
     }
+
+    async listPending(input: ListPendingMemoryStagingInput): Promise<MemoryStagingRecord[]> {
+        return this.records
+            .filter((r) => r.userId === input.userId)
+            .filter((r) => r.characterId === input.characterId)
+            .filter((r) => r.status === (input.status ?? "pending"))
+            .slice()
+            .sort((a, b) => {
+                if (a.lastSeenAt !== b.lastSeenAt) return a.lastSeenAt < b.lastSeenAt ? -1 : 1;
+                return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+            })
+            .slice(0, input.limit)
+            .map((r) => cloneStaging(r));
+    }
+
+    async updateStatus(input: UpdateMemoryStagingStatusInput): Promise<void> {
+        const record = this.records.find((r) => r.id === input.memoryStagingId);
+        if (!record) throw new Error(`unknown staging row ${input.memoryStagingId}`);
+        record.status = input.status;
+        record.statusReason = input.statusReason;
+        record.updatedAt = input.updatedAt;
+    }
 }
 
 function cloneStaging(record: MemoryStagingRecord): MemoryStagingRecord {
@@ -355,6 +387,55 @@ class InMemoryMemoryRetainedStore implements MemoryRetainedStore {
             .slice(0, input.limit ?? Number.POSITIVE_INFINITY)
             .map((r) => cloneRetained(r));
     }
+
+    async create(input: CreateMemoryRetainedInput): Promise<MemoryRetainedRecord> {
+        const stored: MemoryRetainedRecord = {
+            id: input.id,
+            userId: input.userId,
+            characterId: input.characterId,
+            scope: input.scope,
+            type: input.type,
+            text: input.text,
+            normalizedText: input.normalizedText,
+            relatedEntities: [...input.relatedEntities],
+            tags: [...input.tags],
+            sourceStagingId: input.sourceStagingId,
+            status: input.status,
+            importance: input.importance,
+            occurrenceCount: input.occurrenceCount,
+            firstSeenAt: input.firstSeenAt,
+            lastSeenAt: input.lastSeenAt,
+            embedding: input.embedding ? { ...input.embedding, vector: [...input.embedding.vector] } : undefined,
+            schemaVersion: MEMORY_SCHEMA_VERSION,
+            createdAt: input.now,
+            updatedAt: input.now,
+        };
+        this.records.push(stored);
+        return cloneRetained(stored);
+    }
+
+    async update(input: UpdateMemoryRetainedInput): Promise<MemoryRetainedRecord> {
+        const record = this.records.find((r) => r.id === input.memoryRetainedId);
+        if (!record) throw new Error(`unknown retained row ${input.memoryRetainedId}`);
+        if (input.text !== undefined) record.text = input.text;
+        if (input.normalizedText !== undefined) record.normalizedText = input.normalizedText;
+        if (input.relatedEntities !== undefined) record.relatedEntities = [...input.relatedEntities];
+        if (input.tags !== undefined) record.tags = [...input.tags];
+        if (input.sourceStagingId !== undefined) record.sourceStagingId = input.sourceStagingId;
+        if (input.importance !== undefined) record.importance = input.importance;
+        if (input.lastSeenAt !== undefined) record.lastSeenAt = input.lastSeenAt;
+        if (input.embedding !== undefined) record.embedding = { ...input.embedding, vector: [...input.embedding.vector] };
+        if (input.occurrenceDelta) record.occurrenceCount += input.occurrenceDelta;
+        record.updatedAt = input.updatedAt;
+        return cloneRetained(record);
+    }
+
+    async archive(input: ArchiveMemoryRetainedInput): Promise<void> {
+        const record = this.records.find((r) => r.id === input.memoryRetainedId);
+        if (!record) throw new Error(`unknown retained row ${input.memoryRetainedId}`);
+        record.status = "archived";
+        record.updatedAt = input.updatedAt;
+    }
 }
 
 function cloneRetained(record: MemoryRetainedRecord): MemoryRetainedRecord {
@@ -364,6 +445,45 @@ function cloneRetained(record: MemoryRetainedRecord): MemoryRetainedRecord {
         tags: [...record.tags],
         embedding: record.embedding ? { ...record.embedding, vector: [...record.embedding.vector] } : undefined,
     };
+}
+
+// ---------- Consolidation decision store (Batch 4) ----------
+
+class InMemoryMemoryConsolidationDecisionStore implements MemoryConsolidationDecisionStore {
+    private readonly records: ConsolidationDecisionRecord[] = [];
+
+    snapshotAll(): ConsolidationDecisionRecord[] {
+        return this.records.map((r) => ({ ...r, archivedRetainedMemoryIds: [...r.archivedRetainedMemoryIds] }));
+    }
+
+    async create(input: CreateConsolidationDecisionInput): Promise<ConsolidationDecisionRecord> {
+        const stored: ConsolidationDecisionRecord = {
+            ...input,
+            archivedRetainedMemoryIds: [...input.archivedRetainedMemoryIds],
+        };
+        this.records.push(stored);
+        return { ...stored, archivedRetainedMemoryIds: [...stored.archivedRetainedMemoryIds] };
+    }
+
+    async findApplied(input: FindAppliedDecisionInput): Promise<ConsolidationDecisionRecord | undefined> {
+        const found = this.records.find(
+            (r) => r.memoryStagingId === input.memoryStagingId && r.status === "applied",
+        );
+        return found ? { ...found, archivedRetainedMemoryIds: [...found.archivedRetainedMemoryIds] } : undefined;
+    }
+
+    async list(input: ListConsolidationDecisionsInput): Promise<ConsolidationDecisionRecord[]> {
+        const actionFilter = toArray(input.action);
+        const statusFilter = toArray(input.status);
+        return this.records
+            .filter((r) => r.userId === input.userId)
+            .filter((r) => input.characterId === undefined || r.characterId === input.characterId)
+            .filter((r) => input.memoryStagingId === undefined || r.memoryStagingId === input.memoryStagingId)
+            .filter((r) => actionFilter.length === 0 || actionFilter.includes(r.action))
+            .filter((r) => statusFilter.length === 0 || statusFilter.includes(r.status))
+            .slice(0, input.limit ?? Number.POSITIVE_INFINITY)
+            .map((r) => ({ ...r, archivedRetainedMemoryIds: [...r.archivedRetainedMemoryIds] }));
+    }
 }
 
 // ---------- Embedding provider ----------
@@ -488,6 +608,7 @@ export interface InMemoryMemoryStores {
     candidateStore: InMemoryMemoryCandidateStore;
     stagingStore: InMemoryMemoryStagingStore;
     retainedStore: InMemoryMemoryRetainedStore;
+    consolidationDecisionStore: InMemoryMemoryConsolidationDecisionStore;
 }
 
 export function makeInMemoryMemoryStores(options: {
@@ -498,6 +619,7 @@ export function makeInMemoryMemoryStores(options: {
         candidateStore: new InMemoryMemoryCandidateStore(options.candidateStore),
         stagingStore: new InMemoryMemoryStagingStore(options.stagingStore),
         retainedStore: new InMemoryMemoryRetainedStore(),
+        consolidationDecisionStore: new InMemoryMemoryConsolidationDecisionStore(),
     };
 }
 

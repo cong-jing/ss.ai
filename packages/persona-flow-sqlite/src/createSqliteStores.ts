@@ -10,6 +10,7 @@ import { SQLiteUserProviderCredentialStore } from "./db/SQLiteUserProviderCreden
 import { SQLiteMemoryCandidateStore } from "./db/SQLiteMemoryCandidateStore.js";
 import { SQLiteMemoryStagingStore } from "./db/SQLiteMemoryStagingStore.js";
 import { SQLiteMemoryRetainedStore } from "./db/SQLiteMemoryRetainedStore.js";
+import { SQLiteMemoryConsolidationDecisionStore } from "./db/SQLiteMemoryConsolidationDecisionStore.js";
 import { CharacterDbRouter } from "./db/CharacterDbRouter.js";
 import type { DbLog } from "./db/openDatabase.js";
 
@@ -69,6 +70,10 @@ export function createSqliteStores(options: {
             logger: memoryLogger,
         }),
         memoryRetained: new SQLiteMemoryRetainedStore({
+            db,
+            logger: memoryLogger,
+        }),
+        memoryConsolidationDecision: new SQLiteMemoryConsolidationDecisionStore({
             db,
             logger: memoryLogger,
         }),

@@ -1,13 +1,16 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { memoryRetained, type MemoryRetainedRow } from "./schema.js";
 import type { DrizzleDb } from "./openDatabase.js";
 import { parseEmbeddingJson, parseJsonArray } from "./SQLiteMemoryCandidateStore.js";
 import type {
+    ArchiveMemoryRetainedInput,
+    CreateMemoryRetainedInput,
     ListMemoryRetainedInput,
     MemoryLogger,
     MemoryRetainedRecord,
     MemoryRetainedStatus,
     MemoryRetainedStore,
+    UpdateMemoryRetainedInput,
 } from "@ss-ai/persona-flow";
 
 /**
@@ -61,6 +64,62 @@ export class SQLiteMemoryRetainedStore implements MemoryRetainedStore {
         return rows.map((row) => this.rowToRecord(row));
     }
 
+    async create(input: CreateMemoryRetainedInput): Promise<MemoryRetainedRecord> {
+        const [row] = await this.db
+            .insert(memoryRetained)
+            .values({
+                id: input.id,
+                userId: input.userId,
+                characterId: input.characterId,
+                scope: input.scope,
+                type: input.type,
+                text: input.text,
+                normalizedText: input.normalizedText,
+                relatedEntitiesJson: JSON.stringify(input.relatedEntities),
+                tagsJson: JSON.stringify(input.tags),
+                sourceStagingId: input.sourceStagingId ?? null,
+                status: input.status,
+                importance: input.importance,
+                occurrenceCount: input.occurrenceCount,
+                firstSeenAt: input.firstSeenAt,
+                lastSeenAt: input.lastSeenAt,
+                embeddingJson: input.embedding ? JSON.stringify(input.embedding) : null,
+                schemaVersion: 1,
+                createdAt: input.now,
+                updatedAt: input.now,
+            })
+            .returning();
+        return this.rowToRecord(row);
+    }
+
+    async update(input: UpdateMemoryRetainedInput): Promise<MemoryRetainedRecord> {
+        const patch: Record<string, unknown> = { updatedAt: input.updatedAt };
+        if (input.text !== undefined) patch.text = input.text;
+        if (input.normalizedText !== undefined) patch.normalizedText = input.normalizedText;
+        if (input.relatedEntities !== undefined) patch.relatedEntitiesJson = JSON.stringify(input.relatedEntities);
+        if (input.tags !== undefined) patch.tagsJson = JSON.stringify(input.tags);
+        if (input.sourceStagingId !== undefined) patch.sourceStagingId = input.sourceStagingId;
+        if (input.importance !== undefined) patch.importance = input.importance;
+        if (input.lastSeenAt !== undefined) patch.lastSeenAt = input.lastSeenAt;
+        if (input.embedding !== undefined) patch.embeddingJson = JSON.stringify(input.embedding);
+        if (input.occurrenceDelta) {
+            patch.occurrenceCount = sql`${memoryRetained.occurrenceCount} + ${input.occurrenceDelta}`;
+        }
+        const [row] = await this.db
+            .update(memoryRetained)
+            .set(patch)
+            .where(eq(memoryRetained.id, input.memoryRetainedId))
+            .returning();
+        return this.rowToRecord(row);
+    }
+
+    async archive(input: ArchiveMemoryRetainedInput): Promise<void> {
+        await this.db
+            .update(memoryRetained)
+            .set({ status: "archived", updatedAt: input.updatedAt })
+            .where(eq(memoryRetained.id, input.memoryRetainedId));
+    }
+
     private rowToRecord(row: MemoryRetainedRow): MemoryRetainedRecord {
         return {
             id: row.id,
@@ -75,6 +134,9 @@ export class SQLiteMemoryRetainedStore implements MemoryRetainedStore {
             sourceStagingId: row.sourceStagingId ?? undefined,
             status: row.status as MemoryRetainedStatus,
             importance: row.importance,
+            occurrenceCount: row.occurrenceCount,
+            firstSeenAt: row.firstSeenAt,
+            lastSeenAt: row.lastSeenAt,
             embedding: parseEmbeddingJson(row.embeddingJson, this.logger, "memory_retained.embedding_json", row.id),
             schemaVersion: row.schemaVersion,
             createdAt: row.createdAt,

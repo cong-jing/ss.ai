@@ -16,12 +16,14 @@ import type {
     IncrementMemoryStagingOccurrenceInput,
     LinkStagingSourceInput,
     ListMemoryStagingInput,
+    ListPendingMemoryStagingInput,
     MemoryIdGenerator,
     MemoryLogger,
     MemoryStagingRecord,
     MemoryStagingSourceRecord,
     MemoryStagingStatus,
     MemoryStagingStore,
+    UpdateMemoryStagingStatusInput,
 } from "@ss-ai/persona-flow";
 
 /**
@@ -255,6 +257,31 @@ export class SQLiteMemoryStagingStore implements MemoryStagingStore {
             .orderBy(desc(memoryStaging.updatedAt), desc(memoryStaging.createdAt), asc(memoryStaging.id));
         const rows = input.limit !== undefined ? await baseQuery.limit(input.limit) : await baseQuery;
         return rows.map((row) => this.rowToRecord(row));
+    }
+
+    async listPending(input: ListPendingMemoryStagingInput): Promise<MemoryStagingRecord[]> {
+        const rows = await this.db
+            .select()
+            .from(memoryStaging)
+            .where(and(
+                eq(memoryStaging.userId, input.userId),
+                eq(memoryStaging.characterId, input.characterId),
+                eq(memoryStaging.status, input.status ?? "pending"),
+            ))
+            .orderBy(asc(memoryStaging.lastSeenAt), asc(memoryStaging.id))
+            .limit(input.limit);
+        return rows.map((row) => this.rowToRecord(row));
+    }
+
+    async updateStatus(input: UpdateMemoryStagingStatusInput): Promise<void> {
+        await this.db
+            .update(memoryStaging)
+            .set({
+                status: input.status,
+                statusReason: input.statusReason ?? null,
+                updatedAt: input.updatedAt,
+            })
+            .where(eq(memoryStaging.id, input.memoryStagingId));
     }
 
     private rowToRecord(row: MemoryStagingRow): MemoryStagingRecord {

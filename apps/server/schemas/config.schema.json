@@ -144,6 +144,17 @@
                         "enabled": {
                             "type": "boolean"
                         },
+                        "processingMode": {
+                            "type": "string",
+                            "enum": [
+                                "manual",
+                                "inline",
+                                "worker"
+                            ]
+                        },
+                        "batchLimit": {
+                            "type": "number"
+                        },
                         "retrieval": {
                             "type": "object",
                             "additionalProperties": false,
@@ -152,6 +163,42 @@
                                     "type": "number"
                                 },
                                 "listLimit": {
+                                    "type": "number"
+                                },
+                                "minSimilarityForJudgeContext": {
+                                    "type": "number"
+                                }
+                            }
+                        },
+                        "judge": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "enabled": {
+                                    "type": "boolean"
+                                },
+                                "maxSourceCandidates": {
+                                    "type": "number"
+                                },
+                                "maxRetainedForPrompt": {
+                                    "type": "number"
+                                },
+                                "maxTextChars": {
+                                    "type": "number"
+                                }
+                            }
+                        },
+                        "importance": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "min": {
+                                    "type": "number"
+                                },
+                                "max": {
+                                    "type": "number"
+                                },
+                                "default": {
                                     "type": "number"
                                 }
                             }

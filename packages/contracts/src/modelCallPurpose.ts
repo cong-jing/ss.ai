@@ -4,6 +4,7 @@ export const MODEL_CALL_PURPOSES = [
     // "chat.semanticAnalysis",
     // "chat.toolContinuation",
     "memory.summarize",
+    "memory.consolidate",
     "memory.embed",
     // "memory.extract",
     // "vision.ocr"
@@ -41,5 +42,6 @@ export type ModelCapabilityCategory = "chat" | "embed";
 export const MODEL_CALL_PURPOSE_CATEGORIES: Readonly<Record<ModelCallPurpose, ModelCapabilityCategory>> = {
     "chat.main": "chat",
     "memory.summarize": "chat",
+    "memory.consolidate": "chat",
     "memory.embed": "embed",
 };
