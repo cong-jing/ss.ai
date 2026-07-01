@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-`ss.ai` is a TypeScript / Node.js full-stack application for exploring LLM-driven character chat, TRPG-style interaction, structured chat events, and an early long-term-memory write pipeline. The project is not only about sending messages to a model; it is about organizing prompt context, character state, model output, persistence, streaming, and debugging into a maintainable application.
+`ss.ai` is a TypeScript / Node.js full-stack application for exploring LLM-driven character chat, TRPG-style interaction, structured chat events, and a long-term memory system. The project is not only about sending messages to a model; it is about organizing prompt context, character state, structured model output, persistence, memory consolidation, streaming, and debugging into a maintainable application.
 
 The most complete experience today is single-character chat. A user selects a character and conversation, sends a message, the server assembles prompt context, calls the configured model with structured output, then persists the visible reply, turn events, and optional memory candidates. Other interaction modes are represented in contracts and UI shape, but are not wired into runtime model-call dispatch yet.
 
@@ -17,10 +17,11 @@ The most complete experience today is single-character chat. A user selects a ch
 - End-to-end `single_character_chat` flow.
 - Structured turn events: model output is parsed as `TurnEvent[]`, and the UI renders text, expression markers, scene-atmosphere markers, and debug payloads from those events.
 - SSE streaming preview: `/v1/chat/stream` incrementally previews visible text and event markers from the structured-output JSON text channel, then reconciles against the final canonical `turnEvents`.
-- Per-purpose model assignment for `chat.main`, `memory.summarize`, and `memory.embed`.
+- Per-purpose model assignment for `chat.main`, `memory.summarize`, `memory.consolidate`, and `memory.embed`.
 - Provider API-key configuration with user credentials and runtime defaults.
-- Long-term-memory write prototype: the model can submit `memoryWriteCandidates`; the server records candidates, embeds them, ranks active memories by cosine similarity, and writes conservative decisions.
-- Read-only debug APIs for memory candidates, active memories, and memory decisions.
+- Long-term-memory persistence pipeline: the model can submit `memoryWriteCandidates`; the server records candidates, embeds them, aggregates staging evidence, and uses a `memory.consolidate` LLM judge to promote stable facts into retained memories.
+- Auditable memory decisions: the pipeline keeps candidate, staging, retained, and consolidation-decision layers so a fact can be traced from proposal to aggregation, judge recommendation, and final create/update/merge/ignore/archive outcome.
+- Debug APIs for memory candidates, staging evidence, and retained memories; consolidation decisions are stored as an audit layer, with trace / decision views planned for the Memory Lab.
 - Prompt dry-run endpoint for inspecting prompt assembly without calling a model or persisting a turn.
 
 ## Core Mechanisms
@@ -58,16 +59,16 @@ Implemented:
 - Structured-output `TurnEvent[]` generation, persistence, and UI rendering.
 - SSE streaming previews with final event reconciliation.
 - SQLite persistence for characters, conversations, preferences, credentials, messages, and turn events.
-- Memory candidate recording, embedding, similarity ranking, conservative commit decisions, SQLite memory stores, and read-only debug APIs.
+- Memory candidate recording, embedding, staging evidence aggregation, LLM consolidation judge, retained memory stores, decision audit, and debug APIs.
 - `default-user` and `local-password` auth modes.
 - Staging and production deploy packaging scripts.
 
 Pending or still prototype-level:
 
 - Interaction modes beyond `single_character_chat` are not wired into runtime model-call dispatch.
-- Active memories are not read back into prompt context yet, so the memory system currently implements the write side rather than a full RAG loop.
-- No LLM judge / merge pipeline yet; near-duplicates route to `needs_judge` and are not automatically merged or deleted.
-- `createMemory + candidate status + decision` is not yet one transaction boundary.
+- A frontend Memory Lab / tuning tool is still pending; the next step is to expose candidate intake, processor controls, trace views, and judge-preview workflows.
+- Retained memories are not read back into prompt context yet; the next step is to inject important long-term memories into chat and expose query tools that can support an agent loop.
+- Memory consolidation still needs tighter transaction boundaries and better operator-facing diagnostics around retained writes and decision audit.
 - Provider API-key encryption hooks exist, but at-rest encryption is still a placeholder.
 
 ## Tech Stack

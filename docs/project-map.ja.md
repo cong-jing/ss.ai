@@ -19,6 +19,7 @@
 - prompt template の構成と管理
 - structured output を主軸にしつつ、将来の agent ツール向けに provider-neutral な tool-call 抽象も残した turn-event 設計
 - 会話とキャラクターデータの SQLite 永続化
+- candidate intake、staging evidence、LLM consolidation judge、retained memory、decision audit を含む長期記憶保存 pipeline
 - キャラクター会話と TRPG 風インタラクション設計
 - LLM provider abstraction layer
 
@@ -190,7 +191,7 @@ flowchart LR
 
 Memory candidate collection は streaming preview に影響しません。streamed text と `turnEventPreview` は structured-output JSON text channel だけから生成されます。memory candidates は model stream 完了後の最終 parsed structured output からのみ消費されます。
 
-Memory write path は現在 candidate -> memory staging までを実装しています。structured output は `memoryWriteCandidates` を含めることができ、server は candidate を記録し、embedding を生成し、normalized text が完全一致する evidence を memory staging へ集約し、`memory_candidates`、`memory_staging`、`memory_staging_sources` を書き込みます。`memory_retained` table と read-only debug API は用意済みですが、Batch 3.5 は retained memory を書き込みません。Staging / retained memory はまだ prompt context に read-back されないため、完全な RAG loop ではありません。詳細な boundary、ports、tables、settings、pending work は [Project Map - Memory 子系统](project-map-memory.zh-CN.md) にあります。
+Memory persistence path は現在 candidate -> staging -> retained までを実装しています。structured output は `memoryWriteCandidates` を含めることができ、server は candidate を記録し、embedding を生成し、normalized text が完全一致する evidence を memory staging へ集約します。その後 retained consolidation が staging evidence、関連 retained memories、character context を `memory.consolidate` LLM judge に渡し、system layer が create / update / merge / ignore / archive decision を検証して `memory_retained` と consolidation decision audit に書き込みます。Retained memories はまだ prompt context に read-back されないため、完全な RAG loop ではありません。次の作業は Memory Lab / tuning UI、重要な長期記憶の prompt injection、query tool / agent loop です。詳細な boundary、ports、tables、settings、next work は [Project Map - Memory 子系统](project-map-memory.zh-CN.md) にあります。
 
 interaction mode は `@ss-ai/contracts` に共有定義されており、全体アーキテクチャとしても将来的に複数 mode を支える前提で設計されています。実行時に実際に登録されているのは現在 `single_character_chat` だけです。他の mode も contracts と UI には将来計画のプレースホルダーとして存在しますが、prompt と model-call dispatch にはまだ接続されていません。
 
@@ -406,8 +407,11 @@ model assignment は purpose ベースです。共有識別子は `packages/cont
 
 - `chat.main`
 - `memory.summarize`
+- `memory.consolidate`
+- `memory.embed`
 
 chat path は現在 `modelCallPurpose: "chat.main"` でモデルを呼びます。
+memory embedding は `"memory.embed"`、retained consolidation judge は `"memory.consolidate"` を使います。
 
 解決順は user 優先、config fallback です。
 
@@ -467,8 +471,8 @@ API key の解決も user 優先です。
 - SQLite の model assignment column は `model_assignments_json`。旧 model-assignment storage 互換は削除済み
 - single-character chat の model output path は現在、可視 turn events と任意の `memoryWriteCandidates` のために `response_format: json_schema` structured output を使う（event schema の source は依然 `submitTurnEventsTool.argsSchema`）。この path では memory candidate tool は登録しない
 - Chat-turn memory write は durable な pipeline になっている。Candidates は structured output から parse され、assistant turn 永続化後に `MemoryPipelineService` へ渡される。サーバー runtime config の `memory.enabled`、`memory.candidateProcessingMode`、`memory.staging`、`memory.retained` で pipeline の挙動を切り替える
-- Memory pipeline は candidate recording、candidate -> memory staging processing、text normalization、embedding、normalized duplicate aggregation、similarity sampling logs、SQLite-backed `memory_candidates` / `memory_staging` / `memory_staging_sources` / `memory_retained` stores、chat-turn integration を含む
-- Memory write path TODO: Batch 4 の memory staging -> memory retained LLM consolidation judge を実装し、その後 retained memory prompt read-back を追加する
+- Memory pipeline は candidate recording、candidate -> memory staging processing、text normalization、embedding、normalized duplicate aggregation、similarity ranking、LLM consolidation judge、SQLite-backed `memory_candidates` / `memory_staging` / `memory_staging_sources` / `memory_retained` / `memory_consolidation_decisions` stores、chat-turn integration を含む
+- 次の memory work: trace views、manual candidate intake、processor controls、judge preview を持つ frontend Memory Lab / tuning tool を作り、その後重要な retained memories を prompt に read-back し、agent loop 用 query tools を追加する
 - similarity thresholds に依存する前の TODO: より多くの実 `mistral-embed` samples を収集する。現在の probe は 1024-dimensional vectors を返し、短い中国語 user facts は baseline cosine similarity が高めになり得ることを示した
 - chat-turn / model-call のレイヤ境界は意図的に分離している。chat service は model-call の `parsedOutput` を消費し、各 model call が provider response（structured output または tool argument）の parse を自分で担当する。これにより、将来別の interaction mode が別の出力形式を使っても chat-turn persistence code を変えなくてよい
 - `messages` は現在 timeline / display table であり、structured assistant fact は `turn_events` に保存される

@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | 日本語
 
-`ss.ai` は、LLM 駆動のキャラクター会話、TRPG 風インタラクション、structured chat events、そして初期段階の長期記憶 write pipeline を扱う TypeScript / Node.js フルスタックアプリケーションです。単にモデルへメッセージを送るのではなく、prompt context、キャラクター状態、モデル出力、永続化、streaming、debug 経路を保守しやすい形で組み立てることを重視しています。
+`ss.ai` は、LLM 駆動のキャラクター会話、TRPG 風インタラクション、structured chat events、そして長期記憶システムを扱う TypeScript / Node.js フルスタックアプリケーションです。単にモデルへメッセージを送るのではなく、prompt context、キャラクター状態、structured model output、永続化、memory consolidation、streaming、debug 経路を保守しやすい形で組み立てることを重視しています。
 
 現時点でもっとも完成している体験は single-character chat です。ユーザーが character と conversation を選び、server が prompt context を組み立て、configured model を structured output で呼び出し、可視 reply、turn events、任意の memory candidates を永続化します。ほかの interaction mode は contracts と UI 形状には存在しますが、runtime model-call dispatch にはまだ接続されていません。
 
@@ -17,10 +17,11 @@
 - `single_character_chat` の end-to-end flow。
 - Structured turn events: model output を `TurnEvent[]` として parse し、UI が text、expression marker、scene-atmosphere marker、debug payload を描画する。
 - SSE streaming preview: `/v1/chat/stream` が structured-output JSON text channel から可視 text と event marker を段階的に preview し、最後に canonical `turnEvents` で整合する。
-- `chat.main`、`memory.summarize`、`memory.embed` ごとの model assignment。
+- `chat.main`、`memory.summarize`、`memory.consolidate`、`memory.embed` ごとの model assignment。
 - User credential と runtime default による provider API key configuration。
-- Long-term-memory write prototype: model が `memoryWriteCandidates` を提出し、server が candidate 記録、embedding、cosine similarity ranking、conservative decision を行う。
-- Memory candidates、active memories、memory decisions 用の read-only debug API。
+- Long-term-memory persistence pipeline: model が `memoryWriteCandidates` を提出し、server が candidate 記録、embedding、staging evidence 集約を行い、`memory.consolidate` LLM judge で stable facts を retained memories に昇格する。
+- Auditable memory decisions: candidate、staging、retained、consolidation decision の各層から、fact の提案、集約、judge 推奨、create/update/merge/ignore/archive まで追跡できる。
+- Memory candidates、staging evidence、retained memories 用の debug API。consolidation decisions は audit layer に保存され、trace / decision view は Memory Lab で追加する予定。
 - 実モデル呼び出しや永続化なしで prompt assembly を確認できる dry-run endpoint。
 
 ## Core Mechanisms
@@ -58,16 +59,16 @@ Implemented:
 - Structured-output `TurnEvent[]` generation、persistence、UI rendering。
 - SSE streaming previews と final event reconciliation。
 - Characters、conversations、preferences、credentials、messages、turn events の SQLite persistence。
-- Memory candidate recording、embedding、similarity ranking、conservative commit decisions、SQLite memory stores、read-only debug APIs。
+- Memory candidate recording、embedding、staging evidence aggregation、LLM consolidation judge、retained memory stores、decision audit、debug APIs。
 - `default-user` と `local-password` auth modes。
 - Staging / production deploy packaging scripts。
 
 Pending or prototype-level:
 
 - `single_character_chat` 以外の interaction modes は runtime model-call dispatch に未接続。
-- Active memories はまだ prompt context に read-back されていないため、memory system は full RAG loop ではなく write side の実装段階。
-- LLM judge / merge pipeline は未実装。near-duplicate は `needs_judge` へ送られ、自動 merge / delete は行わない。
-- `createMemory + candidate status + decision` はまだ単一 transaction boundary ではない。
+- Frontend Memory Lab / tuning tool は未実装。次に candidate intake、processor controls、trace view、judge preview を用意する。
+- Retained memories はまだ prompt context に read-back されていない。次に重要な長期記憶を chat context に注入し、agent loop を支える query tools を追加する。
+- Memory consolidation では retained write と decision audit の transaction boundary と operator-facing diagnostics をさらに強化する必要がある。
 - Provider API-key encryption hooks はあるが、at-rest encryption は placeholder。
 
 ## Tech Stack

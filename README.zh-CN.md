@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文 | [日本語](README.ja.md)
 
-`ss.ai` 是一个 TypeScript / Node.js 全栈应用，用来探索 LLM 驱动的角色对话、TRPG 风格交互、结构化聊天事件和长期记忆写入机制。项目重点不只是把消息发给模型，而是把对话上下文、角色状态、模型输出、持久化和调试路径组织成一个可维护的应用。
+`ss.ai` 是一个 TypeScript / Node.js 全栈应用，用来探索 LLM 驱动的角色对话、TRPG 风格交互、结构化聊天事件和长期记忆系统。项目重点不只是把消息发给模型，而是把对话上下文、角色状态、结构化模型输出、持久化、记忆沉淀和调试路径组织成一个可维护的应用。
 
 当前最完整的体验是单角色聊天：用户选择角色和会话后发送消息，服务端组装 prompt，通过配置好的模型获取 structured output，再把可见回复、表情/氛围等事件和候选记忆写入持久化层。其他 interaction mode 已在 contracts 和 UI 结构中预留，但还没有接入运行时模型调用。
 
@@ -17,10 +17,11 @@
 - 单角色聊天：当前已实现 `single_character_chat` 的端到端流程。
 - 结构化回合事件：模型输出 `TurnEvent[]`，前端从事件渲染文本、expression、scene atmosphere 等显示片段。
 - 流式预览：`/v1/chat/stream` 通过 SSE 逐步推送 structured-output JSON 中的可见文本和事件预览，最终用 canonical `turnEvents` 校正。
-- 模型配置：按 model-call purpose 管理模型分配，例如 `chat.main`、`memory.summarize`、`memory.embed`。
+- 模型配置：按 model-call purpose 管理模型分配，例如 `chat.main`、`memory.summarize`、`memory.consolidate`、`memory.embed`。
 - Provider credential：支持为 provider 保存 API key，并可由 runtime config 提供默认 key。
-- 长期记忆写入原型：模型可在 structured output 中提交 `memoryWriteCandidates`；服务端记录候选、生成 embedding、做相似度排序，并按保守策略创建 memory 或写入 decision。
-- Debug API：提供 candidates、active memories、memory decisions 的只读查询接口。
+- 长期记忆保存链路：模型可在 structured output 中提交 `memoryWriteCandidates`；服务端记录候选、生成 embedding、聚合中间 evidence，并通过 `memory.consolidate` LLM judge 把稳定事实沉淀为长期 retained memories。
+- 可审计的记忆决策：memory pipeline 保留 candidate、staging、retained 和 consolidation decision 层，便于追踪一条事实从提出、聚合、判断到保存/忽略/合并/归档的完整路径。
+- Debug API：提供 memory candidates、staging evidence、retained memories 的查询入口；consolidation decisions 已写入审计层，后续 Memory Lab 会补 trace / decision 查询体验。
 - Prompt dry-run：可在不调用模型、不持久化的情况下检查 prompt 组装结果。
 
 ## 核心机制
@@ -58,16 +59,16 @@ flowchart LR
 - 基于 structured output 的 `TurnEvent[]` 生成、持久化和前端渲染。
 - SSE streaming preview 和最终事件校正。
 - SQLite 持久化角色、会话、用户偏好、provider credentials、messages 和 turn events。
-- memory candidate 记录、embedding、相似度 ranking、保守提交策略、SQLite memory stores 和只读 debug API。
+- memory candidate 记录、embedding、staging evidence 聚合、LLM consolidation judge、retained memory stores、decision audit 和 debug API。
 - local-password / default-user 两种认证模式。
 - staging / production 部署打包脚本。
 
 尚未实现或仍在原型阶段：
 
 - 除 `single_character_chat` 外的 interaction modes 尚未接入 runtime model-call dispatch。
-- Active memories 还没有回读进 prompt，因此 memory 当前主要完成写入链路，不构成完整 RAG 闭环。
-- 还没有 LLM judge / merge 流程；近似重复目前进入 `needs_judge`，不会自动合并或删除。
-- `createMemory + candidate status + decision` 还不是单一事务边界。
+- 前端 memory debug / tuning 工具仍在设计中，下一步会提供 candidate 追加、processor 手动执行、trace 和 judge preview 等能力。
+- Retained memories 还没有回读进 prompt；下一步是把重要长期记忆注入 chat context，并提供 query 工具，支撑后续 agent loop。
+- memory consolidation 的写入、audit 和状态迁移还需要继续收紧事务边界与调试体验。
 - Provider API key 的加密钩子存在，但当前落库加密仍是占位实现。
 
 ## 技术栈

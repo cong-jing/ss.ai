@@ -18,7 +18,7 @@ The project currently covers these areas:
 - SSE-based streaming chat
 - prompt template composition and management
 - structured-output turn event design with provider-neutral tool-call abstractions reserved for future agent tools
-- early long-term-memory write pipeline design, including candidate intake, memory staging, embedding, lightweight duplicate aggregation, a reserved memory retained table, and debug APIs
+- long-term-memory persistence pipeline design, including candidate intake, memory staging, embedding, lightweight duplicate aggregation, LLM consolidation judge, memory retained storage, and decision audit
 - SQLite-backed persistence for conversations and character data
 - character chat and TRPG-style interaction design
 - LLM provider abstraction layer
@@ -171,7 +171,7 @@ Responsibilities:
 - Resolves model runtime and calls the injected `ModelClient` via `ModelRuntime`.
 - Defines LLM client interfaces in `src/llm/modelClient.ts`, including provider-neutral tool definitions, tool choice, and optional embedding calls.
 - Defines the `submit_turn_events` event schema and parses turn events returned by the model.
-- Defines the long-term memory pipeline under `src/memory/**`: raw candidate records, memory staging records, memory retained records, ports, normalization, embedding, cosine similarity sampling, `MemoryCandidateRecorder`, `MemoryStagingProcessor`, and `MemoryPipelineService`.
+- Defines the long-term memory pipeline under `src/memory/**`: raw candidate records, memory staging records, memory retained records, consolidation decision records, ports, normalization, embedding, cosine similarity ranking, `MemoryCandidateRecorder`, `MemoryStagingProcessor`, `MemoryRetainedConsolidationProcessor`, and `MemoryPipelineService`.
 - Defines `ModelClientMemoryEmbeddingProvider` under `src/memory/embedding/**` to connect the memory pipeline's embedding port to the injected `ModelClient`. Provider/runtime dependencies are contained inside this adapter file so the rest of `src/memory/**` stays provider-neutral.
 
 Layering note: `PersonaFlowChatTurnService` orchestrates turns and persistence, but it should not parse provider tool calls or structured output directly. A registered `ModelCall<TParsedOutput>` owns prompt assembly, the requested output format (`structuredOutputSchema` and/or `tools`), and business-level parsing for its purpose. `ModelRuntime` stays provider/model/API-key focused and returns the raw provider-neutral `llmResponse` (`output` / `structuredOutput` / `toolCalls`). The model call then converts that response into `parsedOutput`; optional `parsedToolCalls` is reserved for intermediate tool results that callers need to inspect. For `single_character_chat`, the final visible reply is produced via `response_format: json_schema` and folded into `parsedOutput` as `{ displayText, events }`. Memory write candidates are a top-level optional field inside that same structured output and are folded into `parsedOutput.memoryWriteCandidates` for internal handling.
@@ -183,7 +183,7 @@ Main chat flow:
 3. `resolveModelCall()` selects the registered handler for the requested purpose and interaction mode. Today that is `chat.main:single_character_chat`.
 4. The handler assembles LLM messages and requests structured output via `structuredOutputSchema` (built from the `submit_turn_events` event schema plus the optional `memoryWriteCandidates` field). `ModelRuntime.chat()` resolves provider and model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves the API key from `providerCredential`, then calls `ModelClient`.
 5. The model call parses `llmResponse.structuredOutput` as `SubmitTurnEventsArgs` and returns a chat-specific `parsedOutput` containing normalized display text plus the ordered `TurnEvent[]`.
-6. The model call also extracts `memoryWriteCandidates` from the structured output. After the assistant turn is persisted, `PersonaFlowChatTurnService` hands those candidates to `MemoryPipelineService.handleChatTurnCandidates()`. The pipeline service checks `memory.enabled`, then invokes `MemoryCandidateRecorder` to persist raw candidate rows; when `memory.candidateProcessingMode === "inline"` and `memory.staging.enabled`, it also runs `MemoryStagingProcessor` to apply rule filtering, normalize text, generate embeddings, aggregate exact normalized-text duplicates into memory staging, and update candidate status.
+6. The model call also extracts `memoryWriteCandidates` from the structured output. After the assistant turn is persisted, `PersonaFlowChatTurnService` hands those candidates to `MemoryPipelineService.handleChatTurnCandidates()`. The pipeline service checks `memory.enabled`, then invokes `MemoryCandidateRecorder` to persist raw candidate rows; when `memory.candidateProcessingMode === "inline"` and `memory.staging.enabled`, it also runs `MemoryStagingProcessor` to apply rule filtering, normalize text, generate embeddings, aggregate exact normalized-text duplicates into memory staging, and update candidate status. The retained consolidation processor can later pull pending staging evidence, retrieve related retained memories, call the `memory.consolidate` LLM judge, and let the system layer apply create / update / merge / ignore / archive decisions.
 7. `PersonaFlowChatTurnService` consumes the parsed result without knowing the underlying output format. The complete ordered turn event list is persisted with the assistant turn.
 8. Assistant turns are appended to the chat store as the conversation self actor via `appendAssistantTurn()`, which writes both the timeline message and the structured turn events.
 
@@ -191,7 +191,7 @@ The `single_character_chat` streaming path has migrated to structured output: `/
 
 Memory candidate collection intentionally does not affect streaming previews. Streamed text and `turnEventPreview` events still come only from the structured-output JSON text channel; memory candidates are consumed only from the final parsed structured output after the model stream returns.
 
-The memory write path currently implements candidate -> memory staging only: structured output can include `memoryWriteCandidates`, the server records candidates, generates embeddings, aggregates exact normalized-text duplicates into staging rows, and writes `memory_candidates`, `memory_staging`, and `memory_staging_sources`. The `memory_retained` table and read-only debug API are scaffolded, but Batch 3.5 does not write retained memories. Staging / retained memories are not yet read back into prompt context, so this is not a complete RAG loop yet. Detailed boundaries, ports, tables, settings, and pending work are tracked in [Project Map - Memory Subsystem](project-map-memory.zh-CN.md).
+The memory persistence path now covers candidate -> staging -> retained: structured output can include `memoryWriteCandidates`, the server records candidates, generates embeddings, aggregates exact normalized-text duplicates into staging rows, and the retained consolidation pass uses an LLM judge to promote stable facts into retained memories with decision audit. Retained memories are not yet read back into prompt context; the next work is a Memory Lab / tuning UI plus prompt injection and query tools for an agent loop. Detailed boundaries, ports, tables, settings, and next work are tracked in [Project Map - Memory Subsystem](project-map-memory.zh-CN.md).
 
 Interaction modes are shared from `@ss-ai/contracts`, and the broader architecture is intended to support multiple modes over time. Today only `single_character_chat` is actually implemented for runtime use. Other modes already exist in contracts and UI as planned placeholders, but are not wired into prompt or model-call dispatch yet.
 
@@ -212,7 +212,7 @@ Model-call configuration uses `MODEL_CALL_PURPOSES` / `ModelCallPurpose` plus `M
 
 Turn event pure types and literal constants live in `packages/contracts/src/turnEvents.ts`. Runtime Zod schemas live in `packages/contracts/src/turnEvents.schema.ts` and are exposed through the `@ss-ai/contracts/turnEvents.schema` sub-entry. This keeps the web app able to import pure contracts without pulling Zod into its main bundle. Adding a new event type should start in contracts, then flow outward through runtime schema validation, storage, prompt history assembly, and UI display.
 
-Memory candidate pure types live in `packages/contracts/src/memoryCandidates.ts`. Runtime Zod schemas live in `packages/contracts/src/memoryCandidates.schema.ts` and are exposed through the `@ss-ai/contracts/memoryCandidates.schema` sub-entry. `SubmitTurnEventsArgs` can include top-level `memoryWriteCandidates`; the current chat-turn wiring records them, optionally processes them into memory staging, and exposes read-only debug APIs for candidates, memory staging, and memory retained rows.
+Memory candidate pure types live in `packages/contracts/src/memoryCandidates.ts`. Runtime Zod schemas live in `packages/contracts/src/memoryCandidates.schema.ts` and are exposed through the `@ss-ai/contracts/memoryCandidates.schema` sub-entry. `SubmitTurnEventsArgs` can include top-level `memoryWriteCandidates`; the current chat-turn wiring records them, optionally processes them into memory staging, and exposes debug API contracts for candidates, memory staging, and memory retained rows. Consolidation decisions are stored in an audit store; trace / decision views are planned for the Memory Lab.
 
 ### `packages/persona-flow-sqlite`
 
@@ -240,6 +240,7 @@ Important tables:
 - `memory_staging`
 - `memory_staging_sources`
 - `memory_retained`
+- `memory_consolidation_decisions`
 
 `user_preferences.model_assignments_json` stores the mapping from model-call purpose to `{ provider, model }`.
 
@@ -408,10 +409,12 @@ Current purposes:
 
 - `chat.main`
 - `memory.summarize`
+- `memory.consolidate`
 - `memory.embed`
 
 The chat path currently calls the model with `modelCallPurpose: "chat.main"`.
 The memory embedding adapter resolves `modelCallPurpose: "memory.embed"` when converting candidate text to vectors.
+The retained-memory consolidation judge uses `modelCallPurpose: "memory.consolidate"`; it can fall back to the `memory.summarize` assignment until the settings UI exposes a dedicated assignment.
 
 Resolution order is user-first with config fallback:
 
@@ -492,8 +495,8 @@ Start here when reviewing or changing behavior:
 - The SQLite model assignment column is `model_assignments_json`; old model-assignment storage compatibility has been removed.
 - The single-character chat model output path now uses `response_format: json_schema` structured output for visible turn events and optional `memoryWriteCandidates` (event schema still sourced from `submitTurnEventsTool.argsSchema`). No memory candidate tool is registered for this path.
 - Chat-turn memory write is now a durable pipeline: candidates are parsed from structured output and, after the assistant turn is persisted, handed to `MemoryPipelineService`. Server runtime config exposes `memory.enabled`, `memory.candidateProcessingMode`, `memory.staging`, and `memory.retained` settings.
-- The memory pipeline includes candidate recording, candidate -> memory staging processing, text normalization, embedding, normalized duplicate aggregation, similarity sampling logs, SQLite-backed `memory_candidates` / `memory_staging` / `memory_staging_sources` / `memory_retained` stores, and chat-turn integration.
-- TODO for the memory write path: implement Batch 4 memory staging -> memory retained LLM consolidation judge, then add retained memory prompt read-back.
+- The memory pipeline includes candidate recording, candidate -> memory staging processing, text normalization, embedding, normalized duplicate aggregation, similarity ranking, LLM consolidation judge, SQLite-backed `memory_candidates` / `memory_staging` / `memory_staging_sources` / `memory_retained` / `memory_consolidation_decisions` stores, and chat-turn integration.
+- Next memory work: build a frontend Memory Lab / tuning tool with trace views, manual candidate intake, processor controls, and judge preview; then read important retained memories back into prompts and expose query tools for an agent loop.
 - TODO before relying on similarity thresholds: collect more real `mistral-embed` samples. The current probe returned 1024-dimensional vectors and showed that short Chinese user facts can have high baseline cosine similarity.
 - Chat-turn/model-call layering is intentionally split: chat services consume model-call `parsedOutput`, while each model call owns provider response parsing (structured output or tool arguments) for its purpose. This keeps future interaction modes free to use different output formats without changing chat-turn persistence code.
 - `messages` is now a timeline/display table with `kind` and `display_text`; structured assistant facts are stored in `turn_events`.
