@@ -9,6 +9,7 @@ import type {
     UserProviderCredential,
     UserProfile,
 } from "../../src/index.js";
+import { makeInMemoryMemoryStores } from "./memoryFakes.js";
 
 class InMemoryCharacterStore {
     private readonly records = new Map<string, Character>();
@@ -346,6 +347,7 @@ export function createTestFixture(): PersonaFlowTestFixture {
     const userProfile = new InMemoryUserProfileStore();
     const userPreferences = new InMemoryUserPreferencesStore();
     const providerCredential = new InMemoryUserProviderCredentialStore();
+    const memoryStores = makeInMemoryMemoryStores();
 
     const stores: AppStores = {
         character,
@@ -355,6 +357,10 @@ export function createTestFixture(): PersonaFlowTestFixture {
         userProfile,
         userPreferences,
         providerCredential,
+        memoryCandidate: memoryStores.candidateStore,
+        memoryStaging: memoryStores.stagingStore,
+        memoryRetained: memoryStores.retainedStore,
+        memoryConsolidationDecision: memoryStores.consolidationDecisionStore,
     };
 
     return {

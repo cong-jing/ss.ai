@@ -6,13 +6,23 @@ import type { ModelAssignment, ModelCallPurpose } from "../modelCallPurpose.js";
 export type ApiKeySource = "user" | "default" | "missing";
 export type ModelAssignmentSource = "user" | "default" | "missing";
 
+/**
+ * Models a provider exposes, split by capability category so the UI can
+ * filter dropdown options per model-call purpose. Each category is always
+ * present (possibly empty) to avoid optional-chaining noise downstream.
+ */
+export interface ProviderAvailableModels {
+    chat: string[];
+    embed: string[];
+}
+
 export interface ProviderStatus {
     provider: string;
     userApiKeySet: boolean;
     defaultApiKeySet: boolean;
     effectiveApiKeySource: ApiKeySource;
     defaultApiKeyWarning?: string;
-    availableModels: string[];
+    availableModels: ProviderAvailableModels;
 }
 
 // --- Model assignment ---
@@ -43,7 +53,7 @@ export interface UpsertApiKeyRequest {
 export interface UpsertApiKeyResponse {
     provider: string;
     apiKeySet: boolean;
-    availableModels: string[];
+    availableModels: ProviderAvailableModels;
 }
 
 // --- POST /v1/user-preference/api-key/delete ---
@@ -55,6 +65,14 @@ export interface DeleteApiKeyRequest {
 export interface DeleteApiKeyResponse {
     provider: string;
     apiKeySet: boolean;
+    /**
+     * Models still effectively available after the user key is removed.
+     * Includes any static `availableModels` from server config (which do not
+     * depend on the user key) so the UI can keep showing dropdown options
+     * when a default API key or static list still applies. Empty when no
+     * key (user or default) and no static list are configured.
+     */
+    availableModels: ProviderAvailableModels;
 }
 
 // --- POST /v1/user-preference/test-api-key ---
@@ -83,6 +101,12 @@ export interface UpsertModelAssignmentResponse {
 }
 
 // --- POST /v1/user-preference/list-models ---
+//
+// Live connectivity check + raw enumeration from the provider. The result is
+// intentionally a flat list (no category split) because providers like Mistral
+// return chat and embed models in the same response with no reliable category
+// marker. Callers use this only for the "test API key" button and may show
+// the raw list as supplemental info.
 
 export interface ListModelsRequest {
     provider: string;

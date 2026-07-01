@@ -66,8 +66,17 @@ export class ModelRuntime {
             modelCallPurpose,
         });
         const prefs = await this.deps.appStores.userPreferences.getUserPreferences(userId);
-        const userAssignment = prefs?.modelAssignments?.[modelCallPurpose];
-        const defaultAssignment = this.deps.defaultModelAssignments?.[modelCallPurpose];
+        // `memory.consolidate` is a system-only purpose with no settings UI yet,
+        // so it transparently falls back to the `memory.summarize` assignment
+        // until a dedicated assignment / UI ships. The purpose identity itself
+        // stays distinct everywhere else (audit, prompt log) so the two calls
+        // remain separable.
+        const fallbackPurpose: ModelCallPurpose | undefined =
+            modelCallPurpose === "memory.consolidate" ? "memory.summarize" : undefined;
+        const userAssignment = prefs?.modelAssignments?.[modelCallPurpose]
+            ?? (fallbackPurpose ? prefs?.modelAssignments?.[fallbackPurpose] : undefined);
+        const defaultAssignment = this.deps.defaultModelAssignments?.[modelCallPurpose]
+            ?? (fallbackPurpose ? this.deps.defaultModelAssignments?.[fallbackPurpose] : undefined);
         const { provider, model } = userAssignment ?? defaultAssignment ?? {};
 
         if (!provider || !model) {

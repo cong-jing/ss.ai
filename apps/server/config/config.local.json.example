@@ -7,7 +7,8 @@
         "level": "debug",
         "logFilePath": "./.runtime/logs/ss-ai.log",
         "includeSourceLocation": true,
-        "includeStackTrace": false
+        "includeStackTrace": false,
+        "logDatabaseSql": false
     },
     "promptLog": {
         "enabled": true,
@@ -34,6 +35,10 @@
         "memory.summarize": {
             "provider": "mistral.ai",
             "model": "mistral-small-latest"
+        },
+        "memory.embed": {
+            "provider": "mistral.ai",
+            "model": "mistral-embed"
         }
     }
 }

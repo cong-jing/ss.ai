@@ -327,6 +327,197 @@ export function openDatabase(path: string, dblog?: DbLog): OpenDatabaseResult {
         migrateAppSessionTokenHashes();
     }
 
+    // ── memory write subsystem (Batch 3.5) ──────────────────────────────
+    // Four tables back the ports defined in
+    // `@ss-ai/persona-flow/memory`. Every memory belongs to exactly
+    // one character world, so `character_id` is required on every
+    // row that carries one; `scope` only classifies the memory
+    // inside that world and never lets it cross characters. The
+    // tables live in the core DB (not per-character DBs) so the
+    // brute-force cosine scan can run a single query per
+    // `(user_id, character_id, scope, type)` bucket regardless of
+    // how many characters the user has.
+    //
+    // Batch 3.5 stripped `embedding_json` / `normalized_text` /
+    // `reason` off `memory_candidates` and dropped the
+    // `memory_decisions` audit table outright. The candidate row is
+    // now just raw intake + processing state; downstream evidence
+    // lives on `memory_staging` and is linked back via the
+    // `memory_staging_sources` table. `memory_retained` is the
+    // Batch 4 consolidation target, created empty here so the
+    // debug surface and storage adapter can be wired now.
+    //
+    // No backward compatibility: pre-3.5 layouts (`memories`,
+    // `memory_decisions`, the old fat `memory_candidates`) are
+    // dropped when detected. Existing dev DBs lose their candidate
+    // history on first open after the migration.
+
+    // 1) Drop legacy tables outright.
+    sqlite.exec(`
+        DROP TABLE IF EXISTS memories;
+        DROP TABLE IF EXISTS memory_decisions;
+    `);
+
+    // 2) If memory_candidates predates Batch 3.5 (still has the
+    //    old `normalized_text` / `embedding_json` / `reason`
+    //    columns), drop it so the new CREATE below installs the
+    //    Batch 3.5 layout. Otherwise leave it intact.
+    const candidateColumns = sqlite
+        .prepare(`PRAGMA table_info(memory_candidates)`)
+        .all() as Array<{ name: string }>;
+    if (candidateColumns.length > 0) {
+        const names = new Set(candidateColumns.map((c) => c.name));
+        const isLegacyShape =
+            names.has("normalized_text")
+            || names.has("embedding_json")
+            || names.has("reason")
+            || !names.has("candidate_reason")
+            || !names.has("status_reason");
+        if (isLegacyShape) {
+            sqlite.exec(`DROP TABLE memory_candidates`);
+        }
+    }
+
+    sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS memory_candidates (
+            id                    TEXT PRIMARY KEY,
+            user_id               TEXT NOT NULL,
+            character_id          TEXT NOT NULL,
+            conversation_id       TEXT NOT NULL,
+            user_message_id       TEXT NOT NULL,
+            assistant_message_id  TEXT NOT NULL,
+            request_id            TEXT NOT NULL,
+            model_call_purpose    TEXT NOT NULL,
+            seq                   INTEGER NOT NULL,
+            scope                 TEXT NOT NULL,
+            type                  TEXT NOT NULL,
+            text                  TEXT NOT NULL,
+            related_entities_json TEXT NOT NULL DEFAULT '[]',
+            tags_json             TEXT NOT NULL DEFAULT '[]',
+            candidate_reason      TEXT,
+            status                TEXT NOT NULL,
+            status_reason         TEXT,
+            schema_version        INTEGER NOT NULL,
+            created_at            TEXT NOT NULL,
+            updated_at            TEXT NOT NULL
+        );
+
+        -- Status scan: the staging processor pulls pending candidates by user + character.
+        CREATE INDEX IF NOT EXISTS idx_memory_candidates_user_character_status_created
+            ON memory_candidates(user_id, character_id, status, created_at);
+
+        -- Debug surface: list-by-turn for the assistant message under review.
+        CREATE INDEX IF NOT EXISTS idx_memory_candidates_turn
+            ON memory_candidates(user_id, conversation_id, assistant_message_id, seq);
+
+        CREATE TABLE IF NOT EXISTS memory_staging (
+            id                    TEXT PRIMARY KEY,
+            user_id               TEXT NOT NULL,
+            character_id          TEXT NOT NULL,
+            scope                 TEXT NOT NULL,
+            type                  TEXT NOT NULL,
+            text                  TEXT NOT NULL,
+            normalized_text       TEXT NOT NULL,
+            related_entities_json TEXT NOT NULL DEFAULT '[]',
+            tags_json             TEXT NOT NULL DEFAULT '[]',
+            status                TEXT NOT NULL,
+            status_reason         TEXT,
+            occurrence_count      INTEGER NOT NULL DEFAULT 1,
+            first_seen_at         TEXT NOT NULL,
+            last_seen_at          TEXT NOT NULL,
+            embedding_json        TEXT,
+            schema_version        INTEGER NOT NULL,
+            created_at            TEXT NOT NULL,
+            updated_at            TEXT NOT NULL
+        );
+
+        -- Bucket scan: list staging rows by user + character + scope + type + status.
+        CREATE INDEX IF NOT EXISTS idx_memory_staging_user_character_scope_type_status
+            ON memory_staging(user_id, character_id, scope, type, status);
+
+        -- Exact-duplicate lookup driven by the staging processor.
+        CREATE INDEX IF NOT EXISTS idx_memory_staging_user_character_scope_type_normtext
+            ON memory_staging(user_id, character_id, scope, type, normalized_text);
+
+        CREATE TABLE IF NOT EXISTS memory_staging_sources (
+            memory_staging_id  TEXT NOT NULL,
+            candidate_id       TEXT NOT NULL UNIQUE,
+            candidate_seq      INTEGER NOT NULL,
+            created_at         TEXT NOT NULL,
+            PRIMARY KEY (memory_staging_id, candidate_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS memory_retained (
+            id                    TEXT PRIMARY KEY,
+            user_id               TEXT NOT NULL,
+            character_id          TEXT NOT NULL,
+            scope                 TEXT NOT NULL,
+            type                  TEXT NOT NULL,
+            text                  TEXT NOT NULL,
+            normalized_text       TEXT NOT NULL,
+            related_entities_json TEXT NOT NULL DEFAULT '[]',
+            tags_json             TEXT NOT NULL DEFAULT '[]',
+            source_staging_id     TEXT,
+            status                TEXT NOT NULL,
+            importance            REAL NOT NULL,
+            occurrence_count      INTEGER NOT NULL DEFAULT 1,
+            first_seen_at         TEXT NOT NULL,
+            last_seen_at          TEXT NOT NULL,
+            embedding_json        TEXT,
+            schema_version        INTEGER NOT NULL,
+            created_at            TEXT NOT NULL,
+            updated_at            TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_memory_retained_user_character_scope_type_status
+            ON memory_retained(user_id, character_id, scope, type, status);
+
+        CREATE TABLE IF NOT EXISTS memory_consolidation_decisions (
+            id                              TEXT PRIMARY KEY,
+            user_id                         TEXT NOT NULL,
+            character_id                    TEXT NOT NULL,
+            memory_staging_id               TEXT NOT NULL,
+            action                          TEXT NOT NULL,
+            target_retained_memory_id       TEXT,
+            created_retained_memory_id      TEXT,
+            archived_retained_memory_ids_json TEXT NOT NULL DEFAULT '[]',
+            judge_request_json              TEXT,
+            judge_response_json             TEXT,
+            validated_action_json           TEXT,
+            status                          TEXT NOT NULL,
+            status_reason                   TEXT,
+            model_call_purpose              TEXT NOT NULL,
+            model                           TEXT,
+            request_id                      TEXT,
+            created_at                      TEXT NOT NULL
+        );
+
+        -- Idempotency: at most one applied decision per staging row.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_consolidation_applied_unique
+            ON memory_consolidation_decisions(memory_staging_id)
+            WHERE status = 'applied';
+
+        -- Audit listing by user + character.
+        CREATE INDEX IF NOT EXISTS idx_memory_consolidation_user_character_created
+            ON memory_consolidation_decisions(user_id, character_id, created_at);
+    `);
+
+    // memory_retained gained occurrence accounting in Batch 4. Older 3.5 DBs
+    // had the table created without these columns; backfill them.
+    try { sqlite.exec(`ALTER TABLE memory_retained ADD COLUMN occurrence_count INTEGER NOT NULL DEFAULT 1`); } catch { /* already exists */ }
+    try { sqlite.exec(`ALTER TABLE memory_retained ADD COLUMN first_seen_at TEXT NOT NULL DEFAULT ''`); } catch { /* already exists */ }
+    try { sqlite.exec(`ALTER TABLE memory_retained ADD COLUMN last_seen_at TEXT NOT NULL DEFAULT ''`); } catch { /* already exists */ }
+
+
+    // Obsolete pre-3.5 indexes — names changed; drop the old ones
+    // so PRAGMA index_list doesn't list zombies.
+    sqlite.exec(`DROP INDEX IF EXISTS idx_memory_candidates_user_status_created`);
+    sqlite.exec(`DROP INDEX IF EXISTS idx_memories_user_character_scope_type_status`);
+    sqlite.exec(`DROP INDEX IF EXISTS idx_memories_user_character_scope_type_normtext_status`);
+    sqlite.exec(`DROP INDEX IF EXISTS idx_memories_user_scope_type_normtext_status`);
+    sqlite.exec(`DROP INDEX IF EXISTS idx_memory_decisions_candidate`);
+    sqlite.exec(`DROP INDEX IF EXISTS idx_memory_decisions_user_decision_created`);
+
     const db = drizzle(sqlite, { schema });
 
     return { sqlite, db };

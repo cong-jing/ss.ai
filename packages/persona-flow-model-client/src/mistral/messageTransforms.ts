@@ -105,7 +105,12 @@ export function extractStructuredOutput(response: unknown): unknown {
         return JSON.parse(content);
     }
 
-    throw new Error("Mistral structured response did not contain parsed or JSON content.");
+    // Models routinely return an empty `content` when they choose to call a
+    // tool instead of producing the requested structured output (especially
+    // under `tool_choice: auto`). Returning undefined here lets the
+    // model-call layer decide how to react: it can fall back, retry, or
+    // surface a domain-specific error that mentions the tool-call situation.
+    return undefined;
 }
 
 export function extractTextDelta(content: unknown): string {
@@ -158,13 +163,48 @@ export function normalizeToolCall(toolCall: unknown): ModelToolCall {
         };
     };
 
+    const { parsed, raw } = normalizeToolCallArguments(value.function?.arguments);
+
     return {
         id: typeof value.id === "string" ? value.id : undefined,
         type: typeof value.type === "string" ? value.type : undefined,
         index: typeof value.index === "number" ? value.index : undefined,
         functionName: typeof value.function?.name === "string" ? value.function.name : undefined,
-        arguments: value.function?.arguments,
+        ...(parsed !== undefined ? { arguments: parsed } : {}),
+        ...(raw !== undefined ? { argumentsRaw: raw } : {}),
     };
+}
+
+/**
+ * Normalize provider tool-call arguments into the {@link ModelToolCall}
+ * contract:
+ *  - When the provider sends a JSON string, parse it once and return both the
+ *    parsed value and the original text for diagnostics.
+ *  - When the provider already sends a structured value, pass it through and
+ *    leave `argumentsRaw` empty.
+ *  - When parsing fails, leave `arguments` undefined but keep the raw text so
+ *    prompt logs / debug tools can still inspect what the model emitted.
+ */
+export function normalizeToolCallArguments(
+    rawArguments: unknown,
+): { parsed?: unknown; raw?: string } {
+    if (rawArguments === undefined || rawArguments === null) {
+        return {};
+    }
+
+    if (typeof rawArguments === "string") {
+        const trimmed = rawArguments.trim();
+        if (trimmed.length === 0) {
+            return { raw: rawArguments };
+        }
+        try {
+            return { parsed: JSON.parse(trimmed), raw: rawArguments };
+        } catch {
+            return { raw: rawArguments };
+        }
+    }
+
+    return { parsed: rawArguments };
 }
 
 export function extractToolCallsFromMessage(message: unknown): ModelToolCall[] {

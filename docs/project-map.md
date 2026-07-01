@@ -5,21 +5,20 @@
 This document is the maintainer-oriented project map for `ss.ai`.
 Use it when you need a cold-start overview of the workspace, the main chat flow, runtime configuration, and the files that currently anchor behavior.
 
-For a portfolio-style overview, live demo links, and a shorter quick start, see the repository root [README](../README.md).
+For a feature overview, live demo links, and a shorter quick start, see the repository root [README](../README.md).
 
 ## Workspace Purpose
 
 `ss.ai` is an experimental TypeScript project for LLM-driven character chat and TRPG-style interaction. Its center is `packages/persona-flow`: it builds prompt context, renders prompt templates, selects a model for each model-call purpose, calls the LLM through an injected client, and persists the resulting chat turn through injected stores.
 
-This repository is a personal portfolio and research project.
-
-Its main purpose is to demonstrate experience in the following areas:
+The project currently covers these areas:
 
 - application design with TypeScript and Node.js
 - LLM API integration
 - SSE-based streaming chat
 - prompt template composition and management
 - structured-output turn event design with provider-neutral tool-call abstractions reserved for future agent tools
+- long-term-memory persistence pipeline design, including candidate intake, memory staging, embedding, lightweight duplicate aggregation, LLM consolidation judge, memory retained storage, and decision audit
 - SQLite-backed persistence for conversations and character data
 - character chat and TRPG-style interaction design
 - LLM provider abstraction layer
@@ -119,6 +118,42 @@ If you need to override the runtime file root, set `RUNTIME_HOME`.
 
 If dependency declarations change in any workspace package (`dependencies`, `devDependencies`, `peerDependencies`, or workspace links), run `pnpm install` again so `pnpm-lock.yaml` and the deploy dependency graph stay in sync.
 
+## Module Dependency Map
+
+This diagram shows package import / build dependencies, not the runtime request flow. `apps/server` is the composition root: it wires the domain package to persistence, provider adapters, logging, runtime config, and HTTP APIs.
+
+```mermaid
+flowchart LR
+    subgraph Apps
+        Web[apps/web\nVue UI]
+        Server[apps/server\nHTTP API + SSE\ncomposition root]
+    end
+
+    subgraph Packages
+        Contracts[packages/contracts\nAPI contracts + shared types]
+        Flow[packages/persona-flow\ndomain core\nprompt / chat / memory ports]
+        Sqlite[packages/persona-flow-sqlite\nSQLite store adapters]
+        ModelClient[packages/persona-flow-model-client\nLLM provider adapters]
+        Logger[packages/persona-flow-logger\nruntime logging]
+    end
+
+    Web --> Contracts
+    Server --> Contracts
+    Server --> Flow
+    Server --> Sqlite
+    Server --> ModelClient
+    Server --> Logger
+    Flow --> Contracts
+    Sqlite --> Contracts
+    Sqlite --> Flow
+    ModelClient --> Flow
+```
+
+- `packages/contracts` is the lowest shared type/API layer and is imported by both app surfaces and domain/storage code.
+- `packages/persona-flow` is the framework-agnostic domain layer; it defines store/model/memory ports and owns prompt/chat orchestration.
+- `packages/persona-flow-sqlite` and `packages/persona-flow-model-client` are adapters. They depend on domain ports instead of the domain depending on SQLite or provider SDKs.
+- `apps/server` performs dependency wiring and exposes HTTP/SSE APIs. `apps/web` stays on contracts plus its own UI state.
+
 ## Packages
 
 ### `packages/persona-flow`
@@ -134,22 +169,29 @@ Responsibilities:
 - Implements the current `chat.main/single_character_chat` prompt assembly and structured-output event flow.
 - Owns chat-turn orchestration via `PersonaFlowChatTurnService`.
 - Resolves model runtime and calls the injected `ModelClient` via `ModelRuntime`.
-- Defines LLM client interfaces in `src/llm/modelClient.ts`, including provider-neutral tool definitions and tool choice.
-- Defines the `submit_turn_events` event schema and parses turn events returned by the model. `ModelToolDefinition` is retained for future query-style tool calls but is no longer the terminal output channel for `single_character_chat`.
+- Defines LLM client interfaces in `src/llm/modelClient.ts`, including provider-neutral tool definitions, tool choice, and optional embedding calls.
+- Defines the `submit_turn_events` event schema and parses turn events returned by the model.
+- Defines the long-term memory pipeline under `src/memory/**`: raw candidate records, memory staging records, memory retained records, consolidation decision records, ports, normalization, embedding, cosine similarity ranking, `MemoryCandidateRecorder`, `MemoryStagingProcessor`, `MemoryRetainedConsolidationProcessor`, and `MemoryPipelineService`.
+- Defines `ModelClientMemoryEmbeddingProvider` under `src/memory/embedding/**` to connect the memory pipeline's embedding port to the injected `ModelClient`. Provider/runtime dependencies are contained inside this adapter file so the rest of `src/memory/**` stays provider-neutral.
 
-Layering note: `PersonaFlowChatTurnService` orchestrates turns and persistence, but it should not parse provider tool calls or structured output directly. A registered `ModelCall<TParsedOutput>` owns prompt assembly, the requested output format (`structuredOutputSchema` or `tools`), and business-level parsing for its purpose. `ModelRuntime` stays provider/model/API-key focused and returns the raw provider-neutral `llmResponse` (`output` / `structuredOutput` / `toolCalls`). The model call then converts that response into `parsedOutput`; optional `parsedToolCalls` is reserved for intermediate tool results that callers need to inspect. For `single_character_chat`, the final result is produced via `response_format: json_schema` and folded into `parsedOutput` as `{ displayText, events }`, so it is not duplicated in `parsedToolCalls`.
+Layering note: `PersonaFlowChatTurnService` orchestrates turns and persistence, but it should not parse provider tool calls or structured output directly. A registered `ModelCall<TParsedOutput>` owns prompt assembly, the requested output format (`structuredOutputSchema` and/or `tools`), and business-level parsing for its purpose. `ModelRuntime` stays provider/model/API-key focused and returns the raw provider-neutral `llmResponse` (`output` / `structuredOutput` / `toolCalls`). The model call then converts that response into `parsedOutput`; optional `parsedToolCalls` is reserved for intermediate tool results that callers need to inspect. For `single_character_chat`, the final visible reply is produced via `response_format: json_schema` and folded into `parsedOutput` as `{ displayText, events }`. Memory write candidates are a top-level optional field inside that same structured output and are folded into `parsedOutput.memoryWriteCandidates` for internal handling.
 
 Main chat flow:
 
 1. `PersonaFlowChatTurnService.chatTurn()` receives user, character, conversation, and message input.
 2. `prepareChatTurnContext()` validates character and conversation, resolves the sender actor, optionally appends the user message, and builds `PromptContext`.
 3. `resolveModelCall()` selects the registered handler for the requested purpose and interaction mode. Today that is `chat.main:single_character_chat`.
-4. The handler assembles LLM messages and requests structured output via `structuredOutputSchema` (built from the `submit_turn_events` event schema). `ModelRuntime.chat()` resolves provider and model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves the API key from `providerCredential`, then calls `ModelClient`.
+4. The handler assembles LLM messages and requests structured output via `structuredOutputSchema` (built from the `submit_turn_events` event schema plus the optional `memoryWriteCandidates` field). `ModelRuntime.chat()` resolves provider and model from `userPreferences.modelAssignments[modelCallPurpose]`, resolves the API key from `providerCredential`, then calls `ModelClient`.
 5. The model call parses `llmResponse.structuredOutput` as `SubmitTurnEventsArgs` and returns a chat-specific `parsedOutput` containing normalized display text plus the ordered `TurnEvent[]`.
-6. `PersonaFlowChatTurnService` consumes that parsed result without knowing the underlying output format. The complete ordered turn event list is persisted with the assistant turn.
-7. Assistant turns are appended to the chat store as the conversation self actor via `appendAssistantTurn()`, which writes both the timeline message and the structured turn events.
+6. The model call also extracts `memoryWriteCandidates` from the structured output. After the assistant turn is persisted, `PersonaFlowChatTurnService` hands those candidates to `MemoryPipelineService.handleChatTurnCandidates()`. The pipeline service checks `memory.enabled`, then invokes `MemoryCandidateRecorder` to persist raw candidate rows; when `memory.candidateProcessingMode === "inline"` and `memory.staging.enabled`, it also runs `MemoryStagingProcessor` to apply rule filtering, normalize text, generate embeddings, aggregate exact normalized-text duplicates into memory staging, and update candidate status. The retained consolidation processor can later pull pending staging evidence, retrieve related retained memories, call the `memory.consolidate` LLM judge, and let the system layer apply create / update / merge / ignore / archive decisions.
+7. `PersonaFlowChatTurnService` consumes the parsed result without knowing the underlying output format. The complete ordered turn event list is persisted with the assistant turn.
+8. Assistant turns are appended to the chat store as the conversation self actor via `appendAssistantTurn()`, which writes both the timeline message and the structured turn events.
 
 The `single_character_chat` streaming path has migrated to structured output: `/v1/chat/stream` lets the provider stream the JSON text channel token by token under `response_format: json_schema`. `createSubmitTurnEventsPreviewParser` incrementally parses that JSON and emits `chunk` (decoded `replyText.text` characters) and `turnEventPreview` SSE events; the final `done` event still carries the canonical `turnEvents`.
+
+Memory candidate collection intentionally does not affect streaming previews. Streamed text and `turnEventPreview` events still come only from the structured-output JSON text channel; memory candidates are consumed only from the final parsed structured output after the model stream returns.
+
+The memory persistence path now covers candidate -> staging -> retained: structured output can include `memoryWriteCandidates`, the server records candidates, generates embeddings, aggregates exact normalized-text duplicates into staging rows, and the retained consolidation pass uses an LLM judge to promote stable facts into retained memories with decision audit. Retained memories are not yet read back into prompt context; the next work is a Memory Lab / tuning UI plus prompt injection and query tools for an agent loop. Detailed boundaries, ports, tables, settings, and next work are tracked in [Project Map - Memory Subsystem](project-map-memory.zh-CN.md).
 
 Interaction modes are shared from `@ss-ai/contracts`, and the broader architecture is intended to support multiple modes over time. Today only `single_character_chat` is actually implemented for runtime use. Other modes already exist in contracts and UI as planned placeholders, but are not wired into prompt or model-call dispatch yet.
 
@@ -164,10 +206,13 @@ Responsibilities:
 - `INTERACTION_MODES`, `DEFAULT_INTERACTION_MODE`, and `InteractionMode`.
 - `MODEL_CALL_PURPOSES`, `ModelCallPurpose`, and model assignment types.
 - `TurnEvent`, `SubmitTurnEventsArgs`, `MessageKind`, and the Zod schemas that validate model-submitted turn events.
+- `MemoryWriteCandidate`, memory scope/type literals, and the Zod schemas that validate model-submitted memory write candidates.
 
 Model-call configuration uses `MODEL_CALL_PURPOSES` / `ModelCallPurpose` plus `ModelAssignment` / `ModelAssignmentMap`.
 
 Turn event pure types and literal constants live in `packages/contracts/src/turnEvents.ts`. Runtime Zod schemas live in `packages/contracts/src/turnEvents.schema.ts` and are exposed through the `@ss-ai/contracts/turnEvents.schema` sub-entry. This keeps the web app able to import pure contracts without pulling Zod into its main bundle. Adding a new event type should start in contracts, then flow outward through runtime schema validation, storage, prompt history assembly, and UI display.
+
+Memory candidate pure types live in `packages/contracts/src/memoryCandidates.ts`. Runtime Zod schemas live in `packages/contracts/src/memoryCandidates.schema.ts` and are exposed through the `@ss-ai/contracts/memoryCandidates.schema` sub-entry. `SubmitTurnEventsArgs` can include top-level `memoryWriteCandidates`; the current chat-turn wiring records them, optionally processes them into memory staging, and exposes debug API contracts for candidates, memory staging, and memory retained rows. Consolidation decisions are stored in an audit store; trace / decision views are planned for the Memory Lab.
 
 ### `packages/persona-flow-sqlite`
 
@@ -191,6 +236,11 @@ Important tables:
 - `user_preferences`
 - `user_character_states`
 - `user_provider_credentials`
+- `memory_candidates`
+- `memory_staging`
+- `memory_staging_sources`
+- `memory_retained`
+- `memory_consolidation_decisions`
 
 `user_preferences.model_assignments_json` stores the mapping from model-call purpose to `{ provider, model }`.
 
@@ -207,8 +257,9 @@ Responsibilities:
 - Implements the `ModelClient` interface from `persona-flow`.
 - `DefaultModelClient` dispatches by provider.
 - Mistral is the current concrete provider via `MistralModelClient`.
-- Supports non-structured generation, structured generation (`response_format: json_schema`) for both non-streaming and streaming, tool calls, model listing, and structured-output streaming over the text channel. Streaming structured responses accumulate raw JSON text for preview and expose the parsed final object as `ModelStreamResult.structuredOutput`.
+- Supports non-structured generation, structured generation (`response_format: json_schema`) for both non-streaming and streaming, tool calls, model listing, embeddings, and structured-output streaming over the text channel. Streaming structured responses accumulate raw JSON text for preview and expose the parsed final object as `ModelStreamResult.structuredOutput`.
 - Converts provider-neutral `ModelToolDefinition` values to Mistral function tools in `src/mistral/mistralToolAdapter.ts` (kept for future query-style tool calls).
+- Wraps Mistral embeddings in `src/mistral/mistralEmbed.ts`, validating request shape, response count, vector finiteness, index order, model metadata, and usage before returning provider-neutral `ModelEmbedResult`.
 
 The provider list and API URLs come from runtime config. API keys are stored per user and provider in the credential store. SQLite currently runs them through no-op encrypt/decrypt helpers, so the stored value remains plaintext until real encryption is added.
 
@@ -358,8 +409,12 @@ Current purposes:
 
 - `chat.main`
 - `memory.summarize`
+- `memory.consolidate`
+- `memory.embed`
 
 The chat path currently calls the model with `modelCallPurpose: "chat.main"`.
+The memory embedding adapter resolves `modelCallPurpose: "memory.embed"` when converting candidate text to vectors.
+The retained-memory consolidation judge uses `modelCallPurpose: "memory.consolidate"`; it can fall back to the `memory.summarize` assignment until the settings UI exposes a dedicated assignment.
 
 Resolution order is user-first with config fallback:
 
@@ -385,13 +440,30 @@ Start here when reviewing or changing behavior:
 
 - `packages/contracts/src/modelCallPurpose.ts`
 - `packages/contracts/src/interactionMode.ts`
+- `packages/contracts/src/memoryCandidates.ts`
+- `packages/contracts/src/memoryCandidates.schema.ts`
 - `packages/contracts/src/turnEvents.ts`
 - `packages/contracts/src/turnEvents.schema.ts`
 - `packages/contracts/src/apis/*.api.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnService.ts`
 - `packages/persona-flow/src/chatTurn/chatTurnPreparation.ts`
+- `packages/persona-flow/src/chatTurn/memoryCandidateLogger.ts`
 - `packages/persona-flow/src/chatTurn/events/submitTurnEventsParser.ts`
 - `packages/persona-flow/src/chatTurn/events/turnEventText.ts`
+- `packages/persona-flow/src/memory/types.ts`
+- `packages/persona-flow/src/memory/settings.ts`
+- `packages/persona-flow/src/memory/MemoryPipelineService.ts`
+- `packages/persona-flow/src/memory/createMemoryPipelineService.ts`
+- `packages/persona-flow/src/memory/candidate/MemoryCandidateRecorder.ts`
+- `packages/persona-flow/src/memory/embedding/ModelClientMemoryEmbeddingProvider.ts`
+- `packages/persona-flow/src/memory/embedding/MemoryEmbeddingStep.ts`
+- `packages/persona-flow/src/memory/ranking/similarity.ts`
+- `packages/persona-flow/src/memory/ranking/rankSimilarMemories.ts`
+- `packages/persona-flow/src/memory/decision/decisionPolicy.ts`
+- `packages/persona-flow/src/memory/staging/MemoryStagingProcessor.ts`
+- `packages/persona-flow/src/memory/staging/memoryStagingPorts.ts`
+- `packages/persona-flow/src/memory/staging/memoryStagingTypes.ts`
+- `packages/persona-flow/src/memory/stores/memoryRetainedStorePort.ts`
 - `packages/persona-flow/src/llm/tools/modelTool.ts`
 - `packages/persona-flow/src/llm/tools/submitTurnEventsTool.ts`
 - `packages/persona-flow/src/modelCall/modelRuntime.ts`
@@ -404,6 +476,7 @@ Start here when reviewing or changing behavior:
 - `packages/persona-flow-sqlite/src/db/CharacterDbRouter.ts`
 - `packages/persona-flow-sqlite/src/createSqliteStores.ts`
 - `packages/persona-flow-model-client/src/defaultModelClient.ts`
+- `packages/persona-flow-model-client/src/mistral/mistralEmbed.ts`
 - `packages/persona-flow-model-client/src/mistral/mistralModelClient.ts`
 - `packages/persona-flow-model-client/src/mistral/mistralToolAdapter.ts`
 - `apps/server/src/http/apis/chat/*.ts`
@@ -412,12 +485,19 @@ Start here when reviewing or changing behavior:
 - `apps/web/src/panels/chat/turnEventDisplay.ts`
 - `apps/web/src/panels/chat/chatTypes.ts`
 - `apps/web/src/panels/userPreference/useUserPreferenceViewModel.ts`
+- `docs/project-map-memory.zh-CN.md`
+- `docs/plans/memory-write-implementation.md`
+- `docs/plans/memory-write-followups.md`
 
 ## Current Maintenance Notes
 
 - The `AI_FUNCTIONS` / `AiFunction` to `MODEL_CALL_PURPOSES` / `ModelCallPurpose` rename is complete in the contracts, web, server, and store layers.
 - The SQLite model assignment column is `model_assignments_json`; old model-assignment storage compatibility has been removed.
-- The single-character chat model output path now uses `response_format: json_schema` structured output (event schema still sourced from `submitTurnEventsTool.argsSchema`). The tool-call path is no longer the terminal output channel, but the `ModelToolDefinition` abstraction is kept for future intermediate query-style tools.
+- The single-character chat model output path now uses `response_format: json_schema` structured output for visible turn events and optional `memoryWriteCandidates` (event schema still sourced from `submitTurnEventsTool.argsSchema`). No memory candidate tool is registered for this path.
+- Chat-turn memory write is now a durable pipeline: candidates are parsed from structured output and, after the assistant turn is persisted, handed to `MemoryPipelineService`. Server runtime config exposes `memory.enabled`, `memory.candidateProcessingMode`, `memory.staging`, and `memory.retained` settings.
+- The memory pipeline includes candidate recording, candidate -> memory staging processing, text normalization, embedding, normalized duplicate aggregation, similarity ranking, LLM consolidation judge, SQLite-backed `memory_candidates` / `memory_staging` / `memory_staging_sources` / `memory_retained` / `memory_consolidation_decisions` stores, and chat-turn integration.
+- Next memory work: build a frontend Memory Lab / tuning tool with trace views, manual candidate intake, processor controls, and judge preview; then read important retained memories back into prompts and expose query tools for an agent loop.
+- TODO before relying on similarity thresholds: collect more real `mistral-embed` samples. The current probe returned 1024-dimensional vectors and showed that short Chinese user facts can have high baseline cosine similarity.
 - Chat-turn/model-call layering is intentionally split: chat services consume model-call `parsedOutput`, while each model call owns provider response parsing (structured output or tool arguments) for its purpose. This keeps future interaction modes free to use different output formats without changing chat-turn persistence code.
 - `messages` is now a timeline/display table with `kind` and `display_text`; structured assistant facts are stored in `turn_events`.
 - Prompt history currently reuses only `replyText` events from assistant turns. TODO: include selected latest non-text state, such as expression or scene atmosphere, once prompt format and UI needs are settled.

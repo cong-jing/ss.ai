@@ -1,4 +1,6 @@
 import type {
+    ModelEmbedInput,
+    ModelEmbedResult,
     ModelGenerationResult,
     ModelGenerationInput,
     ModelStreamCallbacks,
@@ -18,11 +20,13 @@ import {
     extractUsage,
     isMistralMessageContentEmpty,
     normalizeStreamToolCallDeltas,
+    normalizeToolCallArguments,
     toSdkMessages,
     type ToolCallAccumulator,
 } from "./messageTransforms.js";
 import { generateFakeSubmitTurnEventsStream } from "./fakeStream.js";
 import { toMistralToolRequest } from "./mistralToolAdapter.js";
+import { runMistralEmbed, type MistralEmbeddingsSdkLike } from "./mistralEmbed.js";
 import { withTimeout } from "./timeout.js";
 import { ModelAdapter } from "../modelAdapter.js";
 
@@ -300,16 +304,42 @@ export class MistralModelClient implements ModelAdapter {
 
         return names;
     }
+
+    async embed(input: ModelEmbedInput): Promise<ModelEmbedResult> {
+        const sdkClient = await this.getClient();
+        // The Mistral SDK exposes `embeddings.create` matching our
+        // `MistralEmbeddingsSdkLike` shape; the runtime check is unnecessary
+        // but the typed view keeps the wrapper test-friendly.
+        const wrapped: MistralEmbeddingsSdkLike = sdkClient as unknown as MistralEmbeddingsSdkLike;
+        const result = await withTimeout(
+            runMistralEmbed(wrapped, input.model, input.inputs),
+            this.options.timeoutMs,
+            "Mistral embeddings request",
+        );
+        this.options.logger?.debug("Mistral embed succeeded", {
+            model: input.model,
+            inputCount: input.inputs.length,
+            dim: result.vectors[0]?.length ?? 0,
+        });
+        return result;
+    }
 }
 
 function toModelToolCall(accumulator: ToolCallAccumulator): ModelToolCall {
+    // Mistral / OpenAI tool-call arguments are JSON text emitted as multiple
+    // fragments. Normalize the merged buffer to a parsed value here so the
+    // ModelToolCall contract delivers a structured `arguments` to downstream
+    // consumers, while still preserving the raw text under `argumentsRaw` for
+    // prompt logs / debugging when parsing fails.
+    const { parsed, raw } = normalizeToolCallArguments(
+        accumulator.argumentsBuffer ? accumulator.argumentsBuffer : undefined,
+    );
     return {
         ...(accumulator.id ? { id: accumulator.id } : {}),
         ...(accumulator.type ? { type: accumulator.type } : {}),
         ...(accumulator.index !== undefined ? { index: accumulator.index } : {}),
         ...(accumulator.functionName ? { functionName: accumulator.functionName } : {}),
-        // Mistral / OpenAI tool-call arguments are JSON text emitted as multiple
-        // fragments. Preserve the merged string so downstream callers can JSON.parse it.
-        ...(accumulator.argumentsBuffer ? { arguments: accumulator.argumentsBuffer } : {}),
+        ...(parsed !== undefined ? { arguments: parsed } : {}),
+        ...(raw !== undefined ? { argumentsRaw: raw } : {}),
     };
 }

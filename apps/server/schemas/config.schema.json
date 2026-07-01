@@ -45,6 +45,9 @@
                 },
                 "includeStackTrace": {
                     "type": "boolean"
+                },
+                "logDatabaseSql": {
+                    "type": "boolean"
                 }
             }
         },
@@ -81,6 +84,126 @@
                 },
                 "filePath": {
                     "type": "string"
+                }
+            }
+        },
+        "memory": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "candidateProcessingMode": {
+                    "type": "string",
+                    "enum": [
+                        "inline",
+                        "record_only"
+                    ]
+                },
+                "staging": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "candidateBatchLimit": {
+                            "type": "number"
+                        },
+                        "duplicate": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "normalizedText": {
+                                    "type": "boolean"
+                                }
+                            }
+                        },
+                        "similaritySampling": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "enabled": {
+                                    "type": "boolean"
+                                },
+                                "listLimit": {
+                                    "type": "number"
+                                },
+                                "topK": {
+                                    "type": "number"
+                                }
+                            }
+                        }
+                    }
+                },
+                "retained": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "processingMode": {
+                            "type": "string",
+                            "enum": [
+                                "manual",
+                                "inline",
+                                "worker"
+                            ]
+                        },
+                        "batchLimit": {
+                            "type": "number"
+                        },
+                        "retrieval": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "topK": {
+                                    "type": "number"
+                                },
+                                "listLimit": {
+                                    "type": "number"
+                                },
+                                "minSimilarityForJudgeContext": {
+                                    "type": "number"
+                                }
+                            }
+                        },
+                        "judge": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "enabled": {
+                                    "type": "boolean"
+                                },
+                                "maxSourceCandidates": {
+                                    "type": "number"
+                                },
+                                "maxRetainedForPrompt": {
+                                    "type": "number"
+                                },
+                                "maxTextChars": {
+                                    "type": "number"
+                                }
+                            }
+                        },
+                        "importance": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "min": {
+                                    "type": "number"
+                                },
+                                "max": {
+                                    "type": "number"
+                                },
+                                "default": {
+                                    "type": "number"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -134,9 +257,25 @@
                         "type": "string"
                     },
                     "availableModels": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "chat",
+                            "embed"
+                        ],
+                        "properties": {
+                            "chat": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "embed": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     }
                 }
@@ -163,6 +302,22 @@
                     }
                 },
                 "memory.summarize": {
+                    "type": "object",
+                    "required": [
+                        "provider",
+                        "model"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                        "provider": {
+                            "type": "string"
+                        },
+                        "model": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "memory.embed": {
                     "type": "object",
                     "required": [
                         "provider",

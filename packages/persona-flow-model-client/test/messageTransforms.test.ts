@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
     accumulateToolCallDelta,
+    extractStructuredOutput,
     extractText,
     isMistralMessageContentEmpty,
     normalizeStreamToolCallDeltas,
+    normalizeToolCall,
+    normalizeToolCallArguments,
     type ToolCallAccumulator,
 } from "../src/mistral/messageTransforms.js";
 
@@ -144,5 +147,108 @@ describe("mistral message transforms", () => {
             functionName: "other_tool",
             argumentsBuffer: "{\"value\":\"ok\"}",
         });
+    });
+
+    it("normalizeToolCallArguments parses JSON string arguments into objects", () => {
+        const result = normalizeToolCallArguments("{\"candidates\":[]}");
+        assert.deepEqual(result.parsed, { candidates: [] });
+        assert.equal(result.raw, "{\"candidates\":[]}");
+    });
+
+    it("normalizeToolCallArguments passes through already-structured arguments", () => {
+        const result = normalizeToolCallArguments({ candidates: [{ text: "x" }] });
+        assert.deepEqual(result.parsed, { candidates: [{ text: "x" }] });
+        assert.equal(result.raw, undefined);
+    });
+
+    it("normalizeToolCallArguments returns empty when arguments are missing", () => {
+        assert.deepEqual(normalizeToolCallArguments(undefined), {});
+        assert.deepEqual(normalizeToolCallArguments(null), {});
+    });
+
+    it("normalizeToolCallArguments keeps raw text when JSON parsing fails", () => {
+        const result = normalizeToolCallArguments("{not json");
+        assert.equal(result.parsed, undefined);
+        assert.equal(result.raw, "{not json");
+    });
+
+    it("normalizeToolCall parses non-stream tool-call arguments from a JSON string", () => {
+        const toolCall = normalizeToolCall({
+            id: "call-7",
+            type: "function",
+            index: 0,
+            function: {
+                name: "submit_memory_candidates",
+                arguments: "{\"candidates\":[{\"text\":\"User likes tea.\",\"scope\":\"user\",\"type\":\"preference\"}]}",
+            },
+        });
+
+        assert.equal(toolCall.functionName, "submit_memory_candidates");
+        assert.deepEqual(toolCall.arguments, {
+            candidates: [
+                { text: "User likes tea.", scope: "user", type: "preference" },
+            ],
+        });
+        assert.equal(
+            toolCall.argumentsRaw,
+            "{\"candidates\":[{\"text\":\"User likes tea.\",\"scope\":\"user\",\"type\":\"preference\"}]}",
+        );
+    });
+
+    it("normalizeToolCall passes through structured arguments without setting argumentsRaw", () => {
+        const toolCall = normalizeToolCall({
+            id: "call-8",
+            type: "function",
+            function: {
+                name: "submit_memory_candidates",
+                arguments: { candidates: [] },
+            },
+        });
+
+        assert.deepEqual(toolCall.arguments, { candidates: [] });
+        assert.equal(toolCall.argumentsRaw, undefined);
+    });
+
+    it("extractStructuredOutput returns parsed when message.parsed is present", () => {
+        const response = {
+            choices: [{ message: { parsed: { events: [] }, content: "" } }],
+        };
+        assert.deepEqual(extractStructuredOutput(response), { events: [] });
+    });
+
+    it("extractStructuredOutput parses JSON string content when parsed is absent", () => {
+        const response = {
+            choices: [{ message: { content: '{"events":[{"kind":"replyText"}]}' } }],
+        };
+        assert.deepEqual(extractStructuredOutput(response), {
+            events: [{ kind: "replyText" }],
+        });
+    });
+
+    it("extractStructuredOutput returns undefined when message has only tool calls (no content)", () => {
+        // Common shape: provider chose to call a tool instead of producing
+        // content, so `content` is empty/missing and `parsed` is absent.
+        const response = {
+            choices: [
+                {
+                    message: {
+                        content: "",
+                        tool_calls: [
+                            {
+                                id: "call-1",
+                                type: "function",
+                                function: { name: "submit_memory_candidates", arguments: "{}" },
+                            },
+                        ],
+                    },
+                },
+            ],
+        };
+        assert.equal(extractStructuredOutput(response), undefined);
+    });
+
+    it("extractStructuredOutput returns undefined when message is completely empty", () => {
+        const response = { choices: [{ message: {} }] };
+        assert.equal(extractStructuredOutput(response), undefined);
     });
 });

@@ -5,16 +5,30 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import type { LogLevel } from "@ss-ai/persona-flow-logger";
 import type { ModelAssignmentMap } from "@ss-ai/contracts";
+import { MODEL_CALL_PURPOSE_CATEGORIES, type ModelCallPurpose } from "@ss-ai/contracts";
+import { DEFAULT_MEMORY_SETTINGS, type MemorySettings } from "@ss-ai/persona-flow";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(moduleDir, "..", "..");
+
+/**
+ * Models a provider can serve, split by capability category. Chat-completion
+ * and embedding models are distinct families on every provider; sharing a
+ * single dropdown forces the user to pick valid combinations through trial
+ * and error. Keeping them separate at the config layer also lets the
+ * cross-validator catch "chat model assigned to memory.embed" at startup.
+ */
+export interface RuntimeAvailableModels {
+    chat: string[];
+    embed: string[];
+}
 
 export interface RuntimeModelEntry {
     provider: string;
     apiUrl: string;
     apiKey: string;
     defaultModel: string;
-    availableModels: string[];
+    availableModels: RuntimeAvailableModels;
 }
 
 export interface RuntimeConfig {
@@ -29,6 +43,7 @@ export interface RuntimeConfig {
         clearLogFileOnStart: boolean;
         includeSourceLocation: boolean;
         includeStackTrace: boolean;
+        logDatabaseSql: boolean;
     };
     runtimeFiles: {
         tempDir: string;
@@ -44,6 +59,7 @@ export interface RuntimeConfig {
         enabled: boolean;
         filePath: string;
     };
+    memory: MemorySettings;
     auth: {
         mode: "default-user" | "local-password";
         defaultUserId: string;
@@ -73,7 +89,10 @@ interface RawModelConfig {
     apiUrl: string;
     apiKey?: string;
     model?: string;
-    availableModels?: string[];
+    availableModels?: {
+        chat?: string[];
+        embed?: string[];
+    };
 }
 
 interface RawConfig {
@@ -88,6 +107,7 @@ interface RawConfig {
         clearLogFileOnStart?: boolean;
         includeSourceLocation?: boolean;
         includeStackTrace?: boolean;
+        logDatabaseSql?: boolean;
     };
     models?: Record<string, RawModelConfig>;
     defaultModelAssignments?: ModelAssignmentMap;
@@ -102,6 +122,43 @@ interface RawConfig {
     promptLog?: {
         enabled?: boolean;
         filePath?: string;
+    };
+    memory?: {
+        enabled?: boolean;
+        candidateProcessingMode?: "inline" | "record_only";
+        staging?: {
+            enabled?: boolean;
+            candidateBatchLimit?: number;
+            duplicate?: {
+                normalizedText?: boolean;
+            };
+            similaritySampling?: {
+                enabled?: boolean;
+                listLimit?: number;
+                topK?: number;
+            };
+        };
+        retained?: {
+            enabled?: boolean;
+            processingMode?: "manual" | "inline" | "worker";
+            batchLimit?: number;
+            retrieval?: {
+                topK?: number;
+                listLimit?: number;
+                minSimilarityForJudgeContext?: number;
+            };
+            judge?: {
+                enabled?: boolean;
+                maxSourceCandidates?: number;
+                maxRetainedForPrompt?: number;
+                maxTextChars?: number;
+            };
+            importance?: {
+                min?: number;
+                max?: number;
+                default?: number;
+            };
+        };
     };
     auth?: {
         mode?: "default-user" | "local-password";
@@ -134,8 +191,11 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
     return normalized.length > 0 ? normalized : undefined;
 }
 
-function resolveAvailableModels(model: RawModelConfig): string[] {
-    return parseOptionalModelList(model.availableModels);
+function resolveAvailableModels(model: RawModelConfig): RuntimeAvailableModels {
+    return {
+        chat: parseOptionalModelList(model.availableModels?.chat),
+        embed: parseOptionalModelList(model.availableModels?.embed),
+    };
 }
 
 function buildRuntimeModels(modelsRaw: RawConfig["models"]): Record<string, RuntimeModelEntry> {
@@ -166,6 +226,43 @@ function buildRuntimeModels(modelsRaw: RawConfig["models"]): Record<string, Runt
     }
 
     return runtimeModels;
+}
+
+// Cross-field validation that the JSON schema can't express:
+//   1. `defaultModelAssignments.<purpose>.provider` must refer to a key
+//      inside `models`.
+//   2. The assigned `model` must appear in the provider's `availableModels`
+//      list for the *capability category* matching `<purpose>` (e.g. a
+//      `memory.embed` assignment must point at a model under
+//      `availableModels.embed`). The check is skipped when the relevant
+//      category list is empty, because callers may intentionally leave it
+//      empty to fall back to live `client.listModels()` enumeration.
+// Catching these at load time turns confusing runtime "model assignment
+// not found" into a clear startup-time error pointing at the exact bad path.
+function validateDefaultModelAssignments(
+    assignments: ModelAssignmentMap,
+    models: Record<string, RuntimeModelEntry>,
+): void {
+    for (const [purpose, assignment] of Object.entries(assignments)) {
+        if (!assignment) continue;
+        const provider = assignment.provider;
+        const entry = provider ? models[provider] : undefined;
+        if (!provider || !entry) {
+            throw new Error(
+                `Config error: defaultModelAssignments.${purpose}.provider "${provider}" is not defined in models.`,
+            );
+        }
+
+        const category = MODEL_CALL_PURPOSE_CATEGORIES[purpose as ModelCallPurpose];
+        if (!category) continue;
+        const categoryList = entry.availableModels[category];
+        if (categoryList.length === 0) continue;
+        if (!categoryList.includes(assignment.model)) {
+            throw new Error(
+                `Config error: defaultModelAssignments.${purpose}.model "${assignment.model}" is not in models.${provider}.availableModels.${category}.`,
+            );
+        }
+    }
 }
 
 // Runtime files and sqlite data follow the runtime home. In normal development
@@ -344,6 +441,8 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
 
     const fileConfig = validateRawConfig(mergedConfig, configSources.join(" + "), validateConfigWithSchema);
     const models = buildRuntimeModels(fileConfig.models);
+    const defaultModelAssignments = fileConfig.defaultModelAssignments ?? {};
+    validateDefaultModelAssignments(defaultModelAssignments, models);
 
     const loggerFilePath = toAbsolutePath(runtimeHome, fileConfig.logger?.logFilePath, "app.log");
     const tempDir = toAbsolutePath(runtimeHome, fileConfig.runtimeFiles?.tempDir, ".runtime/temp");
@@ -369,14 +468,15 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
             logFilePath: loggerFilePath,
             clearLogFileOnStart: fileConfig.logger?.clearLogFileOnStart ?? false,
             includeSourceLocation: fileConfig.logger?.includeSourceLocation ?? false,
-            includeStackTrace: fileConfig.logger?.includeStackTrace ?? false
+            includeStackTrace: fileConfig.logger?.includeStackTrace ?? false,
+            logDatabaseSql: fileConfig.logger?.logDatabaseSql ?? false,
         },
         runtimeFiles: {
             tempDir,
             userDataDir
         },
         models,
-        defaultModelAssignments: fileConfig.defaultModelAssignments ?? {},
+        defaultModelAssignments: defaultModelAssignments,
         agent: {
             timeoutMs: fileConfig.agent?.timeoutMs ?? 30000,
             maxRetries: fileConfig.agent?.maxRetries ?? 2
@@ -384,6 +484,72 @@ export function loadRuntimeConfig(context: RuntimeConfigContext = {}): RuntimeCo
         promptLog: {
             enabled: fileConfig.promptLog?.enabled ?? false,
             filePath: promptLogFilePath,
+        },
+        memory: {
+            ...DEFAULT_MEMORY_SETTINGS,
+            enabled: fileConfig.memory?.enabled
+                ?? DEFAULT_MEMORY_SETTINGS.enabled,
+            candidateProcessingMode: fileConfig.memory?.candidateProcessingMode
+                ?? DEFAULT_MEMORY_SETTINGS.candidateProcessingMode,
+            staging: {
+                ...DEFAULT_MEMORY_SETTINGS.staging,
+                enabled: fileConfig.memory?.staging?.enabled
+                    ?? DEFAULT_MEMORY_SETTINGS.staging.enabled,
+                candidateBatchLimit: fileConfig.memory?.staging?.candidateBatchLimit
+                    ?? DEFAULT_MEMORY_SETTINGS.staging.candidateBatchLimit,
+                duplicate: {
+                    ...DEFAULT_MEMORY_SETTINGS.staging.duplicate,
+                    normalizedText: fileConfig.memory?.staging?.duplicate?.normalizedText
+                        ?? DEFAULT_MEMORY_SETTINGS.staging.duplicate.normalizedText,
+                },
+                similaritySampling: {
+                    ...DEFAULT_MEMORY_SETTINGS.staging.similaritySampling,
+                    enabled: fileConfig.memory?.staging?.similaritySampling?.enabled
+                        ?? DEFAULT_MEMORY_SETTINGS.staging.similaritySampling.enabled,
+                    listLimit: fileConfig.memory?.staging?.similaritySampling?.listLimit
+                        ?? DEFAULT_MEMORY_SETTINGS.staging.similaritySampling.listLimit,
+                    topK: fileConfig.memory?.staging?.similaritySampling?.topK
+                        ?? DEFAULT_MEMORY_SETTINGS.staging.similaritySampling.topK,
+                },
+            },
+            retained: {
+                ...DEFAULT_MEMORY_SETTINGS.retained,
+                enabled: fileConfig.memory?.retained?.enabled
+                    ?? DEFAULT_MEMORY_SETTINGS.retained.enabled,
+                processingMode: fileConfig.memory?.retained?.processingMode
+                    ?? DEFAULT_MEMORY_SETTINGS.retained.processingMode,
+                batchLimit: fileConfig.memory?.retained?.batchLimit
+                    ?? DEFAULT_MEMORY_SETTINGS.retained.batchLimit,
+                retrieval: {
+                    ...DEFAULT_MEMORY_SETTINGS.retained.retrieval,
+                    topK: fileConfig.memory?.retained?.retrieval?.topK
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.retrieval.topK,
+                    listLimit: fileConfig.memory?.retained?.retrieval?.listLimit
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.retrieval.listLimit,
+                    minSimilarityForJudgeContext: fileConfig.memory?.retained?.retrieval?.minSimilarityForJudgeContext
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.retrieval.minSimilarityForJudgeContext,
+                },
+                judge: {
+                    ...DEFAULT_MEMORY_SETTINGS.retained.judge,
+                    enabled: fileConfig.memory?.retained?.judge?.enabled
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.judge.enabled,
+                    maxSourceCandidates: fileConfig.memory?.retained?.judge?.maxSourceCandidates
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.judge.maxSourceCandidates,
+                    maxRetainedForPrompt: fileConfig.memory?.retained?.judge?.maxRetainedForPrompt
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.judge.maxRetainedForPrompt,
+                    maxTextChars: fileConfig.memory?.retained?.judge?.maxTextChars
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.judge.maxTextChars,
+                },
+                importance: {
+                    ...DEFAULT_MEMORY_SETTINGS.retained.importance,
+                    min: fileConfig.memory?.retained?.importance?.min
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.importance.min,
+                    max: fileConfig.memory?.retained?.importance?.max
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.importance.max,
+                    default: fileConfig.memory?.retained?.importance?.default
+                        ?? DEFAULT_MEMORY_SETTINGS.retained.importance.default,
+                },
+            },
         },
         auth: {
             mode: authMode,

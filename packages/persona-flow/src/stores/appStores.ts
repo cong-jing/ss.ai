@@ -5,6 +5,12 @@ import type { UserProviderCredentialStore } from "./user/userProviderCredentialS
 import type { ChatStore } from "./chat/chatStore.js";
 import type { ConversationStore } from "./character/conversationStore.js";
 import type { ConversationActorStore } from "./character/conversationActorStore.js";
+import type {
+    MemoryCandidateStore,
+    MemoryConsolidationDecisionStore,
+    MemoryRetainedStore,
+    MemoryStagingStore,
+} from "../memory/index.js";
 
 /**
  * Grouped collection of all application stores.
@@ -22,4 +28,9 @@ export interface AppStores {
     conversationActor: ConversationActorStore;
     chat: ChatStore;
     providerCredential: UserProviderCredentialStore;
+    memoryCandidate: MemoryCandidateStore;
+    memoryStaging: MemoryStagingStore;
+    memoryRetained: MemoryRetainedStore;
+    memoryConsolidationDecision: MemoryConsolidationDecisionStore;
 }
+

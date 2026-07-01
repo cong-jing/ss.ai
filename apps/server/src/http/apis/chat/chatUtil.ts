@@ -1,6 +1,6 @@
 import { DEFAULT_INTERACTION_MODE, INTERACTION_MODES, type InteractionMode } from "@ss-ai/contracts";
 import {
-    PersonaFlowChatTurnService
+    PersonaFlowChatTurnService,
 } from "@ss-ai/persona-flow";
 import { DefaultModelClient } from "@ss-ai/persona-flow-model-client";
 import { PromptLogger } from "../../../util/promptLog.js";
@@ -59,19 +59,28 @@ export function resolveInteractionMode(value: unknown, endpoint: string): Intera
 export async function createChatTurnService(context: HttpApiContext): Promise<PersonaFlowChatTurnService> {
 
     const promptLogger = new PromptLogger(context.config.promptLog);
+    const defaultProviderApiKeys = Object.fromEntries(
+        Object.entries(context.config.models).map(([provider, entry]) => [provider.toLowerCase(), entry.apiKey])
+    );
+    const modelClient = new DefaultModelClient({
+        providerConfigs: context.config.models,
+        timeoutMs: context.config.agent.timeoutMs,
+        maxRetries: context.config.agent.maxRetries,
+        logger: context.logger,
+    });
+
+    // The memory pipeline (recorder + embedding provider + processor +
+    // logging) is fully encapsulated by the chat turn service; we only
+    // need to forward the settings derived from the runtime config.
+    // Construction details live in `createMemoryPipelineService`
+    // inside `@ss-ai/persona-flow`.
     return new PersonaFlowChatTurnService({
         stores: context.stores,
         logger: context.logger,
         promptLogger: promptLogger,
         defaultModelAssignments: context.config.defaultModelAssignments,
-        defaultProviderApiKeys: Object.fromEntries(
-            Object.entries(context.config.models).map(([provider, entry]) => [provider.toLowerCase(), entry.apiKey])
-        ),
-        modelClient: new DefaultModelClient({
-            providerConfigs: context.config.models,
-            timeoutMs: context.config.agent.timeoutMs,
-            maxRetries: context.config.agent.maxRetries,
-            logger: context.logger,
-        }),
+        defaultProviderApiKeys,
+        modelClient,
+        memorySettings: context.config.memory,
     });
 }

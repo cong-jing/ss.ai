@@ -1,19 +1,24 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import TextInput from './TextInput.vue'
+import type { ModelCapabilityCategory, ProviderAvailableModels } from '@ss-ai/contracts'
 
 interface ProviderOption {
     provider: string
-    availableModels: string[]
+    availableModels: ProviderAvailableModels
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     provider: string
     model: string
     providers: ProviderOption[]
+    /** Which model-capability slice to expose. Defaults to chat. */
+    category?: ModelCapabilityCategory
     disabled?: boolean
     providerPlaceholder?: string
-}>()
+}>(), {
+    category: 'chat',
+})
 
 const emit = defineEmits<{
     'update:provider': [string]
@@ -21,7 +26,7 @@ const emit = defineEmits<{
 }>()
 
 const availableModels = computed(
-    () => props.providers.find(p => p.provider === props.provider)?.availableModels ?? []
+    () => props.providers.find(p => p.provider === props.provider)?.availableModels[props.category] ?? []
 )
 
 function onProviderChange(val: string) {
