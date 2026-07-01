@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, primaryKey } from "drizzle-orm/sqlite-core";
+import { integer, real, sqliteTable, text, primaryKey } from "drizzle-orm/sqlite-core";
 import { DEFAULT_INTERACTION_MODE } from "@ss-ai/contracts";
 
 // ── conversation_actors ───────────────────────────────────────────────────────
@@ -160,3 +160,145 @@ export const appSessions = sqliteTable("app_sessions", {
 
 export type AppSessionRow = typeof appSessions.$inferSelect;
 export type NewAppSessionRow = typeof appSessions.$inferInsert;
+
+// ── memory_candidates ─────────────────────────────────────────────────────────
+// Per-turn candidates that the model proposed during a chat turn.
+// Lifecycle (Batch 3.5): pending -> processed | rejected_by_rule |
+// failed. (`processing` is reserved for the Batch 4 async worker
+// and is not currently written by inline processing.)
+// Downstream evidence — normalized text, embedding, occurrence
+// aggregation — now lives on `memory_staging` and is no longer
+// folded back onto the candidate row.
+export const memoryCandidates = sqliteTable("memory_candidates", {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    characterId: text("character_id").notNull(),
+    conversationId: text("conversation_id").notNull(),
+    userMessageId: text("user_message_id").notNull(),
+    assistantMessageId: text("assistant_message_id").notNull(),
+    requestId: text("request_id").notNull(),
+    modelCallPurpose: text("model_call_purpose").notNull(),
+    seq: integer("seq").notNull(),
+    scope: text("scope").notNull(),
+    type: text("type").notNull(),
+    text: text("text").notNull(),
+    relatedEntitiesJson: text("related_entities_json").notNull().default("[]"),
+    tagsJson: text("tags_json").notNull().default("[]"),
+    candidateReason: text("candidate_reason"),
+    status: text("status").notNull(),
+    statusReason: text("status_reason"),
+    schemaVersion: integer("schema_version").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+});
+
+export type MemoryCandidateRow = typeof memoryCandidates.$inferSelect;
+export type NewMemoryCandidateRow = typeof memoryCandidates.$inferInsert;
+
+// ── memory_staging ────────────────────────────────────────────────────────────
+// Staging rows aggregate one or more candidates that say the same
+// thing. Created/updated by the Batch 3.5 staging processor.
+// `embedding_json` stores the full MemoryEmbedding shape (vector +
+// signature + createdAt) as JSON, mirroring how candidates used to
+// carry embeddings. The consolidation pass into `memory_retained`
+// ships in Batch 4.
+export const memoryStaging = sqliteTable("memory_staging", {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    characterId: text("character_id").notNull(),
+    scope: text("scope").notNull(),
+    type: text("type").notNull(),
+    text: text("text").notNull(),
+    normalizedText: text("normalized_text").notNull(),
+    relatedEntitiesJson: text("related_entities_json").notNull().default("[]"),
+    tagsJson: text("tags_json").notNull().default("[]"),
+    status: text("status").notNull(),
+    statusReason: text("status_reason"),
+    occurrenceCount: integer("occurrence_count").notNull().default(1),
+    firstSeenAt: text("first_seen_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+    embeddingJson: text("embedding_json"),
+    schemaVersion: integer("schema_version").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+});
+
+export type MemoryStagingRow = typeof memoryStaging.$inferSelect;
+export type NewMemoryStagingRow = typeof memoryStaging.$inferInsert;
+
+// ── memory_staging_sources ────────────────────────────────────────────────────
+// Link rows: which candidates contributed evidence to which staging
+// row. Composite primary key on (memory_staging_id, candidate_id).
+// `candidate_id` is UNIQUE so a single candidate can only ever
+// contribute to one staging row — retries detect the existing link
+// and short-circuit instead of double-counting `occurrence_count`.
+export const memoryStagingSources = sqliteTable("memory_staging_sources", {
+    memoryStagingId: text("memory_staging_id").notNull(),
+    candidateId: text("candidate_id").notNull().unique(),
+    candidateSeq: integer("candidate_seq").notNull(),
+    createdAt: text("created_at").notNull(),
+}, (t) => ({
+    pk: primaryKey({ columns: [t.memoryStagingId, t.candidateId] }),
+}));
+
+export type MemoryStagingSourceRow = typeof memoryStagingSources.$inferSelect;
+export type NewMemoryStagingSourceRow = typeof memoryStagingSources.$inferInsert;
+
+// ── memory_retained ───────────────────────────────────────────────────────────
+// Consolidated long-term memory. Batch 3.5 ships the empty table
+// + read-only port so the debug surface and storage adapter can be
+// wired now; the consolidation pass that writes into this table
+// lives in Batch 4. `source_staging_id` is the staging row this
+// memory was promoted from (null for manual / judge-driven insertions).
+export const memoryRetained = sqliteTable("memory_retained", {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    characterId: text("character_id").notNull(),
+    scope: text("scope").notNull(),
+    type: text("type").notNull(),
+    text: text("text").notNull(),
+    normalizedText: text("normalized_text").notNull(),
+    relatedEntitiesJson: text("related_entities_json").notNull().default("[]"),
+    tagsJson: text("tags_json").notNull().default("[]"),
+    sourceStagingId: text("source_staging_id"),
+    status: text("status").notNull(),
+    importance: real("importance").notNull(),
+    occurrenceCount: integer("occurrence_count").notNull().default(1),
+    firstSeenAt: text("first_seen_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+    embeddingJson: text("embedding_json"),
+    schemaVersion: integer("schema_version").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+});
+
+export type MemoryRetainedRow = typeof memoryRetained.$inferSelect;
+export type NewMemoryRetainedRow = typeof memoryRetained.$inferInsert;
+
+// ── memory_consolidation_decisions ─────────────────────────────────────────────
+// Audit log for the Batch 4 consolidation judge. One row per staging
+// row processed, capturing the judge request/response, the validated
+// action, and the applied outcome. `find applied` enforces at most
+// one `applied` decision per staging row (idempotency).
+export const memoryConsolidationDecisions = sqliteTable("memory_consolidation_decisions", {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    characterId: text("character_id").notNull(),
+    memoryStagingId: text("memory_staging_id").notNull(),
+    action: text("action").notNull(),
+    targetRetainedMemoryId: text("target_retained_memory_id"),
+    createdRetainedMemoryId: text("created_retained_memory_id"),
+    archivedRetainedMemoryIdsJson: text("archived_retained_memory_ids_json").notNull().default("[]"),
+    judgeRequestJson: text("judge_request_json"),
+    judgeResponseJson: text("judge_response_json"),
+    validatedActionJson: text("validated_action_json"),
+    status: text("status").notNull(),
+    statusReason: text("status_reason"),
+    modelCallPurpose: text("model_call_purpose").notNull(),
+    model: text("model"),
+    requestId: text("request_id"),
+    createdAt: text("created_at").notNull(),
+});
+
+export type MemoryConsolidationDecisionRow = typeof memoryConsolidationDecisions.$inferSelect;
+export type NewMemoryConsolidationDecisionRow = typeof memoryConsolidationDecisions.$inferInsert;

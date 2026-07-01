@@ -42,15 +42,24 @@ export const USER_PREFERENCE_ERROR_CODES = [
     "user_preference.api_key_required",
     "user_preference.model_call_purpose_invalid",
     "user_preference.model_required",
+    "user_preference.model_not_in_capability_list",
 ] as const;
 
 export type UserPreferenceErrorCode = (typeof USER_PREFERENCE_ERROR_CODES)[number];
+
+export const MEMORY_DEBUG_ERROR_CODES = [
+    "memory.debug.characterId_required",
+    "memory.debug.invalid_enum_value",
+] as const;
+
+export type MemoryDebugErrorCode = (typeof MEMORY_DEBUG_ERROR_CODES)[number];
 
 export type AppErrorCode =
     | AuthErrorCode
     | CharacterErrorCode
     | ConversationErrorCode
     | ConversationActorErrorCode
-    | UserPreferenceErrorCode;
+    | UserPreferenceErrorCode
+    | MemoryDebugErrorCode;
 
 export type ErrorParams = Record<string, string | number>;

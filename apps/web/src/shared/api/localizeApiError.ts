@@ -27,6 +27,9 @@ const ERROR_MESSAGE_KEYS: Record<AppErrorCode, MessageKey> = {
     "user_preference.api_key_required": "serverError.userPreference.apiKeyRequired",
     "user_preference.model_call_purpose_invalid": "serverError.userPreference.modelCallPurposeInvalid",
     "user_preference.model_required": "serverError.userPreference.modelRequired",
+    "user_preference.model_not_in_capability_list": "serverError.userPreference.modelNotInCapabilityList",
+    "memory.debug.characterId_required": "serverError.memoryDebug.characterIdRequired",
+    "memory.debug.invalid_enum_value": "serverError.memoryDebug.invalidEnumValue",
 };
 
 export function localizeApiError(error: unknown): string {

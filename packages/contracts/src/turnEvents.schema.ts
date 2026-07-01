@@ -5,6 +5,7 @@ import {
     STATE_UPDATE_TYPES,
     TURN_EVENT_TYPES,
 } from "./turnEvents.js";
+import { MemoryWriteCandidateSchema } from "./memoryCandidates.schema.js";
 export type {
     AtmosphereValue,
     ExpressionEvent,
@@ -91,4 +92,7 @@ export const TurnEventSchema = z.discriminatedUnion("type", [
 
 export const SubmitTurnEventsArgsSchema = z.object({
     events: z.array(TurnEventSchema).min(1),
+    // Optional long-term memory candidates. Capped at 5 to keep the model
+    // honest about "only emit when clearly worth saving".
+    memoryWriteCandidates: z.array(MemoryWriteCandidateSchema).max(5).optional(),
 }).strict();

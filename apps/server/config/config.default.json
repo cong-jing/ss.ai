@@ -9,7 +9,8 @@
         "logFilePath": ".runtime/logs/ss-ai.log",
         "clearLogFileOnStart": false,
         "includeSourceLocation": true,
-        "includeStackTrace": false
+        "includeStackTrace": false,
+        "logDatabaseSql": false
     },
     "runtimeFiles": {
         "tempDir": ".runtime/temp",
@@ -23,6 +24,10 @@
         "enabled": true,
         "filePath": ".runtime/logs/ss-ai.prompt.log"
     },
+    "memory": {
+        "enabled": true,
+        "candidateProcessingMode": "inline"
+    },
     "auth": {
         "mode": "default-user",
         "defaultUserId": "default",
@@ -35,16 +40,21 @@
         "mistral.ai": {
             "apiUrl": "https://api.mistral.ai",
             "apiKey": "",
-            "availableModels": [
-                "mistral-large-latest",
-                "mistral-medium-latest",
-                "mistral-small-latest",
-                "ministral-3b-latest",
-                "ministral-8b-latest",
-                "ministral-14b-latest",
-                "magistral-small-latest",
-                "open-mistral-nemo-2407"
-            ]
+            "availableModels": {
+                "chat": [
+                    "mistral-large-latest",
+                    "mistral-medium-latest",
+                    "mistral-small-latest",
+                    "ministral-3b-latest",
+                    "ministral-8b-latest",
+                    "ministral-14b-latest",
+                    "magistral-small-latest",
+                    "open-mistral-nemo-2407"
+                ],
+                "embed": [
+                    "mistral-embed-2312"
+                ]
+            }
         }
     },
     "defaultModelAssignments": {
@@ -55,6 +65,10 @@
         "memory.summarize": {
             "provider": "mistral.ai",
             "model": "mistral-small-latest"
+        },
+        "memory.embed": {
+            "provider": "mistral.ai",
+            "model": "mistral-embed-2312"
         }
     }
 }

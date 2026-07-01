@@ -2,38 +2,38 @@
 
 English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-`ss.ai` is a personal TypeScript/Node.js project for LLM-driven character chat and TRPG-style interaction. The focus is not just prompt experimentation, but building a maintainable full-stack application with clear module boundaries, persistent state, model abstraction, and deployable runtime paths.
+`ss.ai` is a TypeScript / Node.js full-stack application for exploring LLM-driven character chat, TRPG-style interaction, structured chat events, and a long-term memory system. The project is not only about sending messages to a model; it is about organizing prompt context, character state, structured model output, persistence, memory consolidation, streaming, and debugging into a maintainable application.
 
-It is best read as an application architecture and implementation exercise: Vue 3 on the frontend, an Express API on the backend, shared contracts across the workspace, and a domain package that owns prompt composition and chat-turn orchestration.
-
-The architecture is intended to grow toward multiple interaction modes, but at the moment only `single_character_chat` is fully implemented end to end. Other modes are planned in contracts and UI shape, but are not yet wired into runtime prompt/model-call execution.
+The most complete experience today is single-character chat. A user selects a character and conversation, sends a message, the server assembles prompt context, calls the configured model with structured output, then persists the visible reply, turn events, and optional memory candidates. Other interaction modes are represented in contracts and UI shape, but are not wired into runtime model-call dispatch yet.
 
 ## Live Demo
 
 - GitHub: <https://github.com/cong-jing/ss.ai>
 - Live Demo: <http://13.159.36.248:8080/>
 
-## Highlights
+## Core Features
 
-- TypeScript/Node.js monorepo organized with pnpm workspace packages and clear package boundaries
-- Vue 3 + Vite frontend separated from an Express-based API server
-- Structured-output turn-event chat flow with SSE streaming previews
-- SQLite-backed persistence for conversations, characters, user preferences, and provider credentials
-- LLM provider abstraction, per-purpose model assignment, and retained tool-call interfaces for future agent/query tools
-- Prompt composition and chat-turn orchestration centered in a reusable domain package
-- End-to-end project scope including logging, config management, tests, and deployment scripts
+- Character and conversation management.
+- End-to-end `single_character_chat` flow.
+- Structured turn events: model output is parsed as `TurnEvent[]`, and the UI renders text, expression markers, scene-atmosphere markers, and debug payloads from those events.
+- SSE streaming preview: `/v1/chat/stream` incrementally previews visible text and event markers from the structured-output JSON text channel, then reconciles against the final canonical `turnEvents`.
+- Per-purpose model assignment for `chat.main`, `memory.summarize`, `memory.consolidate`, and `memory.embed`.
+- Provider API-key configuration with user credentials and runtime defaults.
+- Long-term-memory persistence pipeline: the model can submit `memoryWriteCandidates`; the server records candidates, embeds them, aggregates staging evidence, and uses a `memory.consolidate` LLM judge to promote stable facts into retained memories.
+- Auditable memory decisions: the pipeline keeps candidate, staging, retained, and consolidation-decision layers so a fact can be traced from proposal to aggregation, judge recommendation, and final create/update/merge/ignore/archive outcome.
+- Debug APIs for memory candidates, staging evidence, and retained memories; consolidation decisions are stored as an audit layer, with trace / decision views planned for the Memory Lab.
+- Prompt dry-run endpoint for inspecting prompt assembly without calling a model or persisting a turn.
 
-## Architecture
+## Core Mechanisms
 
 ```mermaid
 flowchart LR
     UI[apps/web\nVue 3 + Vite]
     API[apps/server\nExpress API + SSE]
-    Contracts[packages/contracts\nShared API contracts]
-    Domain[packages/persona-flow\nPrompt composition\nChat turn orchestration]
-    Persistence[packages/persona-flow-sqlite\nSQLite + Drizzle stores]
-    ModelClient[packages/persona-flow-model-client\nProvider integration]
-    Logger[packages/persona-flow-logger\nRuntime logging]
+    Contracts[packages/contracts\nAPI and shared types]
+    Domain[packages/persona-flow\nPrompt and chat orchestration]
+    Persistence[packages/persona-flow-sqlite\nSQLite stores]
+    ModelClient[packages/persona-flow-model-client\nProvider adapters]
 
     UI <-- types --> Contracts
     UI --> API
@@ -41,37 +41,43 @@ flowchart LR
     API --> Domain
     API --> Persistence
     API --> ModelClient
-    API --> Logger
     Domain --> Contracts
-    Domain --> Persistence
-    Domain --> ModelClient
 ```
+
+- `packages/contracts` defines shared API contracts, interaction modes, model-call purposes, turn events, and memory candidate types.
+- `packages/persona-flow` owns prompt-context construction, model-call dispatch, chat-turn orchestration, and the memory core.
+- `packages/persona-flow-sqlite` implements `AppStores` on SQLite for characters, conversations, messages, turn events, user settings, credentials, and memory tables.
+- `packages/persona-flow-model-client` adapts the provider-neutral `ModelClient` interface to concrete providers, currently Mistral.
+- `apps/server` owns HTTP APIs, SSE, runtime configuration, auth modes, and dependency wiring.
+- `apps/web` provides the three-panel chat UI, settings panel, streaming render path, and debug surfaces.
+
+## Implemented And Pending
+
+Implemented:
+
+- Runtime support for `single_character_chat`.
+- Structured-output `TurnEvent[]` generation, persistence, and UI rendering.
+- SSE streaming previews with final event reconciliation.
+- SQLite persistence for characters, conversations, preferences, credentials, messages, and turn events.
+- Memory candidate recording, embedding, staging evidence aggregation, LLM consolidation judge, retained memory stores, decision audit, and debug APIs.
+- `default-user` and `local-password` auth modes.
+- Staging and production deploy packaging scripts.
+
+Pending or still prototype-level:
+
+- Interaction modes beyond `single_character_chat` are not wired into runtime model-call dispatch.
+- A frontend Memory Lab / tuning tool is still pending; the next step is to expose candidate intake, processor controls, trace views, and judge-preview workflows.
+- Retained memories are not read back into prompt context yet; the next step is to inject important long-term memories into chat and expose query tools that can support an agent loop.
+- Memory consolidation still needs tighter transaction boundaries and better operator-facing diagnostics around retained writes and decision audit.
+- Provider API-key encryption hooks exist, but at-rest encryption is still a placeholder.
 
 ## Tech Stack
 
 - Frontend: Vue 3, Vite, TypeScript
 - Backend: Node.js, Express, TypeScript
 - Storage: SQLite, Drizzle ORM, better-sqlite3
-- LLM integration: provider abstraction, model assignment, structured output, streaming path
-- Tooling and ops: pnpm workspace, tsx, workspace tests, deployment scripts
-
-## What Is Working Now
-
-- Character chat UI with conversation and context panels
-- Conversation, character, and user-preference persistence on SQLite
-- Provider credential input and per-purpose model assignment
-- Structured-output chat calls and SSE streaming previews
-- Turn-event rendering in the web chat UI, including inline expression / scene-atmosphere markers and final canonical reconciliation from `turnEvents`
-- End-to-end runtime support for `single_character_chat`; other interaction modes remain planned rather than implemented
-- Prompt dry-run path for debugging prompt assembly without sending a live model call
-- Deploy packaging for staging and production targets
-
-## Current Limitations
-
-- Only `single_character_chat` is wired into runtime model-call dispatch; other interaction modes remain placeholders
-- Several API and runtime assumptions are still effectively single-user oriented
-- Provider credential encryption hooks exist, but at-rest encryption is still a placeholder
-- This repository is a portfolio and implementation study, not a stabilized general-purpose OSS framework
+- LLM: provider abstraction, structured output, streaming, embeddings
+- Tooling: pnpm workspace, tsx, TypeScript project tests, deploy scripts
 
 ## Quick Start
 
@@ -89,6 +95,7 @@ The local server defaults to `http://127.0.0.1:8999`.
 ## Further Reading
 
 - [Project Map](docs/project-map.md)
+- [Memory Subsystem Notes](docs/project-map-memory.zh-CN.md)
 - [Project Map (简体中文)](docs/project-map.zh-CN.md)
 - [Project Map (日本語)](docs/project-map.ja.md)
 - [TODO / Roadmap Notes](docs/todo.md)

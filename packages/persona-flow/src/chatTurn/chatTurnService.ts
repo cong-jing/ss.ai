@@ -1,13 +1,19 @@
-import type { InteractionMode, ModelAssignmentMap, TurnEvent } from "@ss-ai/contracts";
+import type { InteractionMode, ModelAssignmentMap, ModelCallPurpose, TurnEvent } from "@ss-ai/contracts";
 import type { AppStores } from "../stores/appStores.js";
 import { prepareChatTurnContext } from "./chatTurnPreparation.js";
 import { createNoopPersonaFlowLogger, type PersonaFlowLogger, type PersonaFlowPromptLogger } from "./personaFlowLogger.js";
+import { logMemoryWriteCandidates } from "./memoryCandidateLogger.js";
 import type { ModelClient } from "../llm/modelClient.js";
 import type { SingleCharacterChatResult } from "../modelCall/chat.main/singleCharacterChat/singleCharacterChatCall.js";
 import type { ModelCallRunResult } from "../modelCall/modelCall.js";
 import { resolveModelCall } from "../modelCall/modelCallRegistry.js";
 import { ModelRuntime } from "../modelCall/modelRuntime.js";
 import type { SubmitTurnEventsTurnEventPreview } from "./events/submitTurnEventsStreamPreview.js";
+import { createMemoryPipelineService, DEFAULT_MEMORY_SETTINGS } from "../memory/index.js";
+import type {
+    MemoryPipelineService,
+    MemorySettings,
+} from "../memory/index.js";
 
 export interface PersonaFlowChatTurnServiceDependencies {
     stores: AppStores;
@@ -16,6 +22,20 @@ export interface PersonaFlowChatTurnServiceDependencies {
     modelClient: ModelClient;
     defaultModelAssignments?: ModelAssignmentMap;
     defaultProviderApiKeys?: Record<string, string>;
+    /**
+     * Optional override for the memory subsystem settings. Defaults
+     * to {@link DEFAULT_MEMORY_SETTINGS}; the server passes its
+     * runtime memory config here, and tests can supply a slimmed
+     * version for record-only / disabled scenarios.
+     */
+    memorySettings?: MemorySettings;
+    /**
+     * Pre-built memory pipeline. Tests that want to inject in-memory
+     * stores or fake processors supply one directly; production
+     * wiring may either reuse a shared instance or let this service
+     * build its own from `stores` + `modelClient` via the factory.
+     */
+    memoryPipelineService?: MemoryPipelineService;
 }
 
 export interface PersonaChatTurnRequest {
@@ -59,6 +79,7 @@ export interface PersonaStreamTurnRequest {
 export class PersonaFlowChatTurnService {
     private readonly logger: PersonaFlowLogger;
     private readonly modelRuntime: ModelRuntime;
+    private readonly memoryPipelineService: MemoryPipelineService;
 
     constructor(private readonly deps: PersonaFlowChatTurnServiceDependencies) {
         this.logger = deps.logger ?? createNoopPersonaFlowLogger();
@@ -69,6 +90,14 @@ export class PersonaFlowChatTurnService {
             promptLogger: deps.promptLogger,
             defaultModelAssignments: deps.defaultModelAssignments,
             defaultProviderApiKeys: deps.defaultProviderApiKeys,
+        });
+        this.memoryPipelineService = deps.memoryPipelineService ?? createMemoryPipelineService({
+            stores: deps.stores,
+            modelClient: deps.modelClient,
+            settings: deps.memorySettings ?? DEFAULT_MEMORY_SETTINGS,
+            ...(deps.defaultModelAssignments ? { defaultModelAssignments: deps.defaultModelAssignments } : {}),
+            ...(deps.defaultProviderApiKeys ? { defaultProviderApiKeys: deps.defaultProviderApiKeys } : {}),
+            logger: this.logger,
         });
     }
 
@@ -178,6 +207,17 @@ export class PersonaFlowChatTurnService {
             requestId: callResult.llmResponse.requestId,
             conversationId: input.conversationId,
             assistantMessageId,
+        });
+
+        await this.safeHandleMemoryWriteCandidates({
+            requestId: callResult.llmResponse.requestId,
+            userId: input.userId,
+            characterId: input.characterId,
+            conversationId: input.conversationId,
+            userMessageId: prepared.userMessage.id,
+            assistantMessageId,
+            modelCallPurpose: "chat.main",
+            candidates: chatResult.memoryWriteCandidates,
         });
 
         return {
@@ -312,6 +352,17 @@ export class PersonaFlowChatTurnService {
             assistantMessageId,
         });
 
+        await this.safeHandleMemoryWriteCandidates({
+            requestId: callResult.llmResponse.requestId,
+            userId: input.userId,
+            characterId: input.characterId,
+            conversationId: input.conversationId,
+            userMessageId: prepared.userMessage.id,
+            assistantMessageId,
+            modelCallPurpose: "chat.main",
+            candidates: chatResult.memoryWriteCandidates,
+        });
+
         return {
             requestId: callResult.llmResponse.requestId,
             model: callResult.llmResponse.model,
@@ -328,6 +379,58 @@ export class PersonaFlowChatTurnService {
         };
     }
 
+    private async safeHandleMemoryWriteCandidates(input: {
+        requestId: string;
+        userId: string;
+        characterId: string;
+        conversationId: string;
+        userMessageId: string;
+        assistantMessageId: string;
+        modelCallPurpose: ModelCallPurpose;
+        candidates: SingleCharacterChatResult["memoryWriteCandidates"];
+    }): Promise<void> {
+        // The whole memory pipeline is fail-soft by design: it must never
+        // roll back the persisted assistant turn or surface as a chat error.
+        // We keep the Batch 1 INFO summary line as the primary observability
+        // sink (so dashboards / log queries still see "candidates logged"
+        // even when storage is disabled or fails), then hand off to the
+        // pipeline service which owns the rest of the policy
+        // (enabled/disabled, record-only vs inline, recorder + processor).
+        try {
+            logMemoryWriteCandidates(this.logger, input);
+        } catch (err) {
+            this.logger.warn("persona-flow/memory: candidate logging failed", {
+                requestId: input.requestId,
+                conversationId: input.conversationId,
+                error: err instanceof Error ? err.message : String(err),
+            });
+        }
+
+        try {
+            await this.memoryPipelineService.handleChatTurnCandidates({
+                source: {
+                    userId: input.userId,
+                    characterId: input.characterId,
+                    conversationId: input.conversationId,
+                    userMessageId: input.userMessageId,
+                    assistantMessageId: input.assistantMessageId,
+                    requestId: input.requestId,
+                    modelCallPurpose: input.modelCallPurpose,
+                },
+                candidates: input.candidates,
+            });
+        } catch (err) {
+            // The pipeline service is documented to fail-soft and never
+            // throw on normal failures; this catch only fires on
+            // programmer bugs that escape its internal handling.
+            this.logger.warn("persona-flow/memory: pipeline service failed", {
+                requestId: input.requestId,
+                conversationId: input.conversationId,
+                error: err instanceof Error ? err.message : String(err),
+            });
+        }
+    }
+
 }
 
 function getSingleCharacterChatResult(callResult: ModelCallRunResult): SingleCharacterChatResult {
@@ -337,6 +440,7 @@ function getSingleCharacterChatResult(callResult: ModelCallRunResult): SingleCha
         || typeof parsedOutput !== "object"
         || typeof (parsedOutput as SingleCharacterChatResult).displayText !== "string"
         || !Array.isArray((parsedOutput as SingleCharacterChatResult).events)
+        || !Array.isArray((parsedOutput as SingleCharacterChatResult).memoryWriteCandidates)
     ) {
         throw new Error("Model call must return a parsed single-character chat result.");
     }

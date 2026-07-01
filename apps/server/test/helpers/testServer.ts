@@ -12,7 +12,14 @@ import { InMemoryUserProviderCredentialStore } from "./inMemoryUserProviderCrede
 import { InMemoryConversationStore } from "./inMemoryConversationStore.js";
 import { InMemoryChatStore } from "./inMemoryChatStore.js";
 import { InMemoryConversationActorStore } from "./inMemoryConversationActorStore.js";
+import {
+    StubMemoryCandidateStore,
+    StubMemoryConsolidationDecisionStore,
+    StubMemoryRetainedStore,
+    StubMemoryStagingStore,
+} from "./inMemoryMemoryStores.js";
 import type { AppStores } from "@ss-ai/persona-flow";
+import { DEFAULT_MEMORY_SETTINGS } from "@ss-ai/persona-flow";
 import type { ModelAssignmentMap } from "@ss-ai/contracts";
 
 export interface TestApp {
@@ -52,6 +59,7 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}, op
             clearLogFileOnStart: false,
             includeSourceLocation: false,
             includeStackTrace: false,
+            logDatabaseSql: false,
         },
         runtimeFiles: {
             tempDir: path.join(tmpDir, "tmp"),
@@ -61,6 +69,7 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}, op
         defaultModelAssignments: options.defaultModelAssignments ?? {},
         agent: { timeoutMs: 30000, maxRetries: 2 },
         promptLog: { enabled: false, filePath: "" },
+        memory: { ...DEFAULT_MEMORY_SETTINGS },
         auth: {
             mode: "default-user",
             defaultUserId: "default",
@@ -86,6 +95,10 @@ export function createTestApp(models: Record<string, RuntimeModelEntry> = {}, op
         conversation: new InMemoryConversationStore(),
         chat: new InMemoryChatStore(),
         providerCredential: new InMemoryUserProviderCredentialStore(),
+        memoryCandidate: new StubMemoryCandidateStore(),
+        memoryStaging: new StubMemoryStagingStore(),
+        memoryRetained: new StubMemoryRetainedStore(),
+        memoryConsolidationDecision: new StubMemoryConsolidationDecisionStore(),
     };
 
     const app = createHttpServer(config, { stores }) as typeof createHttpServer extends (...args: any[]) => infer T ? T & { closeDatabase?: () => void } : never;

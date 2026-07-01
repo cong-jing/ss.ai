@@ -5,7 +5,8 @@ import type { ModelCall, ModelCallRunInput, ModelCallRunResult, ModelCallStreamR
 import type { PromptContext } from "../../../prompt/promptContext.js";
 import type { RenderedMessage } from "../../../prompt/promptTypes.js";
 import type { PromptLanguage } from "../../../stores/character/character.js";
-import type { SubmitTurnEventsArgs } from "@ss-ai/contracts";
+import type { MemoryWriteCandidate, SubmitTurnEventsArgs } from "@ss-ai/contracts";
+import { MemoryWriteCandidateSchema } from "@ss-ai/contracts/memoryCandidates.schema";
 import { renderPromptTemplate } from "../../../prompt/renderPromptTemplate.js";
 import { getTurnEventsReplyText, mergeConsecutiveReplyTextEvents } from "../../../chatTurn/events/turnEventText.js";
 import { parseSubmitTurnEventsArgs } from "../../../chatTurn/events/submitTurnEventsParser.js";
@@ -28,6 +29,7 @@ const SYSTEM_TEMPLATE_PATHS: Record<PromptLanguage, string> = {
 export type SingleCharacterChatResult = {
     displayText: string;
     events: SubmitTurnEventsArgs["events"];
+    memoryWriteCandidates: MemoryWriteCandidate[];
 };
 
 function normalizeSingleCharacterReply(
@@ -215,22 +217,84 @@ function parseSingleCharacterChatResponse(
     promptContext: PromptContext,
 ): SingleCharacterChatResult {
     if (llmResponse.structuredOutput === undefined) {
+        // Memory candidates now live inside the structured output, so the
+        // only legitimate cause for a missing structured payload is the
+        // model producing zero content (e.g. unexpected tool call or empty
+        // response). Surface any unexpected tool calls in the message so
+        // it's debuggable from logs without diving into the provider response.
+        const toolCallNames = llmResponse.toolCalls
+            .map(call => call.functionName)
+            .filter((name): name is string => Boolean(name));
+        const detail = toolCallNames.length > 0
+            ? ` Unexpected tool calls received: [${toolCallNames.join(", ")}]. This call does not register any tools; the model must always return ${SUBMIT_TURN_EVENTS_TOOL_NAME} structured output.`
+            : " Model returned an empty content channel and no tool calls.";
         throw new Error(
-            `Model response did not include structured output for ${SUBMIT_TURN_EVENTS_TOOL_NAME}.`,
+            `Model response did not include structured output for ${SUBMIT_TURN_EVENTS_TOOL_NAME}.${detail}`,
         );
     }
 
-    const submitTurnEventsOutput = parseSubmitTurnEventsArgs(llmResponse.structuredOutput);
-    return toSingleCharacterChatResult({
-        submitTurnEventsOutput,
-        promptContext,
-    });
+    const { eventsOnly, rawCandidates } = splitStructuredOutput(llmResponse.structuredOutput);
+    const submitTurnEventsOutput = parseSubmitTurnEventsArgs(eventsOnly);
+    const memoryWriteCandidates = parseMemoryWriteCandidatesLeniently(rawCandidates);
+    return {
+        ...toSingleCharacterChatResult({
+            submitTurnEventsOutput,
+            promptContext,
+        }),
+        memoryWriteCandidates,
+    };
+}
+
+/**
+ * Memory candidates live inside the same structured-output JSON as `events`,
+ * but they are a fail-soft side channel for batch 1: an invalid candidate
+ * must never block the visible chat turn. We split candidates out before
+ * strict events validation, then validate each candidate independently and
+ * drop any that fail.
+ */
+function splitStructuredOutput(structuredOutput: unknown): {
+    eventsOnly: unknown;
+    rawCandidates: unknown;
+} {
+    if (typeof structuredOutput === "string") {
+        // Provider adapters normally pre-parse JSON, but tolerate raw strings
+        // here so we don't crash on a malformed adapter; let strict events
+        // parsing raise the actual error.
+        try {
+            return splitStructuredOutput(JSON.parse(structuredOutput));
+        } catch {
+            return { eventsOnly: structuredOutput, rawCandidates: undefined };
+        }
+    }
+    if (structuredOutput === null || typeof structuredOutput !== "object") {
+        return { eventsOnly: structuredOutput, rawCandidates: undefined };
+    }
+    const { memoryWriteCandidates, ...rest } = structuredOutput as Record<string, unknown>;
+    return { eventsOnly: rest, rawCandidates: memoryWriteCandidates };
+}
+
+function parseMemoryWriteCandidatesLeniently(rawCandidates: unknown): MemoryWriteCandidate[] {
+    if (!Array.isArray(rawCandidates)) {
+        return [];
+    }
+    const validated: MemoryWriteCandidate[] = [];
+    for (const candidate of rawCandidates) {
+        const parsed = MemoryWriteCandidateSchema.safeParse(candidate);
+        if (parsed.success) {
+            validated.push(parsed.data);
+        }
+        // Invalid candidates are silently dropped in batch 1; prompt logs
+        // still contain the raw model output for diagnostics.
+    }
+    // The strict schema caps at 5; mirror that here so a misbehaving model
+    // cannot flood the log via the lenient path.
+    return validated.slice(0, 5);
 }
 
 function toSingleCharacterChatResult(input: {
     submitTurnEventsOutput: SubmitTurnEventsArgs;
     promptContext: PromptContext;
-}): SingleCharacterChatResult {
+}): Omit<SingleCharacterChatResult, "memoryWriteCandidates"> {
     const selfActor = Array.from(input.promptContext.actorMap.values()).find(actor => actor.role === "self");
     // Streaming providers tend to emit one `replyText` per paragraph; collapse
     // any consecutive run with the same speaker into a single event so the

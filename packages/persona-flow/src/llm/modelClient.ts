@@ -27,7 +27,24 @@ export interface ModelToolCall {
     type?: string;
     index?: number;
     functionName?: string;
+    /**
+     * Parsed tool-call arguments value. Provider adapters MUST normalize
+     * provider-specific representations (e.g. Mistral/OpenAI send arguments as
+     * a JSON string) into a parsed JavaScript value before returning. Consumers
+     * (model calls, tool dispatchers) can therefore validate this directly with
+     * a Zod schema without re-handling string vs. object cases.
+     *
+     * Undefined when the provider sent no arguments, or when raw text was
+     * present but failed to JSON-parse (see {@link argumentsRaw}).
+     */
     arguments?: unknown;
+    /**
+     * Raw arguments text exactly as emitted by the provider, preserved even
+     * when JSON parsing fails so prompt logs and debug tools can inspect the
+     * original payload. Provider adapters set this when arguments arrived as a
+     * string; they may leave it unset when arguments were already structured.
+     */
+    argumentsRaw?: string;
 }
 
 /**
@@ -94,6 +111,39 @@ export interface ModelClient {
     generate(input: ModelGenerationInput): Promise<ModelGenerationResult>;
     generateStream(input: ModelGenerationInput, callbacks?: ModelStreamCallbacks): Promise<ModelStreamResult>;
     listModels(provider: string, encryptedApiKey: string): Promise<string[]>;
+    /**
+     * Optional embeddings API. Adapters that do not yet wire embeddings can
+     * leave this unset; callers (e.g. the memory embedding provider) must
+     * surface a clear error rather than silently falling back.
+     */
+    embed?(input: ModelEmbedInput): Promise<ModelEmbedResult>;
+}
+
+/**
+ * Provider-neutral embedding request. Adapters batch internally when their
+ * provider supports batching; consumers can pass any number of `inputs` and
+ * receive one vector per input in `vectors`, preserving order.
+ */
+export interface ModelEmbedInput {
+    provider: string;
+    model: string;
+    /** Encrypted API key payload passed through the pipeline. */
+    encryptedApiKey: string;
+    /** Texts to embed. Must contain at least one entry. */
+    inputs: string[];
+}
+
+export interface ModelEmbedResult {
+    /** One vector per input, in the same order as `ModelEmbedInput.inputs`. */
+    vectors: number[][];
+    /**
+     * Model identifier the provider actually used. Most providers echo the
+     * requested model back; callers should still record this rather than
+     * trusting the request side, because some providers route to a versioned
+     * model server-side.
+     */
+    model: string;
+    usage?: ModelUsage;
 }
 
 export interface ModelClientFactoryInput {

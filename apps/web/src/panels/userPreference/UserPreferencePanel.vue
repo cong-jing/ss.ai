@@ -7,6 +7,7 @@ import CollapsibleSection from "../../shared/ui/CollapsibleSection.vue";
 import { useUserPreferenceViewModel } from "./useUserPreferenceViewModel";
 import { useUserProfileViewModel } from "../userProfile/useUserProfileViewModel";
 import type { ApiKeySource, ModelAssignmentSource, ModelCallPurpose } from "@ss-ai/contracts";
+import { MODEL_CALL_PURPOSE_CATEGORIES } from "@ss-ai/contracts";
 import { isSupportedLocale, locale, setLocale, t } from "../../shared/i18n/i18n";
 import { SUPPORTED_LOCALES, type Locale } from "../../shared/i18n/messages";
 import { useAuthState } from "../../auth/useAuthState";
@@ -29,8 +30,11 @@ const {
   saveModelAssignment
 } = vm;
 
-function modelsForProvider(providerName: string): string[] {
-  return providers.value.find(p => p.provider === providerName)?.availableModels ?? [];
+function modelsForProvider(providerName: string, purpose: ModelCallPurpose): string[] {
+  const provider = providers.value.find(p => p.provider === providerName);
+  if (!provider) return [];
+  const category = MODEL_CALL_PURPOSE_CATEGORIES[purpose];
+  return provider.availableModels[category] ?? [];
 }
 
 function effectiveApiKeySourceFor(providerName: string): ApiKeySource {
@@ -92,7 +96,15 @@ async function onAssignmentProviderChange(_purpose: ModelCallPurpose, idx: numbe
   modelAssignments.value[idx].provider = providerName;
   modelAssignments.value[idx].model = "";
   const p = providers.value.find(p => p.provider === providerName);
-  if (p && p.availableModels.length === 0 && p.effectiveApiKeySource !== "missing") {
+  // Only fall back to live /v1/models when both static lists are empty;
+  // a partial static config (e.g. chat populated, embed empty) is a
+  // deliberate choice and live probing cannot reliably classify embed.
+  if (
+    p
+    && p.availableModels.chat.length === 0
+    && p.availableModels.embed.length === 0
+    && p.effectiveApiKeySource !== "missing"
+  ) {
     await loadModels(providerName);
   }
 }
@@ -227,7 +239,16 @@ async function onLogout(): Promise<void> {
       </CollapsibleSection>
 
       <CollapsibleSection :title="t('settings.section.modelAssignment')">
-        <div v-for="(assignmentState, idx) in modelAssignments" :key="assignmentState.purpose" class="fn-block">
+        <template v-for="(assignmentState, idx) in modelAssignments" :key="assignmentState.purpose">
+          <!--
+            Embed-category purposes (e.g. memory.embed) are not yet exposed in
+            the UI — they are still configurable via server config but the
+            user-facing model picker for embeddings will land in a later step.
+          -->
+          <div
+            v-if="MODEL_CALL_PURPOSE_CATEGORIES[assignmentState.purpose] === 'chat'"
+            class="fn-block"
+          >
           <div class="fn-label">{{ formatModelCallPurpose(assignmentState.purpose) }}</div>
           <p class="assignment-source">{{ assignmentSourceLabel(assignmentState.effectiveSource) }}</p>
           <div class="fn-edit">
@@ -246,23 +267,24 @@ async function onLogout(): Promise<void> {
                 <select
                   :value="assignmentState.model"
                   class="fn-select"
-                  :disabled="modelsForProvider(assignmentState.provider).length === 0 || isSavingModelAssignment"
+                  :disabled="modelsForProvider(assignmentState.provider, assignmentState.purpose).length === 0 || isSavingModelAssignment"
                   @change="onAssignmentModelChange(idx, assignmentState.purpose, ($event.target as HTMLSelectElement).value)"
                 >
                   <option value="">
-                    {{ modelsForProvider(assignmentState.provider).length === 0 ? t("settings.noModels") : t("settings.selectModel") }}
+                    {{ modelsForProvider(assignmentState.provider, assignmentState.purpose).length === 0 ? t("settings.noModels") : t("settings.selectModel") }}
                   </option>
-                  <option v-for="m in modelsForProvider(assignmentState.provider)" :key="m" :value="m">{{ m }}</option>
+                  <option v-for="m in modelsForProvider(assignmentState.provider, assignmentState.purpose)" :key="m" :value="m">{{ m }}</option>
                 </select>
                 <Button
-                  v-if="modelsForProvider(assignmentState.provider).length === 0"
+                  v-if="modelsForProvider(assignmentState.provider, assignmentState.purpose).length === 0"
                   size="sm"
                   @click="loadModels(assignmentState.provider)"
                 >{{ t("settings.loadModels") }}</Button>
               </template>
             </template>
           </div>
-        </div>
+          </div>
+        </template>
       </CollapsibleSection>
 
       <div v-if="showLogout" class="settings-footer">

@@ -1,5 +1,7 @@
 import {
     ModelClient,
+    ModelEmbedInput,
+    ModelEmbedResult,
     ModelGenerationResult,
     ModelGenerationInput,
     ModelStreamCallbacks,
@@ -52,6 +54,15 @@ export class DefaultModelClient implements ModelClient {
 
         const client = this.getModelAdapter(provider, encryptedApiKey);
         return client.listModels();
+    }
+
+    async embed(input: ModelEmbedInput): Promise<ModelEmbedResult> {
+        const normalizedProvider = input.provider.toLowerCase();
+        const client = this.getModelAdapter(normalizedProvider, input.encryptedApiKey);
+        if (!client.embed) {
+            throw new Error(`Model provider does not support embeddings: ${input.provider}`);
+        }
+        return client.embed(input);
     }
 
     private getModelAdapter(provider: string, encryptedApiKey: string): ModelAdapter {

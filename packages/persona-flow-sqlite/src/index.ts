@@ -11,3 +11,7 @@ export { SQLiteCharacterStore } from "./db/SQLiteCharacterStore.js";
 export { SQLiteUserProfileStore } from "./db/SQLiteUserProfileStore.js";
 export { SQLiteUserPreferencesStore } from "./db/SQLiteUserPreferencesStore.js";
 export { SQLiteUserProviderCredentialStore } from "./db/SQLiteUserProviderCredentialStore.js";
+export { SQLiteMemoryCandidateStore } from "./db/SQLiteMemoryCandidateStore.js";
+export { SQLiteMemoryStagingStore } from "./db/SQLiteMemoryStagingStore.js";
+export { SQLiteMemoryRetainedStore } from "./db/SQLiteMemoryRetainedStore.js";
+export { SQLiteMemoryConsolidationDecisionStore } from "./db/SQLiteMemoryConsolidationDecisionStore.js";
